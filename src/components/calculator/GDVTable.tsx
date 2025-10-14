@@ -199,7 +199,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       value={row.type}
                       onValueChange={(value) => handleTypeChange(row.id, value)}
                     >
-                      <SelectTrigger className="w-full h-11 text-base font-medium">
+                      <SelectTrigger className="w-full h-14 text-lg font-semibold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-50 bg-background">
@@ -217,7 +217,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.units}
                       onChange={(e) => updateRow(row.id, "units", parseInt(e.target.value) || 0)}
-                      className="w-full h-11 text-base font-medium"
+                      className="w-full h-14 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell>
@@ -236,7 +236,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.salesValue}
                       onChange={(e) => updateRow(row.id, "salesValue", parseFloat(e.target.value) || 0)}
-                      className="w-full h-11 text-base font-medium"
+                      className="w-full h-14 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell>
@@ -255,7 +255,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.buildPerSqm}
                       onChange={(e) => updateRow(row.id, "buildPerSqm", parseFloat(e.target.value) || 0)}
-                      className="w-full h-11 text-base font-medium"
+                      className="w-full h-14 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell className="text-sm font-medium">
