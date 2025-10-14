@@ -199,7 +199,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       value={row.type}
                       onValueChange={(value) => handleTypeChange(row.id, value)}
                     >
-                      <SelectTrigger className="w-full h-12 text-lg font-semibold">
+                      <SelectTrigger className="h-[44px] px-3 text-base font-medium border border-black/15 rounded-lg bg-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-50 bg-background">
@@ -217,7 +217,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.units}
                       onChange={(e) => updateRow(row.id, "units", parseInt(e.target.value) || 0)}
-                      className="w-full h-12 text-lg font-semibold px-4"
+                      className="h-[44px] px-3 text-base font-medium border border-black/15 rounded-lg bg-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] focus-visible:border-[#2563eb] focus-visible:ring-2 focus-visible:ring-[#2563eb]/20"
                     />
                   </TableCell>
                   <TableCell>
@@ -227,7 +227,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       step="0.5"
                       value={row.giaPerUnit}
                       onChange={(e) => updateRow(row.id, "giaPerUnit", parseFloat(e.target.value) || 0)}
-                      className="w-full"
+                      className="h-[44px] px-3 text-base border border-black/10 rounded-lg bg-white/50"
                     />
                   </TableCell>
                   <TableCell>
@@ -236,7 +236,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.salesValue}
                       onChange={(e) => updateRow(row.id, "salesValue", parseFloat(e.target.value) || 0)}
-                      className="w-full h-12 text-lg font-semibold px-4"
+                      className="h-[44px] px-3 text-base font-medium border border-black/15 rounded-lg bg-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] focus-visible:border-[#2563eb] focus-visible:ring-2 focus-visible:ring-[#2563eb]/20"
                     />
                   </TableCell>
                   <TableCell>
@@ -245,7 +245,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.unitPriceOverride}
                       onChange={(e) => updateRow(row.id, "unitPriceOverride", parseFloat(e.target.value) || 0)}
-                      className="w-full"
+                      className="h-[44px] px-3 text-base font-medium border border-black/15 rounded-lg bg-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] focus-visible:border-[#2563eb] focus-visible:ring-2 focus-visible:ring-[#2563eb]/20"
                       placeholder="Optional"
                     />
                   </TableCell>
@@ -255,7 +255,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.buildPerSqm}
                       onChange={(e) => updateRow(row.id, "buildPerSqm", parseFloat(e.target.value) || 0)}
-                      className="w-full h-12 text-lg font-semibold px-4"
+                      className="h-[44px] px-3 text-base font-medium border border-black/15 rounded-lg bg-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] focus-visible:border-[#2563eb] focus-visible:ring-2 focus-visible:ring-[#2563eb]/20"
                     />
                   </TableCell>
                   <TableCell className="text-sm font-medium">
@@ -275,7 +275,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       type="text"
                       value={row.notes}
                       onChange={(e) => updateRow(row.id, "notes", e.target.value)}
-                      className="w-full"
+                      className="h-[44px] px-3 text-base border border-black/10 rounded-lg bg-white/50"
                       placeholder="Notes..."
                     />
                   </TableCell>
