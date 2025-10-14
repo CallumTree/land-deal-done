@@ -3,7 +3,7 @@ export interface PropertyRow {
   type: string;
   units: number;
   giaPerUnit: number;
-  salesPerSqm: number;
+  salesValue: number;
   unitPriceOverride: number;
   buildPerSqm: number;
   notes: string;
@@ -37,14 +37,14 @@ export interface CalculatedValues {
 }
 
 export const PROPERTY_DEFAULTS: Record<string, Partial<PropertyRow>> = {
-  "2-Bed Semi": { giaPerUnit: 75, salesPerSqm: 3300, buildPerSqm: 1650 },
-  "3-Bed Semi": { giaPerUnit: 90, salesPerSqm: 3250, buildPerSqm: 1650 },
-  "3-Bed Detached": { giaPerUnit: 92.5, salesPerSqm: 3400, buildPerSqm: 1700 },
-  "4-Bed Detached": { giaPerUnit: 120, salesPerSqm: 3600, buildPerSqm: 1800 },
-  "2-Bed Bungalow": { giaPerUnit: 84.5, salesPerSqm: 3350, buildPerSqm: 1800 },
-  "3-Bed Bungalow": { giaPerUnit: 109, salesPerSqm: 3400, buildPerSqm: 1900 },
-  "Apartment (1-bed)": { giaPerUnit: 52, salesPerSqm: 4000, buildPerSqm: 2000 },
-  "Apartment (2-bed)": { giaPerUnit: 70, salesPerSqm: 3800, buildPerSqm: 2000 },
+  "2-Bed Semi": { giaPerUnit: 75, salesValue: 247500, buildPerSqm: 1650 },
+  "3-Bed Semi": { giaPerUnit: 90, salesValue: 292500, buildPerSqm: 1650 },
+  "3-Bed Detached": { giaPerUnit: 92.5, salesValue: 314500, buildPerSqm: 1700 },
+  "4-Bed Detached": { giaPerUnit: 120, salesValue: 432000, buildPerSqm: 1800 },
+  "2-Bed Bungalow": { giaPerUnit: 84.5, salesValue: 283075, buildPerSqm: 1800 },
+  "3-Bed Bungalow": { giaPerUnit: 109, salesValue: 370600, buildPerSqm: 1900 },
+  "Apartment (1-bed)": { giaPerUnit: 52, salesValue: 208000, buildPerSqm: 2000 },
+  "Apartment (2-bed)": { giaPerUnit: 70, salesValue: 266000, buildPerSqm: 2000 },
 };
 
 export const PROPERTY_TYPES = [

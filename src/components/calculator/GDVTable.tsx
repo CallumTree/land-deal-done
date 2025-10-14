@@ -22,7 +22,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
       type: "3-Bed Semi",
       units: 0,
       giaPerUnit: 90,
-      salesPerSqm: 3250,
+      salesValue: 292500,
       unitPriceOverride: 0,
       buildPerSqm: 1650,
       notes: "",
@@ -70,7 +70,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
           type: item.type,
           units: item.units,
           giaPerUnit: defaults.giaPerUnit || 0,
-          salesPerSqm: defaults.salesPerSqm || 0,
+          salesValue: defaults.salesValue || 0,
           unitPriceOverride: 0,
           buildPerSqm: defaults.buildPerSqm || 0,
           notes: "",
@@ -174,12 +174,12 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
         <Table>
           <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow>
-              <TableHead className="w-[180px]">Type</TableHead>
-              <TableHead className="w-[80px]">Units</TableHead>
+              <TableHead className="w-[180px] font-semibold">Type</TableHead>
+              <TableHead className="w-[80px] font-semibold">Units</TableHead>
               <TableHead className="w-[100px]">GIA/Unit (m²)</TableHead>
-              <TableHead className="w-[120px]">Sales £/m²</TableHead>
+              <TableHead className="w-[150px] font-semibold">Sales Value (£)</TableHead>
               <TableHead className="w-[140px]">Override (£)</TableHead>
-              <TableHead className="w-[120px]">Build £/m²</TableHead>
+              <TableHead className="w-[120px] font-semibold">Build £/m²</TableHead>
               <TableHead className="w-[120px]">Build/Unit</TableHead>
               <TableHead className="w-[140px]">Build Total</TableHead>
               <TableHead className="w-[120px]">GDV/Unit</TableHead>
@@ -199,10 +199,10 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       value={row.type}
                       onValueChange={(value) => handleTypeChange(row.id, value)}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full h-11 text-base font-medium">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-50 bg-background">
                         {PROPERTY_TYPES.map((type) => (
                           <SelectItem key={type} value={type}>
                             {type}
@@ -217,7 +217,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.units}
                       onChange={(e) => updateRow(row.id, "units", parseInt(e.target.value) || 0)}
-                      className="w-full"
+                      className="w-full h-11 text-base font-medium"
                     />
                   </TableCell>
                   <TableCell>
@@ -234,9 +234,9 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                     <Input
                       type="number"
                       min="0"
-                      value={row.salesPerSqm}
-                      onChange={(e) => updateRow(row.id, "salesPerSqm", parseFloat(e.target.value) || 0)}
-                      className="w-full"
+                      value={row.salesValue}
+                      onChange={(e) => updateRow(row.id, "salesValue", parseFloat(e.target.value) || 0)}
+                      className="w-full h-11 text-base font-medium"
                     />
                   </TableCell>
                   <TableCell>
@@ -255,7 +255,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.buildPerSqm}
                       onChange={(e) => updateRow(row.id, "buildPerSqm", parseFloat(e.target.value) || 0)}
-                      className="w-full"
+                      className="w-full h-11 text-base font-medium"
                     />
                   </TableCell>
                   <TableCell className="text-sm font-medium">

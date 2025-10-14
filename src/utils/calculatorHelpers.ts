@@ -13,7 +13,7 @@ export const calculateRowValues = (row: PropertyRow) => {
   const buildTotal = row.units * buildPerUnit;
   const gdvPerUnit = row.unitPriceOverride > 0 
     ? row.unitPriceOverride 
-    : row.giaPerUnit * row.salesPerSqm;
+    : row.salesValue;
   const gdvTotal = row.units * gdvPerUnit;
 
   return {
@@ -78,7 +78,7 @@ export const exportToCSV = (rows: PropertyRow[], filename: string = "napkin-gdv.
     "Type",
     "Units",
     "GIA / Unit (m²)",
-    "Sales £/m²",
+    "Sales Value (£)",
     "Unit Price Override (£)",
     "Build £/m²",
     "Notes",
@@ -91,7 +91,7 @@ export const exportToCSV = (rows: PropertyRow[], filename: string = "napkin-gdv.
         row.type,
         row.units,
         row.giaPerUnit,
-        row.salesPerSqm,
+        row.salesValue,
         row.unitPriceOverride,
         row.buildPerSqm,
         `"${row.notes.replace(/"/g, '""')}"`,
@@ -124,7 +124,7 @@ export const importFromCSV = (file: File): Promise<PropertyRow[]> => {
             type: cleanValues[0] || "Custom",
             units: parseInt(cleanValues[1]) || 0,
             giaPerUnit: parseFloat(cleanValues[2]) || 0,
-            salesPerSqm: parseFloat(cleanValues[3]) || 0,
+            salesValue: parseFloat(cleanValues[3]) || 0,
             unitPriceOverride: parseFloat(cleanValues[4]) || 0,
             buildPerSqm: parseFloat(cleanValues[5]) || 0,
             notes: cleanValues[6] || "",
