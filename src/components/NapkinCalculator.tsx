@@ -26,7 +26,18 @@ const NapkinCalculator = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const data = JSON.parse(saved);
-        setRows(data.rows || []);
+        // Migrate old data: convert salesPerSqm to salesValue if needed
+        const migratedRows = (data.rows || []).map((row: any) => {
+          if (row.salesPerSqm !== undefined && row.salesValue === undefined) {
+            // Convert old format: salesValue = GIA × salesPerSqm
+            return {
+              ...row,
+              salesValue: (row.giaPerUnit || 0) * (row.salesPerSqm || 0),
+            };
+          }
+          return row;
+        });
+        setRows(migratedRows);
         setInputs(data.inputs || inputs);
       }
     } catch (error) {

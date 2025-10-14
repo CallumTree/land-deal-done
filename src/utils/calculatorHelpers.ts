@@ -1,6 +1,9 @@
 import { PropertyRow, GlobalInputs, CalculatedValues } from "@/types/calculator";
 
 export const formatCurrency = (value: number): string => {
+  if (value === undefined || value === null || isNaN(value)) {
+    return '£0';
+  }
   return `£${value.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 };
 
@@ -9,18 +12,18 @@ export const formatPercent = (value: number): string => {
 };
 
 export const calculateRowValues = (row: PropertyRow) => {
-  const buildPerUnit = row.giaPerUnit * row.buildPerSqm;
-  const buildTotal = row.units * buildPerUnit;
+  const buildPerUnit = (row.giaPerUnit || 0) * (row.buildPerSqm || 0);
+  const buildTotal = (row.units || 0) * buildPerUnit;
   const gdvPerUnit = row.unitPriceOverride > 0 
     ? row.unitPriceOverride 
-    : row.salesValue;
-  const gdvTotal = row.units * gdvPerUnit;
+    : (row.salesValue || 0);
+  const gdvTotal = (row.units || 0) * gdvPerUnit;
 
   return {
-    buildPerUnit,
-    buildTotal,
-    gdvPerUnit,
-    gdvTotal,
+    buildPerUnit: isNaN(buildPerUnit) ? 0 : buildPerUnit,
+    buildTotal: isNaN(buildTotal) ? 0 : buildTotal,
+    gdvPerUnit: isNaN(gdvPerUnit) ? 0 : gdvPerUnit,
+    gdvTotal: isNaN(gdvTotal) ? 0 : gdvTotal,
   };
 };
 
