@@ -174,17 +174,17 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
         <Table>
           <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow>
-              <TableHead className="w-[220px] font-semibold">Type</TableHead>
-              <TableHead className="w-[120px] font-semibold">Units</TableHead>
-              <TableHead className="w-[100px]">GIA/Unit (m²)</TableHead>
-              <TableHead className="w-[180px] font-semibold">Sales Value (£)</TableHead>
-              <TableHead className="w-[140px]">Override (£)</TableHead>
-              <TableHead className="w-[150px] font-semibold">Build £/m²</TableHead>
-              <TableHead className="w-[120px]">Build/Unit</TableHead>
-              <TableHead className="w-[140px]">Build Total</TableHead>
-              <TableHead className="w-[120px]">GDV/Unit</TableHead>
-              <TableHead className="w-[140px]">GDV Total</TableHead>
-              <TableHead className="w-[180px]">Notes</TableHead>
+              <TableHead className="w-[250px] font-semibold">Type</TableHead>
+              <TableHead className="w-[140px] font-semibold">Units</TableHead>
+              <TableHead className="w-[120px]">GIA/Unit (m²)</TableHead>
+              <TableHead className="w-[200px] font-semibold">Sales Value (£)</TableHead>
+              <TableHead className="w-[160px]">Override (£)</TableHead>
+              <TableHead className="w-[180px] font-semibold">Build £/m²</TableHead>
+              <TableHead className="w-[140px]">Build/Unit</TableHead>
+              <TableHead className="w-[160px]">Build Total</TableHead>
+              <TableHead className="w-[140px]">GDV/Unit</TableHead>
+              <TableHead className="w-[160px]">GDV Total</TableHead>
+              <TableHead className="w-[200px]">Notes</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -199,7 +199,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       value={row.type}
                       onValueChange={(value) => handleTypeChange(row.id, value)}
                     >
-                      <SelectTrigger className="w-full h-16 text-xl font-semibold">
+                      <SelectTrigger className="w-full h-12 text-lg font-semibold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-50 bg-background">
@@ -217,7 +217,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.units}
                       onChange={(e) => updateRow(row.id, "units", parseInt(e.target.value) || 0)}
-                      className="w-full h-16 text-xl font-semibold px-4"
+                      className="w-full h-12 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell>
@@ -236,7 +236,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.salesValue}
                       onChange={(e) => updateRow(row.id, "salesValue", parseFloat(e.target.value) || 0)}
-                      className="w-full h-16 text-xl font-semibold px-4"
+                      className="w-full h-12 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell>
@@ -255,7 +255,7 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
                       min="0"
                       value={row.buildPerSqm}
                       onChange={(e) => updateRow(row.id, "buildPerSqm", parseFloat(e.target.value) || 0)}
-                      className="w-full h-16 text-xl font-semibold px-4"
+                      className="w-full h-12 text-lg font-semibold px-4"
                     />
                   </TableCell>
                   <TableCell className="text-sm font-medium">
