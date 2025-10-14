@@ -50,16 +50,10 @@ const NapkinCalculator = () => {
       <div className="container mx-auto max-w-7xl">
         <div className="text-center mb-8 animate-fade-in">
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Run the numbers in <span className="text-primary">60 seconds</span>
+            GDV Calculator
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-2">
-            Use defaults or tweak assumptions. Export your scenario or book a demo.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Want a full feasibility pack?{" "}
-            <a href="#email-capture" className="text-primary font-semibold hover:underline">
-              → Start Free Trial
-            </a>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Use defaults or tweak assumptions. Export your scenario for lender submission.
           </p>
         </div>
 

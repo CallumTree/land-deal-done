@@ -3,12 +3,6 @@ import { TrendingUp, DollarSign, Calculator, Brain, FileText } from "lucide-reac
 import heroImage from "@/assets/hero-property.jpg";
 
 const Hero = () => {
-  const scrollToGetStarted = () => {
-    const element = document.getElementById("get-started");
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth" });
-    }
-  };
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16 sm:pt-20">
@@ -64,9 +58,9 @@ const Hero = () => {
                 variant="cta"
                 size="lg"
                 className="text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 h-auto"
-                onClick={scrollToGetStarted}
+                asChild
               >
-                Start My Free Feasibility Check
+                <a href="/auth">Start My Free Feasibility Check</a>
               </Button>
             </div>
             
