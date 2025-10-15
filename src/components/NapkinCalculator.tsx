@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { PropertyRow, GlobalInputs as GlobalInputsType } from "@/types/calculator";
+import { SensitivityAdjustments, DEFAULT_SENSITIVITY } from "@/types/sensitivity";
 import { calculateTotals } from "@/utils/calculatorHelpers";
 import GlobalInputs from "@/components/calculator/GlobalInputs";
 import GDVTable from "@/components/calculator/GDVTable";
 import SummaryPanel from "@/components/calculator/SummaryPanel";
+import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPanel";
+import LenderReportModal from "@/components/calculator/LenderReportModal";
 
 const STORAGE_KEY = "napkin-calculator-data";
 
@@ -19,6 +22,8 @@ const NapkinCalculator = () => {
     targetMarginPercent: 20,
     vatEnabled: false,
   });
+  const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -54,7 +59,9 @@ const NapkinCalculator = () => {
     }
   }, [rows, inputs]);
 
-  const calculatedValues = calculateTotals(rows, inputs);
+  const baseValues = calculateTotals(rows, inputs);
+  const adjustedValues = calculateTotals(rows, inputs, sensitivity);
+  const isSensitivityActive = Object.values(sensitivity).some(v => v !== 0);
 
   return (
     <section className="py-16 px-4 bg-background" id="calculator">
@@ -70,6 +77,13 @@ const NapkinCalculator = () => {
 
         <GlobalInputs inputs={inputs} onChange={setInputs} />
 
+        <MarketSensitivityPanel
+          adjustments={sensitivity}
+          onChange={setSensitivity}
+          onReset={() => setSensitivity(DEFAULT_SENSITIVITY)}
+          onGenerateReport={() => setShowReportModal(true)}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8">
             <GDVTable rows={rows} onChange={setRows} />
@@ -78,12 +92,22 @@ const NapkinCalculator = () => {
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-4">
               <SummaryPanel 
-                values={calculatedValues} 
+                values={isSensitivityActive ? adjustedValues : baseValues} 
                 targetMargin={inputs.targetMarginPercent}
+                isSensitivityActive={isSensitivityActive}
+                sensitivity={sensitivity}
               />
             </div>
           </div>
         </div>
+
+        <LenderReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          baseCase={baseValues}
+          adjustedCase={adjustedValues}
+          adjustments={sensitivity}
+        />
 
         {/* Mobile sticky CTA */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-background border-t shadow-large z-50">

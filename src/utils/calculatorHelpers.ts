@@ -29,25 +29,46 @@ export const calculateRowValues = (row: PropertyRow) => {
 
 export const calculateTotals = (
   rows: PropertyRow[],
-  inputs: GlobalInputs
+  inputs: GlobalInputs,
+  sensitivityAdjustments?: {
+    salesValuePercent: number;
+    buildCostPercent: number;
+    financeRatePercent: number;
+    contingencyPercent: number;
+    programmeDelayMonths: number;
+  }
 ): CalculatedValues => {
+  const sensitivity = sensitivityAdjustments || {
+    salesValuePercent: 0,
+    buildCostPercent: 0,
+    financeRatePercent: 0,
+    contingencyPercent: 0,
+    programmeDelayMonths: 0,
+  };
+
+  // Apply sensitivity adjustments to calculations
   const totalGDV = rows.reduce((sum, row) => {
     const { gdvTotal } = calculateRowValues(row);
     return sum + gdvTotal;
-  }, 0);
+  }, 0) * (1 + sensitivity.salesValuePercent / 100);
 
   const buildCost = rows.reduce((sum, row) => {
     const { buildTotal } = calculateRowValues(row);
     return sum + buildTotal;
-  }, 0);
+  }, 0) * (1 + sensitivity.buildCostPercent / 100);
 
   const professionalFees = buildCost * (inputs.professionalFeesPercent / 100);
   const marketingSales = totalGDV * (inputs.marketingSalesPercent / 100);
-  const contingency = buildCost * (inputs.contingencyPercent / 100);
   
-  // Finance on half the total (staged drawdown)
+  // Apply contingency adjustment
+  const contingencyRate = inputs.contingencyPercent + sensitivity.contingencyPercent;
+  const contingency = buildCost * (contingencyRate / 100);
+  
+  // Apply finance rate adjustment and programme delay
   const financeBase = (buildCost + professionalFees + marketingSales + contingency) * 0.5;
-  const finance = financeBase * (inputs.financePercent / 100);
+  const adjustedFinanceRate = inputs.financePercent + sensitivity.financeRatePercent;
+  const delayMultiplier = 1 + (sensitivity.programmeDelayMonths / 12); // Convert months to years
+  const finance = financeBase * (adjustedFinanceRate / 100) * delayMultiplier;
 
   const totalCosts = buildCost + professionalFees + marketingSales + contingency + finance + inputs.s106CIL + inputs.landCost;
   const netProfit = totalGDV - totalCosts;

@@ -1,16 +1,19 @@
 import { CalculatedValues } from "@/types/calculator";
+import { SensitivityAdjustments } from "@/types/sensitivity";
 import { formatCurrency, formatPercent } from "@/utils/calculatorHelpers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Copy } from "lucide-react";
+import { TrendingUp, TrendingDown, Copy, Activity } from "lucide-react";
 import { toast } from "sonner";
 
 interface SummaryPanelProps {
   values: CalculatedValues;
   targetMargin: number;
+  isSensitivityActive?: boolean;
+  sensitivity?: SensitivityAdjustments;
 }
 
-const SummaryPanel = ({ values, targetMargin }: SummaryPanelProps) => {
+const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity }: SummaryPanelProps) => {
   const isSuccessful = values.profitMarginPercent >= targetMargin;
   const isVariancePositive = values.variance >= 0;
 
@@ -51,10 +54,18 @@ Variance to Land: ${formatCurrency(values.variance)}
 
   return (
     <div className="space-y-4">
-      <Card className="shadow-medium">
+      <Card className={`shadow-medium transition-all ${isSensitivityActive ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center justify-between">
-            Summary
+            <div className="flex items-center gap-2">
+              Summary
+              {isSensitivityActive && (
+                <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-primary/20 text-primary rounded-full">
+                  <Activity className="h-3 w-3" />
+                  Live Sensitivity
+                </span>
+              )}
+            </div>
             <Button variant="ghost" size="sm" onClick={copySummary}>
               <Copy className="h-4 w-4 mr-2" />
               Copy
@@ -62,6 +73,18 @@ Variance to Land: ${formatCurrency(values.variance)}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isSensitivityActive && sensitivity && (
+            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+              <p className="font-medium text-primary mb-1">Market adjustments applied:</p>
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {sensitivity.salesValuePercent !== 0 && <p>Sales: {sensitivity.salesValuePercent > 0 ? '+' : ''}{sensitivity.salesValuePercent}%</p>}
+                {sensitivity.buildCostPercent !== 0 && <p>Build: {sensitivity.buildCostPercent > 0 ? '+' : ''}{sensitivity.buildCostPercent}%</p>}
+                {sensitivity.financeRatePercent !== 0 && <p>Finance: {sensitivity.financeRatePercent > 0 ? '+' : ''}{sensitivity.financeRatePercent}%</p>}
+                {sensitivity.contingencyPercent !== 0 && <p>Contingency: {sensitivity.contingencyPercent > 0 ? '+' : ''}{sensitivity.contingencyPercent}%</p>}
+                {sensitivity.programmeDelayMonths !== 0 && <p>Delay: +{sensitivity.programmeDelayMonths} months</p>}
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <div className="flex justify-between items-baseline">
               <span className="text-sm text-muted-foreground">Total GDV</span>
