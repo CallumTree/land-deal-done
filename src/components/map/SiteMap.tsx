@@ -1,128 +1,149 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import MapboxDraw from '@mapbox/mapbox-gl-draw';
-import { point } from '@turf/helpers';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-draw';
+import 'leaflet-draw/dist/leaflet.draw.css';
 import { area as turfArea } from '@turf/area';
 import distance from '@turf/distance';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import { point } from '@turf/helpers';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2 } from 'lucide-react';
+import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
-  mapboxToken: string;
 }
 
-const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const draw = useRef<MapboxDraw | null>(null);
+  const map = useRef<L.Map | null>(null);
+  const drawnItems = useRef<L.FeatureGroup | null>(null);
+  const drawControl = useRef<L.Control.Draw | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(!savedArea);
   const [currentArea, setCurrentArea] = useState<number>(savedArea || 0);
   const [currentPerimeter, setCurrentPerimeter] = useState<number>(0);
+  const [mapError, setMapError] = useState(false);
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken) return;
+    if (!mapContainer.current || map.current) return;
 
-    mapboxgl.accessToken = mapboxToken;
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
-      center: [-0.1278, 51.5074], // Default to London
-      zoom: 15,
-    });
+    try {
+      // Initialize map
+      map.current = L.map(mapContainer.current).setView([51.5074, -0.1278], 15);
 
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      // Add OpenStreetMap tiles
+      const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      });
 
-    // Initialize draw tool
-    draw.current = new MapboxDraw({
-      displayControlsDefault: false,
-      controls: {
-        polygon: true,
-        trash: true,
-      },
-      defaultMode: 'simple_select',
-      styles: [
-        // Polygon fill
-        {
-          'id': 'gl-draw-polygon-fill',
-          'type': 'fill',
-          'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
-          'paint': {
-            'fill-color': 'hsl(220, 70%, 35%)',
-            'fill-opacity': 0.3,
-          }
+      tileLayer.on('tileerror', () => {
+        setMapError(true);
+      });
+
+      tileLayer.on('tileload', () => {
+        setMapError(false);
+      });
+
+      tileLayer.addTo(map.current);
+
+      // Initialize feature group for drawn items
+      drawnItems.current = new L.FeatureGroup();
+      map.current.addLayer(drawnItems.current);
+
+      // Initialize draw control
+      drawControl.current = new L.Control.Draw({
+        edit: {
+          featureGroup: drawnItems.current,
         },
-        // Polygon outline
-        {
-          'id': 'gl-draw-polygon-stroke-active',
-          'type': 'line',
-          'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
-          'paint': {
-            'line-color': 'hsl(220, 70%, 35%)',
-            'line-width': 3,
-          }
+        draw: {
+          polygon: {
+            allowIntersection: false,
+            shapeOptions: {
+              color: 'hsl(220, 70%, 35%)',
+              fillColor: 'hsl(220, 70%, 35%)',
+              fillOpacity: 0.3,
+              weight: 3,
+            }
+          },
+          polyline: false,
+          circle: false,
+          rectangle: false,
+          marker: false,
+          circlemarker: false,
         },
-        // Vertex points
-        {
-          'id': 'gl-draw-polygon-and-line-vertex-active',
-          'type': 'circle',
-          'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point']],
-          'paint': {
-            'circle-radius': 6,
-            'circle-color': 'hsl(220, 70%, 35%)',
-            'circle-stroke-width': 2,
-            'circle-stroke-color': '#fff',
-          }
-        }
-      ]
-    });
+      });
 
-    map.current.addControl(draw.current);
+      map.current.addControl(drawControl.current);
 
-    // Handle draw events
-    const updateArea = () => {
-      const data = draw.current?.getAll();
-      if (data && data.features.length > 0) {
-        const polygon = data.features[0];
-        const areaInM2 = turfArea(polygon);
-        const perimeterInM = calculatePerimeter(polygon);
-        
-        setCurrentArea(areaInM2);
-        setCurrentPerimeter(perimeterInM);
-      } else {
-        setCurrentArea(0);
-        setCurrentPerimeter(0);
-      }
-    };
+      // Handle draw events
+      map.current.on(L.Draw.Event.CREATED, (e: any) => {
+        const layer = e.layer;
+        drawnItems.current?.clearLayers();
+        drawnItems.current?.addLayer(layer);
+        updateArea();
+      });
 
-    map.current.on('draw.create', updateArea);
-    map.current.on('draw.update', updateArea);
-    map.current.on('draw.delete', updateArea);
+      map.current.on(L.Draw.Event.EDITED, () => {
+        updateArea();
+      });
+
+      map.current.on(L.Draw.Event.DELETED, () => {
+        updateArea();
+      });
+
+    } catch (error) {
+      console.error('Map initialization error:', error);
+      setMapError(true);
+    }
 
     return () => {
       map.current?.remove();
+      map.current = null;
     };
-  }, [mapboxToken]);
+  }, []);
 
-  const calculatePerimeter = (polygon: any): number => {
-    if (!polygon.geometry || !polygon.geometry.coordinates || !polygon.geometry.coordinates[0]) {
-      return 0;
+  const updateArea = () => {
+    if (!drawnItems.current) return;
+
+    const layers = drawnItems.current.getLayers();
+    if (layers.length > 0) {
+      const layer = layers[0] as L.Polygon;
+      const latlngs = layer.getLatLngs()[0] as L.LatLng[];
+      
+      // Convert to GeoJSON for area calculation
+      const coordinates = latlngs.map((latlng: L.LatLng) => [latlng.lng, latlng.lat]);
+      coordinates.push(coordinates[0]); // Close the polygon
+      
+      const geojson = {
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [coordinates]
+        },
+        properties: {}
+      };
+
+      const areaInM2 = turfArea(geojson);
+      const perimeterInM = calculatePerimeter(coordinates);
+      
+      setCurrentArea(areaInM2);
+      setCurrentPerimeter(perimeterInM);
+    } else {
+      setCurrentArea(0);
+      setCurrentPerimeter(0);
     }
-    
-    const coords = polygon.geometry.coordinates[0];
+  };
+
+  const calculatePerimeter = (coords: number[][]): number => {
     let perimeter = 0;
     
     for (let i = 0; i < coords.length - 1; i++) {
@@ -142,14 +163,15 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
     }
 
     try {
+      // Using Nominatim API for geocoding (OpenStreetMap's geocoding service)
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?country=GB&access_token=${mapboxToken}`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&countrycodes=gb&limit=1`
       );
       const data = await response.json();
 
-      if (data.features && data.features.length > 0) {
-        const [lng, lat] = data.features[0].center;
-        map.current?.flyTo({ center: [lng, lat], zoom: 17 });
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        map.current?.flyTo([parseFloat(lat), parseFloat(lon)], 17);
         toast.success('Location found');
       } else {
         toast.error('Location not found');
@@ -170,15 +192,42 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
   };
 
   const handleClear = () => {
-    draw.current?.deleteAll();
+    drawnItems.current?.clearLayers();
     setCurrentArea(0);
     setCurrentPerimeter(0);
+  };
+
+  const handleRetry = () => {
+    setMapError(false);
+    window.location.reload();
   };
 
   const formatArea = (m2: number) => {
     const hectares = m2 / 10000;
     return `${m2.toLocaleString()} m² (${hectares.toFixed(2)} ha)`;
   };
+
+  if (mapError) {
+    return (
+      <Card className="w-full">
+        <CardContent className="py-12">
+          <div className="text-center space-y-4">
+            <MapPin className="h-12 w-12 mx-auto text-muted-foreground" />
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Map temporarily unavailable</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Unable to load map tiles. Your GDV calculator remains fully functional.
+              </p>
+              <Button onClick={handleRetry} variant="outline" className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">
@@ -224,6 +273,11 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
 
             {/* Map container */}
             <div ref={mapContainer} className="w-full h-[500px] rounded-lg border overflow-hidden" />
+
+            {/* OSM Attribution */}
+            <p className="text-xs text-muted-foreground text-center">
+              Map data © OpenStreetMap contributors
+            </p>
 
             {/* Area info */}
             {currentArea > 0 && (
