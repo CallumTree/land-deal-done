@@ -19,6 +19,17 @@ export interface GlobalInputs {
   targetMarginPercent: number;
   vatEnabled: boolean;
   siteArea: number;
+  demolitionClearance: number;
+  ecologyEnvironmental: number;
+  groundInvestigation: number;
+  planningStatutoryFees: number;
+  serviceConnections: number;
+  abnormals: number;
+  siteSecurity: number;
+  miscellaneousAllowance: number;
+  abnormalsPercentEnabled: boolean;
+  abnormalsPercent: number;
+  siteNotes: string;
 }
 
 export interface CalculatedValues {
@@ -29,6 +40,7 @@ export interface CalculatedValues {
   contingency: number;
   finance: number;
   other: number;
+  sitePrepTechnical: number;
   landCost: number;
   totalCosts: number;
   netProfit: number;

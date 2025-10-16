@@ -27,6 +27,17 @@ const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) 
     targetMarginPercent: 20,
     vatEnabled: false,
     siteArea: 0,
+    demolitionClearance: 0,
+    ecologyEnvironmental: 0,
+    groundInvestigation: 0,
+    planningStatutoryFees: 0,
+    serviceConnections: 0,
+    abnormals: 0,
+    siteSecurity: 0,
+    miscellaneousAllowance: 0,
+    abnormalsPercentEnabled: false,
+    abnormalsPercent: 5,
+    siteNotes: "",
   });
   const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
   const [showReportModal, setShowReportModal] = useState(false);

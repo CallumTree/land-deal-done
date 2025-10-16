@@ -64,19 +64,35 @@ export const calculateTotals = (
   const contingencyRate = inputs.contingencyPercent + sensitivity.contingencyPercent;
   const contingency = buildCost * (contingencyRate / 100);
   
+  // Calculate site prep & technical costs
+  let abnormals = inputs.abnormals || 0;
+  if (inputs.abnormalsPercentEnabled && abnormals === 0) {
+    abnormals = buildCost * (inputs.abnormalsPercent / 100);
+  }
+  
+  const sitePrepTechnical = 
+    (inputs.demolitionClearance || 0) +
+    (inputs.ecologyEnvironmental || 0) +
+    (inputs.groundInvestigation || 0) +
+    (inputs.planningStatutoryFees || 0) +
+    (inputs.serviceConnections || 0) +
+    abnormals +
+    (inputs.siteSecurity || 0) +
+    (inputs.miscellaneousAllowance || 0);
+  
   // Apply finance rate adjustment and programme delay
-  const financeBase = (buildCost + professionalFees + marketingSales + contingency) * 0.5;
+  const financeBase = (buildCost + professionalFees + marketingSales + contingency + sitePrepTechnical) * 0.5;
   const adjustedFinanceRate = inputs.financePercent + sensitivity.financeRatePercent;
   const delayMultiplier = 1 + (sensitivity.programmeDelayMonths / 12); // Convert months to years
   const finance = financeBase * (adjustedFinanceRate / 100) * delayMultiplier;
 
-  const totalCosts = buildCost + professionalFees + marketingSales + contingency + finance + inputs.s106CIL + inputs.landCost;
+  const totalCosts = buildCost + professionalFees + marketingSales + contingency + finance + sitePrepTechnical + inputs.s106CIL + inputs.landCost;
   const netProfit = totalGDV - totalCosts;
   const profitMarginPercent = totalGDV > 0 ? (netProfit / totalGDV) * 100 : 0;
 
   // RLV at target margin
   const residualLandValue = totalGDV * (1 - inputs.targetMarginPercent / 100) - 
-    (buildCost + professionalFees + marketingSales + contingency + finance + inputs.s106CIL);
+    (buildCost + professionalFees + marketingSales + contingency + finance + sitePrepTechnical + inputs.s106CIL);
   
   const variance = residualLandValue - inputs.landCost;
 
@@ -88,6 +104,7 @@ export const calculateTotals = (
     contingency,
     finance,
     other: inputs.s106CIL,
+    sitePrepTechnical,
     landCost: inputs.landCost,
     totalCosts,
     netProfit,

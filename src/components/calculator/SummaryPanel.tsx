@@ -18,6 +18,7 @@ const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensi
   const isVariancePositive = values.variance >= 0;
 
   const copySummary = () => {
+    const sitePrepPercent = values.totalCosts > 0 ? (values.sitePrepTechnical / values.totalCosts) * 100 : 0;
     const summary = `
 Napkin GDV Summary
 ==================
@@ -27,6 +28,7 @@ Professional Fees: ${formatCurrency(values.professionalFees)}
 Marketing & Sales: ${formatCurrency(values.marketingSales)}
 Contingency: ${formatCurrency(values.contingency)}
 Finance: ${formatCurrency(values.finance)}
+${values.sitePrepTechnical > 0 ? `Site Prep & Technical: ${formatCurrency(values.sitePrepTechnical)} (${sitePrepPercent.toFixed(1)}%)` : ''}
 Other (S106/CIL): ${formatCurrency(values.other)}
 Land Cost: ${formatCurrency(values.landCost)}
 ---
@@ -48,9 +50,10 @@ Variance to Land: ${formatCurrency(values.variance)}
     { label: "Marketing", value: values.marketingSales, color: "bg-secondary" },
     { label: "Contingency", value: values.contingency, color: "bg-muted" },
     { label: "Finance", value: values.finance, color: "bg-primary/60" },
+    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep & Technical", value: values.sitePrepTechnical, color: "bg-orange-500" }] : []),
     { label: "Other", value: values.other, color: "bg-accent/60" },
     { label: "Land", value: values.landCost, color: "bg-secondary/60" },
-  ];
+  ].filter(item => item.value > 0);
 
   return (
     <div className="space-y-4">
@@ -155,7 +158,7 @@ Variance to Land: ${formatCurrency(values.variance)}
             </div>
           </div>
 
-          {/* Mini bar chart */}
+          {/* Stacked bar chart */}
           <div className="border-t pt-4">
             <h4 className="text-sm font-semibold mb-3">Visual Breakdown</h4>
             <div className="space-y-2">
@@ -170,15 +173,30 @@ Variance to Land: ${formatCurrency(values.variance)}
                 </div>
               </div>
               
+              {/* Stacked costs bar */}
               <div className="relative h-8 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="absolute h-full bg-destructive transition-all"
-                  style={{ width: `${(values.totalCosts / values.totalGDV) * 100}%` }}
-                >
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-destructive-foreground">
-                    Costs: {formatCurrency(values.totalCosts)}
-                  </span>
-                </div>
+                {(() => {
+                  let offset = 0;
+                  return costBreakdown.map((item, idx) => {
+                    const width = (item.value / values.totalGDV) * 100;
+                    const element = (
+                      <div
+                        key={item.label}
+                        className={`absolute h-full ${item.color} transition-all`}
+                        style={{ 
+                          left: `${offset}%`,
+                          width: `${width}%`
+                        }}
+                        title={`${item.label}: ${formatCurrency(item.value)}`}
+                      />
+                    );
+                    offset += width;
+                    return element;
+                  });
+                })()}
+                <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white mix-blend-difference">
+                  Costs: {formatCurrency(values.totalCosts)}
+                </span>
               </div>
               
               <div className="relative h-8 bg-muted rounded-full overflow-hidden">
