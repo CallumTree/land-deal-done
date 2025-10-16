@@ -5,11 +5,15 @@ import { Button } from "@/components/ui/button";
 import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
+import SiteMap from "@/components/map/SiteMap";
+import MapboxTokenInput from "@/components/map/MapboxTokenInput";
 import { Calculator, DollarSign, TrendingUp, Settings, LogOut } from "lucide-react";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mapboxToken, setMapboxToken] = useState<string>('');
+  const [siteArea, setSiteArea] = useState<number>(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -94,8 +98,20 @@ const Dashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <NapkinCalculator />
+      <main className="container mx-auto px-4 py-8 space-y-8">
+        {/* Mapbox Token Input */}
+        {!mapboxToken && <MapboxTokenInput onTokenSubmit={setMapboxToken} />}
+        
+        {/* Site Map */}
+        {mapboxToken && (
+          <SiteMap 
+            onAreaUpdate={setSiteArea} 
+            savedArea={siteArea}
+            mapboxToken={mapboxToken}
+          />
+        )}
+        
+        <NapkinCalculator siteArea={siteArea} />
         
         {/* Placeholder sections for future features */}
         <div className="mt-16 space-y-16">

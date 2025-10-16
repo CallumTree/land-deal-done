@@ -1,14 +1,16 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { GlobalInputs as GlobalInputsType } from "@/types/calculator";
 
 interface GlobalInputsProps {
   inputs: GlobalInputsType;
   onChange: (inputs: GlobalInputsType) => void;
+  totalUnits?: number;
 }
 
-const GlobalInputs = ({ inputs, onChange }: GlobalInputsProps) => {
+const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) => {
   const updateInput = (key: keyof GlobalInputsType, value: number | boolean) => {
     onChange({ ...inputs, [key]: value });
   };
@@ -121,6 +123,33 @@ const GlobalInputs = ({ inputs, onChange }: GlobalInputsProps) => {
           onChange={(e) => updateInput("targetMarginPercent", parseFloat(e.target.value) || 0)}
           className="text-sm"
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="siteArea" className="text-sm font-medium">
+          Site Area (m²)
+        </Label>
+        <Input
+          id="siteArea"
+          type="number"
+          min="0"
+          value={inputs.siteArea}
+          onChange={(e) => updateInput("siteArea", parseFloat(e.target.value) || 0)}
+          className="text-sm"
+          placeholder="From map or manual entry"
+        />
+        {inputs.siteArea > 0 && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {(inputs.siteArea / 10000).toFixed(2)} hectares
+            </p>
+            {totalUnits > 0 && inputs.siteArea > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {((totalUnits / (inputs.siteArea / 10000)).toFixed(0))} dph
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center space-x-2">

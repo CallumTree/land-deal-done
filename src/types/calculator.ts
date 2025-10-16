@@ -18,6 +18,7 @@ export interface GlobalInputs {
   landCost: number;
   targetMarginPercent: number;
   vatEnabled: boolean;
+  siteArea: number;
 }
 
 export interface CalculatedValues {

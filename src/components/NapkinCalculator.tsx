@@ -10,7 +10,11 @@ import LenderReportModal from "@/components/calculator/LenderReportModal";
 
 const STORAGE_KEY = "napkin-calculator-data";
 
-const NapkinCalculator = () => {
+interface NapkinCalculatorProps {
+  siteArea?: number;
+}
+
+const NapkinCalculator = ({ siteArea = 0 }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -21,6 +25,7 @@ const NapkinCalculator = () => {
     landCost: 0,
     targetMarginPercent: 20,
     vatEnabled: false,
+    siteArea: 0,
   });
   const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -59,9 +64,18 @@ const NapkinCalculator = () => {
     }
   }, [rows, inputs]);
 
+  // Update siteArea when prop changes
+  useEffect(() => {
+    if (siteArea > 0) {
+      setInputs(prev => ({ ...prev, siteArea }));
+    }
+  }, [siteArea]);
+
   const baseValues = calculateTotals(rows, inputs);
   const adjustedValues = calculateTotals(rows, inputs, sensitivity);
   const isSensitivityActive = Object.values(sensitivity).some(v => v !== 0);
+  
+  const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
 
   return (
     <section className="py-16 px-4 bg-background" id="calculator">
@@ -75,7 +89,7 @@ const NapkinCalculator = () => {
           </p>
         </div>
 
-        <GlobalInputs inputs={inputs} onChange={setInputs} />
+        <GlobalInputs inputs={inputs} onChange={setInputs} totalUnits={totalUnits} />
 
         <MarketSensitivityPanel
           adjustments={sensitivity}
