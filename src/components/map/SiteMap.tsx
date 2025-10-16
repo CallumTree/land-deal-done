@@ -14,8 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
@@ -23,6 +25,36 @@ interface SiteMapProps {
 }
 
 type BasemapType = 'standard' | 'satellite';
+type ContextPreset = 'rural' | 'suburban' | 'urban';
+type MixType = 'semis' | 'mixed' | 'terrace' | 'bungalow';
+
+interface DensityBand { low: number; high: number; }
+interface UnitAssumptions {
+  netDevelopable: number;
+  infrastructure: number;
+  context: ContextPreset;
+  mixType: MixType;
+}
+
+const CONTEXT_DENSITY: Record<ContextPreset, DensityBand> = {
+  rural: { low: 22, high: 30 },
+  suburban: { low: 30, high: 35 },
+  urban: { low: 35, high: 60 },
+};
+
+const MIX_PLOT_AREA: Record<MixType, number> = {
+  semis: 220,
+  mixed: 230,
+  terrace: 150,
+  bungalow: 260,
+};
+
+const MIX_LABELS: Record<MixType, string> = {
+  semis: 'Semis',
+  mixed: 'Mixed',
+  terrace: 'Terrace-led',
+  bungalow: 'Bungalow-heavy',
+};
 
 const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -42,6 +74,15 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
   const [fillOpacity, setFillOpacity] = useState<number>(() => {
     const saved = localStorage.getItem('siteMapOpacity');
     return saved ? parseFloat(saved) : 0.3;
+  });
+  const [assumptions, setAssumptions] = useState<UnitAssumptions>(() => {
+    const saved = localStorage.getItem('siteMapAssumptions');
+    return saved ? JSON.parse(saved) : {
+      netDevelopable: 70,
+      infrastructure: 25,
+      context: 'suburban' as ContextPreset,
+      mixType: 'semis' as MixType,
+    };
   });
 
   // Initialize map
@@ -131,6 +172,11 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
     updatePolygonStyles();
     localStorage.setItem('siteMapOpacity', fillOpacity.toString());
   }, [fillOpacity]);
+
+  // Persist assumptions
+  useEffect(() => {
+    localStorage.setItem('siteMapAssumptions', JSON.stringify(assumptions));
+  }, [assumptions]);
 
   const getPolygonOptions = () => {
     const isSatellite = basemap === 'satellite';
@@ -300,6 +346,40 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
     return `${m2.toLocaleString()} m² (${hectares.toFixed(2)} ha)`;
   };
 
+  const calculateUnits = () => {
+    if (currentArea === 0) return null;
+
+    const grossAreaM2 = currentArea;
+    const grossAreaHa = grossAreaM2 / 10000;
+    
+    // Net-Developable
+    const netDevelopableM2 = grossAreaM2 * (assumptions.netDevelopable / 100);
+    const netDevelopableHa = netDevelopableM2 / 10000;
+    
+    // Net-Buildable
+    const netBuildableM2 = netDevelopableM2 * (1 - assumptions.infrastructure / 100);
+    
+    // Plot-area method (primary)
+    const plotArea = MIX_PLOT_AREA[assumptions.mixType];
+    const unitsPlot = Math.round(netBuildableM2 / plotArea);
+    
+    // Density cross-check (secondary)
+    const densityBand = CONTEXT_DENSITY[assumptions.context];
+    const unitsLow = Math.round(netDevelopableHa * densityBand.low);
+    const unitsHigh = Math.round(netDevelopableHa * densityBand.high);
+    
+    return {
+      unitsPlot,
+      unitsLow,
+      unitsHigh,
+      mixLabel: MIX_LABELS[assumptions.mixType],
+      parking: Math.round(unitsPlot * 2.2),
+      roadLength: Math.round(unitsPlot * 20),
+    };
+  };
+
+  const unitEstimate = calculateUnits();
+
   if (mapError) {
     return (
       <Card className="w-full">
@@ -407,7 +487,7 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
 
             {/* Area info */}
             {currentArea > 0 && (
-              <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+              <div className="bg-muted/50 p-4 rounded-lg space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Total Area:</span>
                   <span className="text-sm font-bold">{formatArea(currentArea)}</span>
@@ -416,6 +496,116 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
                   <span className="text-sm font-medium">Perimeter:</span>
                   <span className="text-sm font-bold">{currentPerimeter.toLocaleString()} m</span>
                 </div>
+                
+                {unitEstimate && (
+                  <>
+                    <div className="pt-2 border-t border-border/50">
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="text-sm font-medium">Approx Units:</span>
+                        <div className="text-right">
+                          <div className="text-sm font-bold">
+                            {unitEstimate.unitsPlot} ({unitEstimate.mixLabel}) · {unitEstimate.unitsLow}–{unitEstimate.unitsHigh} (density)
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-muted-foreground">
+                          Assumes ND {assumptions.netDevelopable}%, Infra {assumptions.infrastructure}%
+                        </p>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Settings className="h-3 w-3" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Unit Estimator Assumptions</DialogTitle>
+                              <DialogDescription>
+                                Adjust the assumptions to refine the unit count estimate
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">
+                                  Net-Developable %: {assumptions.netDevelopable}%
+                                </Label>
+                                <Slider
+                                  value={[assumptions.netDevelopable]}
+                                  onValueChange={([value]) => setAssumptions({ ...assumptions, netDevelopable: value })}
+                                  min={50}
+                                  max={85}
+                                  step={1}
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">
+                                  Infrastructure %: {assumptions.infrastructure}%
+                                </Label>
+                                <Slider
+                                  value={[assumptions.infrastructure]}
+                                  onValueChange={([value]) => setAssumptions({ ...assumptions, infrastructure: value })}
+                                  min={15}
+                                  max={35}
+                                  step={1}
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Context Preset</Label>
+                                <Select 
+                                  value={assumptions.context} 
+                                  onValueChange={(value: ContextPreset) => setAssumptions({ ...assumptions, context: value })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="rural">Rural edge (22–30 u/ha)</SelectItem>
+                                    <SelectItem value="suburban">Suburban (30–35 u/ha)</SelectItem>
+                                    <SelectItem value="urban">Urban edge (35–60 u/ha)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Mix Type</Label>
+                                <Select 
+                                  value={assumptions.mixType} 
+                                  onValueChange={(value: MixType) => setAssumptions({ ...assumptions, mixType: value })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="semis">Semis (220 m²)</SelectItem>
+                                    <SelectItem value="mixed">Mixed (230 m²)</SelectItem>
+                                    <SelectItem value="terrace">Terrace-led (150 m²)</SelectItem>
+                                    <SelectItem value="bungalow">Bungalow-heavy (260 m²)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="pt-4 border-t border-border/50 space-y-1 text-xs text-muted-foreground">
+                                <div className="flex justify-between">
+                                  <span>Parking (rough):</span>
+                                  <span>{unitEstimate.parking} spaces</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Internal roads (rough):</span>
+                                  <span>{unitEstimate.roadLength} m</span>
+                                </div>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
