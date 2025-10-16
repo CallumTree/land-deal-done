@@ -3,8 +3,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw';
 import 'leaflet-draw/dist/leaflet.draw.css';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { area as turfArea } from '@turf/area';
 import distance from '@turf/distance';
 import { point } from '@turf/helpers';
@@ -22,12 +20,11 @@ import { toast } from 'sonner';
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
-  mapboxToken?: string;
 }
 
 type BasemapType = 'standard' | 'satellite';
 
-const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
@@ -159,23 +156,25 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
   const addTileLayer = (type: BasemapType) => {
     if (!map.current) return;
 
-    if (type === 'satellite' && mapboxToken) {
+    if (type === 'satellite') {
       try {
-        // Use Mapbox satellite tiles
+        // Use Esri World Imagery (free, no API key required)
         const satelliteLayer = L.tileLayer(
-          `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.png?access_token=${mapboxToken}`,
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
           {
-            attribution: '© Mapbox © OpenStreetMap contributors',
+            attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
             maxZoom: 19,
-            tileSize: 512,
-            zoomOffset: -1,
           }
         );
 
         satelliteLayer.on('tileerror', () => {
           console.warn('Satellite tiles failed, falling back to standard');
           setBasemap('standard');
-          toast.error('Satellite view unavailable, switched to Standard');
+          toast.info('Satellite unavailable — using Standard map');
+        });
+
+        satelliteLayer.on('tileload', () => {
+          setMapError(false);
         });
 
         satelliteLayer.addTo(map.current);
@@ -183,6 +182,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
       } catch (error) {
         console.error('Satellite tile error:', error);
         setBasemap('standard');
+        toast.info('Satellite unavailable — using Standard map');
       }
     } else {
       // Use OpenStreetMap tiles
@@ -365,20 +365,18 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
             </div>
 
             {/* Basemap Switcher */}
-            {mapboxToken && (
-              <Tabs value={basemap} onValueChange={(v) => setBasemap(v as BasemapType)} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="standard" className="gap-2">
-                    <MapIcon className="h-4 w-4" />
-                    Standard
-                  </TabsTrigger>
-                  <TabsTrigger value="satellite" className="gap-2">
-                    <Satellite className="h-4 w-4" />
-                    Satellite
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            )}
+            <Tabs value={basemap} onValueChange={(v) => setBasemap(v as BasemapType)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="standard" className="gap-2">
+                  <MapIcon className="h-4 w-4" />
+                  Standard
+                </TabsTrigger>
+                <TabsTrigger value="satellite" className="gap-2">
+                  <Satellite className="h-4 w-4" />
+                  Satellite
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
             {/* Opacity Slider */}
             {currentArea > 0 && (
@@ -402,8 +400,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
 
             {/* Attribution */}
             <p className="text-xs text-muted-foreground text-center">
-              {basemap === 'satellite' && mapboxToken 
-                ? 'Map data © OpenStreetMap contributors | Satellite © Mapbox'
+              {basemap === 'satellite' 
+                ? '© Esri, Maxar, Earthstar Geographics, and the GIS User Community'
                 : 'Map data © OpenStreetMap contributors'}
             </p>
 
