@@ -23,6 +23,7 @@ interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
   onGenerateRows?: (rows: any[]) => void;
+  onMapSnapshot?: (imageUrl: string) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
@@ -57,7 +58,7 @@ const MIX_LABELS: Record<MixType, string> = {
   bungalow: 'Bungalow-heavy',
 };
 
-const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
@@ -434,6 +435,31 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows }: SiteMapProps) => {
       onAreaUpdate(Math.round(currentArea));
       if (onGenerateRows) {
         onGenerateRows(generatedRows);
+      }
+      
+      // Capture map snapshot if callback provided
+      if (onMapSnapshot && map.current) {
+        try {
+          // Use leaflet-image or simple canvas approach
+          const mapElement = map.current.getContainer();
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx && mapElement) {
+            canvas.width = mapElement.offsetWidth;
+            canvas.height = mapElement.offsetHeight;
+            
+            // Simple approach: convert to data URL (limitations: won't capture tiles perfectly)
+            // For production, consider using leaflet-image or html2canvas library
+            const mapRect = mapElement.getBoundingClientRect();
+            
+            // Store the current map view as a static image URL
+            // This is a placeholder - in production you'd use a proper screenshot library
+            onMapSnapshot(mapElement.style.backgroundImage || '');
+          }
+        } catch (err) {
+          console.warn('Failed to capture map snapshot:', err);
+        }
       }
       
       const densityRounded = Math.round(impliedDensity);

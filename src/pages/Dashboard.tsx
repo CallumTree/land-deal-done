@@ -14,6 +14,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [siteArea, setSiteArea] = useState<number>(0);
   const [generatedRows, setGeneratedRows] = useState<PropertyRow[] | undefined>();
+  const [mapImageUrl, setMapImageUrl] = useState<string>("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -102,7 +103,7 @@ const Dashboard = () => {
           onGenerateRows={setGeneratedRows}
         />
         
-        <NapkinCalculator siteArea={siteArea} initialRows={generatedRows} />
+        <NapkinCalculator siteArea={siteArea} initialRows={generatedRows} mapImageUrl={mapImageUrl} />
         
         {/* Placeholder sections for future features */}
         <div className="mt-16 space-y-16">

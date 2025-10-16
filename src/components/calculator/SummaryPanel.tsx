@@ -11,9 +11,10 @@ interface SummaryPanelProps {
   targetMargin: number;
   isSensitivityActive?: boolean;
   sensitivity?: SensitivityAdjustments;
+  onOpenLenderPack?: () => void;
 }
 
-const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity }: SummaryPanelProps) => {
+const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity, onOpenLenderPack }: SummaryPanelProps) => {
   const isSuccessful = values.profitMarginPercent >= targetMargin;
   const isVariancePositive = values.variance >= 0;
 
@@ -212,9 +213,20 @@ Variance to Land: ${formatCurrency(values.variance)}
             </div>
           </div>
 
-          <Button variant="cta" className="w-full mt-4" asChild>
-            <a href="#email-capture">Book a Demo</a>
-          </Button>
+          <div className="space-y-2 mt-4">
+            {onOpenLenderPack && (
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={onOpenLenderPack}
+              >
+                Export Lender Pack
+              </Button>
+            )}
+            <Button variant="cta" className="w-full" asChild>
+              <a href="#email-capture">Book a Demo</a>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

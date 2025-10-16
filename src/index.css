@@ -103,3 +103,88 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles for Lender Pack */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1cm;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  .print\:border-0 {
+    border: 0 !important;
+  }
+
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+
+  .print\:h-auto {
+    height: auto !important;
+  }
+
+  .print\:min-h-0 {
+    min-height: 0 !important;
+  }
+
+  .print\:max-w-full {
+    max-width: 100% !important;
+  }
+
+  .print\:max-h-full {
+    max-height: none !important;
+  }
+
+  h1 {
+    font-size: 24pt;
+  }
+
+  h2 {
+    font-size: 18pt;
+  }
+
+  body {
+    font-size: 10pt;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    break-inside: avoid;
+  }
+
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  input,
+  textarea {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

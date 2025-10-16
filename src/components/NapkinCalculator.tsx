@@ -7,15 +7,17 @@ import GDVTable from "@/components/calculator/GDVTable";
 import SummaryPanel from "@/components/calculator/SummaryPanel";
 import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPanel";
 import LenderReportModal from "@/components/calculator/LenderReportModal";
+import LenderSummaryPack from "@/components/calculator/LenderSummaryPack";
 
 const STORAGE_KEY = "napkin-calculator-data";
 
 interface NapkinCalculatorProps {
   siteArea?: number;
   initialRows?: PropertyRow[];
+  mapImageUrl?: string;
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -41,6 +43,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) 
   });
   const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showLenderPack, setShowLenderPack] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -129,6 +132,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) 
                 targetMargin={inputs.targetMarginPercent}
                 isSensitivityActive={isSensitivityActive}
                 sensitivity={sensitivity}
+                onOpenLenderPack={() => setShowLenderPack(true)}
               />
             </div>
           </div>
@@ -140,6 +144,16 @@ const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) 
           baseCase={baseValues}
           adjustedCase={adjustedValues}
           adjustments={sensitivity}
+        />
+
+        <LenderSummaryPack
+          open={showLenderPack}
+          onClose={() => setShowLenderPack(false)}
+          values={isSensitivityActive ? adjustedValues : baseValues}
+          inputs={inputs}
+          rows={rows}
+          siteArea={siteArea}
+          mapImageUrl={mapImageUrl}
         />
 
         {/* Mobile sticky CTA */}
