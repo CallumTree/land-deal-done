@@ -3,6 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw';
 import 'leaflet-draw/dist/leaflet.draw.css';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { area as turfArea } from '@turf/area';
 import distance from '@turf/distance';
 import { point } from '@turf/helpers';
@@ -10,26 +12,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw } from 'lucide-react';
+import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
+  mapboxToken?: string;
 }
 
-const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
+type BasemapType = 'standard' | 'satellite';
+
+const SiteMap = ({ onAreaUpdate, savedArea, mapboxToken }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
   const drawControl = useRef<L.Control.Draw | null>(null);
+  const currentTileLayer = useRef<L.TileLayer | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(!savedArea);
   const [currentArea, setCurrentArea] = useState<number>(savedArea || 0);
   const [currentPerimeter, setCurrentPerimeter] = useState<number>(0);
   const [mapError, setMapError] = useState(false);
+  const [basemap, setBasemap] = useState<BasemapType>(() => {
+    return (localStorage.getItem('siteMapBasemap') as BasemapType) || 'standard';
+  });
+  const [fillOpacity, setFillOpacity] = useState<number>(() => {
+    const saved = localStorage.getItem('siteMapOpacity');
+    return saved ? parseFloat(saved) : 0.3;
+  });
 
   // Initialize map
   useEffect(() => {
@@ -39,27 +55,15 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
       // Initialize map
       map.current = L.map(mapContainer.current).setView([51.5074, -0.1278], 15);
 
-      // Add OpenStreetMap tiles
-      const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19,
-      });
-
-      tileLayer.on('tileerror', () => {
-        setMapError(true);
-      });
-
-      tileLayer.on('tileload', () => {
-        setMapError(false);
-      });
-
-      tileLayer.addTo(map.current);
+      // Add initial tile layer
+      addTileLayer(basemap);
 
       // Initialize feature group for drawn items
       drawnItems.current = new L.FeatureGroup();
       map.current.addLayer(drawnItems.current);
 
-      // Initialize draw control
+      // Initialize draw control with higher contrast styles for satellite
+      const polygonOptions = getPolygonOptions();
       drawControl.current = new L.Control.Draw({
         edit: {
           featureGroup: drawnItems.current,
@@ -67,12 +71,7 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
         draw: {
           polygon: {
             allowIntersection: false,
-            shapeOptions: {
-              color: 'hsl(220, 70%, 35%)',
-              fillColor: 'hsl(220, 70%, 35%)',
-              fillOpacity: 0.3,
-              weight: 3,
-            }
+            shapeOptions: polygonOptions
           },
           polyline: false,
           circle: false,
@@ -110,6 +109,100 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
       map.current = null;
     };
   }, []);
+
+  // Handle basemap changes
+  useEffect(() => {
+    if (!map.current) return;
+    
+    // Remove current tile layer
+    if (currentTileLayer.current) {
+      currentTileLayer.current.remove();
+    }
+
+    // Add new tile layer
+    addTileLayer(basemap);
+
+    // Update polygon styling
+    updatePolygonStyles();
+
+    // Save preference
+    localStorage.setItem('siteMapBasemap', basemap);
+  }, [basemap]);
+
+  // Handle opacity changes
+  useEffect(() => {
+    updatePolygonStyles();
+    localStorage.setItem('siteMapOpacity', fillOpacity.toString());
+  }, [fillOpacity]);
+
+  const getPolygonOptions = () => {
+    const isSatellite = basemap === 'satellite';
+    return {
+      color: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
+      fillColor: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
+      fillOpacity: fillOpacity,
+      weight: isSatellite ? 4 : 3,
+    };
+  };
+
+  const updatePolygonStyles = () => {
+    if (!drawnItems.current) return;
+    
+    const options = getPolygonOptions();
+    drawnItems.current.eachLayer((layer: any) => {
+      if (layer.setStyle) {
+        layer.setStyle(options);
+      }
+    });
+  };
+
+  const addTileLayer = (type: BasemapType) => {
+    if (!map.current) return;
+
+    if (type === 'satellite' && mapboxToken) {
+      try {
+        // Use Mapbox satellite tiles
+        const satelliteLayer = L.tileLayer(
+          `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.png?access_token=${mapboxToken}`,
+          {
+            attribution: '© Mapbox © OpenStreetMap contributors',
+            maxZoom: 19,
+            tileSize: 512,
+            zoomOffset: -1,
+          }
+        );
+
+        satelliteLayer.on('tileerror', () => {
+          console.warn('Satellite tiles failed, falling back to standard');
+          setBasemap('standard');
+          toast.error('Satellite view unavailable, switched to Standard');
+        });
+
+        satelliteLayer.addTo(map.current);
+        currentTileLayer.current = satelliteLayer;
+      } catch (error) {
+        console.error('Satellite tile error:', error);
+        setBasemap('standard');
+      }
+    } else {
+      // Use OpenStreetMap tiles
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      });
+
+      osmLayer.on('tileerror', () => {
+        setMapError(true);
+      });
+
+      osmLayer.on('tileload', () => {
+        setMapError(false);
+      });
+
+      osmLayer.addTo(map.current);
+      currentTileLayer.current = osmLayer;
+    }
+  };
 
   const updateArea = () => {
     if (!drawnItems.current) return;
@@ -271,12 +364,47 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
               </Button>
             </div>
 
+            {/* Basemap Switcher */}
+            {mapboxToken && (
+              <Tabs value={basemap} onValueChange={(v) => setBasemap(v as BasemapType)} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="standard" className="gap-2">
+                    <MapIcon className="h-4 w-4" />
+                    Standard
+                  </TabsTrigger>
+                  <TabsTrigger value="satellite" className="gap-2">
+                    <Satellite className="h-4 w-4" />
+                    Satellite
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+
+            {/* Opacity Slider */}
+            {currentArea > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Boundary Opacity: {Math.round(fillOpacity * 100)}%
+                </Label>
+                <Slider
+                  value={[fillOpacity]}
+                  onValueChange={([value]) => setFillOpacity(value)}
+                  min={0}
+                  max={0.6}
+                  step={0.05}
+                  className="w-full"
+                />
+              </div>
+            )}
+
             {/* Map container */}
             <div ref={mapContainer} className="w-full h-[500px] rounded-lg border overflow-hidden" />
 
-            {/* OSM Attribution */}
+            {/* Attribution */}
             <p className="text-xs text-muted-foreground text-center">
-              Map data © OpenStreetMap contributors
+              {basemap === 'satellite' && mapboxToken 
+                ? 'Map data © OpenStreetMap contributors | Satellite © Mapbox'
+                : 'Map data © OpenStreetMap contributors'}
             </p>
 
             {/* Area info */}

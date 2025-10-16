@@ -6,12 +6,13 @@ import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
-import { Calculator, DollarSign, TrendingUp, LogOut } from "lucide-react";
+import { Calculator, DollarSign, TrendingUp, LogOut, Settings as SettingsIcon } from "lucide-react";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [siteArea, setSiteArea] = useState<number>(0);
+  const [mapboxToken, setMapboxToken] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,8 +34,28 @@ const Dashboard = () => {
       }
     });
 
+    // Load Mapbox token
+    loadMapboxToken();
+
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const loadMapboxToken = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('setting_value')
+        .eq('setting_key', 'mapbox_satellite_token')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setMapboxToken(data.setting_value || '');
+      }
+    } catch (error) {
+      console.error('Error loading Mapbox token:', error);
+    }
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -83,10 +104,16 @@ const Dashboard = () => {
               </a>
             </nav>
 
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              Log Out
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => navigate("/settings")} className="gap-2">
+                <SettingsIcon className="h-4 w-4" />
+                Settings
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+                <LogOut className="h-4 w-4" />
+                Log Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -97,6 +124,7 @@ const Dashboard = () => {
         <SiteMap 
           onAreaUpdate={setSiteArea} 
           savedArea={siteArea}
+          mapboxToken={mapboxToken}
         />
         
         <NapkinCalculator siteArea={siteArea} />
