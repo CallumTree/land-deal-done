@@ -166,9 +166,9 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
         />
         {inputs.siteArea > 0 && (
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {(inputs.siteArea / 10000).toFixed(2)} hectares
-            </p>
+            </span>
             {totalUnits > 0 && inputs.siteArea > 0 && (
               <Badge variant="secondary" className="text-xs">
                 {((totalUnits / (inputs.siteArea / 10000)).toFixed(0))} dph
@@ -216,7 +216,7 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
                     id={field.key}
                     type="number"
                     min="0"
-                    value={inputs[field.key]}
+                    value={inputs[field.key] || 0}
                     onChange={(e) => updateInput(field.key, parseFloat(e.target.value) || 0)}
                     className="text-sm"
                     placeholder="£0"
