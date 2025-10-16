@@ -7,11 +7,13 @@ import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
 import { Calculator, DollarSign, TrendingUp, LogOut } from "lucide-react";
+import { PropertyRow } from "@/types/calculator";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [siteArea, setSiteArea] = useState<number>(0);
+  const [generatedRows, setGeneratedRows] = useState<PropertyRow[] | undefined>();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -97,9 +99,10 @@ const Dashboard = () => {
         <SiteMap 
           onAreaUpdate={setSiteArea} 
           savedArea={siteArea}
+          onGenerateRows={setGeneratedRows}
         />
         
-        <NapkinCalculator siteArea={siteArea} />
+        <NapkinCalculator siteArea={siteArea} initialRows={generatedRows} />
         
         {/* Placeholder sections for future features */}
         <div className="mt-16 space-y-16">

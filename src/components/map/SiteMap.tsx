@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
+  onGenerateRows?: (rows: any[]) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
@@ -56,7 +57,7 @@ const MIX_LABELS: Record<MixType, string> = {
   bungalow: 'Bungalow-heavy',
 };
 
-const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
@@ -322,9 +323,130 @@ const SiteMap = ({ onAreaUpdate, savedArea }: SiteMapProps) => {
 
   const handleUseForGDV = () => {
     if (currentArea > 0) {
+      // Calculate density and compactness
+      const grossAreaM2 = currentArea;
+      const grossAreaHa = grossAreaM2 / 10000;
+      const netDevelopableHa = grossAreaHa * (assumptions.netDevelopable / 100);
+      
+      // Calculate approx units
+      const netDevelopableM2 = grossAreaM2 * (assumptions.netDevelopable / 100);
+      const netBuildableM2 = netDevelopableM2 * (1 - assumptions.infrastructure / 100);
+      const avgPlotArea = MIX_PLOT_AREA[assumptions.mixType];
+      const approxUnits = Math.round(netBuildableM2 / avgPlotArea);
+      
+      // Calculate implied density (units per net developable hectare)
+      const impliedDensity = netDevelopableHa > 0 ? approxUnits / netDevelopableHa : 0;
+      
+      // Calculate compactness: 4πA/P²
+      const compactness = currentPerimeter > 0 ? (4 * Math.PI * grossAreaM2) / (currentPerimeter * currentPerimeter) : 0;
+      const isCompact = compactness >= 0.65;
+      const isIrregular = !isCompact;
+      
+      // Determine mix based on density
+      let mixName = "";
+      let mixConfig: Array<{ type: string; percent: number; gia: number }> = [];
+      
+      if (impliedDensity < 28) {
+        // 20-28 u/ha: Family Suburban
+        mixName = "Family Suburban";
+        mixConfig = [
+          { type: "3-Bed Semi", percent: isIrregular ? 60 : 50, gia: 90 },
+          { type: "4-Bed Detached", percent: isIrregular ? 20 : 30, gia: 120 },
+          { type: "2-Bed Semi", percent: 20, gia: 75 },
+        ];
+      } else if (impliedDensity < 36) {
+        // 28-36 u/ha: Balanced Mixed (default suburban)
+        mixName = "Balanced Mixed";
+        mixConfig = [
+          { type: "3-Bed Semi", percent: 50, gia: 90 },
+          { type: "2-Bed Semi", percent: 30, gia: 75 },
+          { type: "2-Bed Semi", percent: isIrregular ? 20 : 10, gia: 75 },
+          { type: "4-Bed Detached", percent: isIrregular ? 0 : 10, gia: 120 },
+        ].filter(m => m.percent > 0);
+      } else if (impliedDensity < 45) {
+        // 36-45 u/ha: Compact Mixed
+        mixName = "Compact Mixed";
+        mixConfig = [
+          { type: "2-Bed Semi", percent: isCompact ? 30 : 40, gia: 75 },
+          { type: "3-Bed Semi", percent: isCompact ? 50 : 40, gia: 90 },
+          { type: "2-Bed Semi", percent: 20, gia: 75 },
+        ];
+      } else {
+        // >45 u/ha: Urban Edge
+        mixName = "Urban Edge";
+        mixConfig = [
+          { type: "2-Bed Semi", percent: 60, gia: 75 },
+          { type: "3-Bed Semi", percent: 20, gia: 85 },
+          { type: "2-Bed Semi", percent: 20, gia: 75 },
+        ];
+      }
+      
+      // Calculate units per type and round
+      let generatedRows = mixConfig.map((config, idx) => {
+        const units = Math.round((approxUnits * config.percent) / 100);
+        const defaults: Record<string, { salesValue: number; buildPerSqm: number }> = {
+          "2-Bed Semi": { salesValue: 247500, buildPerSqm: 1650 },
+          "3-Bed Semi": { salesValue: 292500, buildPerSqm: 1650 },
+          "4-Bed Detached": { salesValue: 432000, buildPerSqm: 1800 },
+        };
+        const typeDefaults = defaults[config.type] || { salesValue: 0, buildPerSqm: 1650 };
+        
+        return {
+          id: `mix-${Date.now()}-${idx}`,
+          type: config.type,
+          units,
+          giaPerUnit: config.gia,
+          salesValue: typeDefaults.salesValue,
+          unitPriceOverride: 0,
+          buildPerSqm: typeDefaults.buildPerSqm,
+          notes: "",
+        };
+      });
+      
+      // Ensure total matches approxUnits
+      const totalGenerated = generatedRows.reduce((sum, r) => sum + r.units, 0);
+      if (totalGenerated !== approxUnits) {
+        const diff = approxUnits - totalGenerated;
+        // Adjust largest row
+        const largestIdx = generatedRows.reduce((maxIdx, row, idx, arr) => 
+          row.units > arr[maxIdx].units ? idx : maxIdx, 0);
+        generatedRows[largestIdx].units += diff;
+      }
+      
+      // Ensure at least 10-20% are 2-beds
+      const twoBedCount = generatedRows
+        .filter(r => r.type.includes("2-Bed"))
+        .reduce((sum, r) => sum + r.units, 0);
+      const twoBedPercent = (twoBedCount / approxUnits) * 100;
+      
+      if (twoBedPercent < 10 && impliedDensity < 45) {
+        // Add some 2-beds if missing
+        const adjustAmount = Math.ceil(approxUnits * 0.1) - twoBedCount;
+        const existingTwoBed = generatedRows.find(r => r.type.includes("2-Bed"));
+        if (existingTwoBed && adjustAmount > 0) {
+          existingTwoBed.units += adjustAmount;
+          // Reduce from largest other type
+          const otherRow = generatedRows.find(r => r !== existingTwoBed && r.units > adjustAmount);
+          if (otherRow) otherRow.units -= adjustAmount;
+        }
+      }
+      
       onAreaUpdate(Math.round(currentArea));
-      toast.success(`Site area updated: ${(currentArea / 10000).toFixed(2)} ha`);
+      if (onGenerateRows) {
+        onGenerateRows(generatedRows);
+      }
+      
+      const densityRounded = Math.round(impliedDensity);
+      toast.success(
+        `Recommended mix applied: ${mixName}, ${approxUnits} units @ ${densityRounded} u/ha (ND ${assumptions.netDevelopable}%, Infra ${assumptions.infrastructure}%). Edit any row to refine.`
+      );
+      
       setIsOpen(false);
+      
+      // Scroll to calculator
+      setTimeout(() => {
+        document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
     } else {
       toast.error('Please draw a boundary first');
     }

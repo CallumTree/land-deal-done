@@ -12,9 +12,10 @@ const STORAGE_KEY = "napkin-calculator-data";
 
 interface NapkinCalculatorProps {
   siteArea?: number;
+  initialRows?: PropertyRow[];
 }
 
-const NapkinCalculator = ({ siteArea = 0 }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -70,6 +71,13 @@ const NapkinCalculator = ({ siteArea = 0 }: NapkinCalculatorProps) => {
       setInputs(prev => ({ ...prev, siteArea }));
     }
   }, [siteArea]);
+
+  // Apply initialRows when provided (from "Use for GDV")
+  useEffect(() => {
+    if (initialRows && initialRows.length > 0) {
+      setRows(initialRows);
+    }
+  }, [initialRows]);
 
   const baseValues = calculateTotals(rows, inputs);
   const adjustedValues = calculateTotals(rows, inputs, sensitivity);
