@@ -6,7 +6,6 @@ import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
-import MapboxTokenInput from "@/components/map/MapboxTokenInput";
 import { Calculator, DollarSign, TrendingUp, Settings, LogOut } from "lucide-react";
 
 const Dashboard = () => {
@@ -35,8 +34,28 @@ const Dashboard = () => {
       }
     });
 
+    loadMapboxToken();
+
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const loadMapboxToken = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("setting_value")
+        .eq("setting_key", "mapbox_token")
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error loading mapbox token:", error);
+      } else if (data?.setting_value) {
+        setMapboxToken(data.setting_value);
+      }
+    } catch (error) {
+      console.error("Error loading mapbox token:", error);
+    }
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -83,10 +102,15 @@ const Dashboard = () => {
                 <TrendingUp className="h-4 w-4" />
                 ROI Visualiser
               </a>
-              <a href="#settings" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/settings")}
+                className="flex items-center gap-2"
+              >
                 <Settings className="h-4 w-4" />
                 Settings
-              </a>
+              </Button>
             </nav>
 
             <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
@@ -99,16 +123,19 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 space-y-8">
-        {/* Mapbox Token Input */}
-        {!mapboxToken && <MapboxTokenInput onTokenSubmit={setMapboxToken} />}
-        
         {/* Site Map */}
-        {mapboxToken && (
+        {mapboxToken ? (
           <SiteMap 
             onAreaUpdate={setSiteArea} 
             savedArea={siteArea}
             mapboxToken={mapboxToken}
           />
+        ) : (
+          <div className="bg-muted/30 rounded-lg p-8 text-center">
+            <p className="text-muted-foreground">
+              Map unavailable. Please contact the owner to add a Mapbox token in Settings.
+            </p>
+          </div>
         )}
         
         <NapkinCalculator siteArea={siteArea} />
@@ -131,13 +158,6 @@ const Dashboard = () => {
             </div>
           </section>
 
-          <section id="settings" className="scroll-mt-20">
-            <div className="text-center py-16 px-4 bg-muted/30 rounded-lg">
-              <Settings className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-bold mb-2">Settings</h3>
-              <p className="text-muted-foreground">Coming soon</p>
-            </div>
-          </section>
         </div>
       </main>
     </div>
