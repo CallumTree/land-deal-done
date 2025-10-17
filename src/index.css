@@ -124,6 +124,16 @@ All colors MUST be HSL.
   }
 }
 
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
 /* Print styles for Lender Pack */
 @media print {
   @page {
