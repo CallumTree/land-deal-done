@@ -8,6 +8,7 @@ import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
 import { Calculator, DollarSign, TrendingUp, LogOut } from "lucide-react";
 import { PropertyRow } from "@/types/calculator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -95,35 +96,60 @@ const Dashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        {/* Site Map */}
-        <SiteMap 
-          onAreaUpdate={setSiteArea} 
-          savedArea={siteArea}
-          onGenerateRows={setGeneratedRows}
-        />
-        
-        <NapkinCalculator siteArea={siteArea} initialRows={generatedRows} mapImageUrl={mapImageUrl} />
-        
-        {/* Placeholder sections for future features */}
-        <div className="mt-16 space-y-16">
-          <section id="cost-estimator" className="scroll-mt-20">
+      <main className="container mx-auto px-4 py-8">
+        <Tabs defaultValue="site-map" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="site-map">
+              <Calculator className="h-4 w-4 mr-2" />
+              Site Map
+            </TabsTrigger>
+            <TabsTrigger value="gdv-calculator">
+              <Calculator className="h-4 w-4 mr-2" />
+              GDV Calculator
+            </TabsTrigger>
+            <TabsTrigger value="roi-visualiser">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              ROI Visualiser
+            </TabsTrigger>
+            <TabsTrigger value="build-cost">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Build Cost
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="site-map">
+            <SiteMap 
+              onAreaUpdate={setSiteArea} 
+              savedArea={siteArea}
+              onGenerateRows={setGeneratedRows}
+            />
+          </TabsContent>
+
+          <TabsContent value="gdv-calculator">
+            <NapkinCalculator 
+              siteArea={siteArea} 
+              initialRows={generatedRows} 
+              mapImageUrl={mapImageUrl} 
+            />
+          </TabsContent>
+
+          <TabsContent value="roi-visualiser">
+            <NapkinCalculator 
+              siteArea={siteArea} 
+              initialRows={generatedRows} 
+              mapImageUrl={mapImageUrl}
+              showROIVisualiser
+            />
+          </TabsContent>
+
+          <TabsContent value="build-cost">
             <div className="text-center py-16 px-4 bg-muted/30 rounded-lg">
               <DollarSign className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-2xl font-bold mb-2">Build Cost Estimator</h3>
               <p className="text-muted-foreground">Coming soon</p>
             </div>
-          </section>
-
-          <section id="roi" className="scroll-mt-20">
-            <div className="text-center py-16 px-4 bg-muted/30 rounded-lg">
-              <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-bold mb-2">ROI Visualiser</h3>
-              <p className="text-muted-foreground">Coming soon</p>
-            </div>
-          </section>
-
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

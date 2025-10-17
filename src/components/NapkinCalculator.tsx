@@ -8,6 +8,7 @@ import SummaryPanel from "@/components/calculator/SummaryPanel";
 import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPanel";
 import LenderReportModal from "@/components/calculator/LenderReportModal";
 import LenderSummaryPack from "@/components/calculator/LenderSummaryPack";
+import { ROIVisualiser } from "@/components/roi/ROIVisualiser";
 
 const STORAGE_KEY = "napkin-calculator-data";
 
@@ -15,9 +16,10 @@ interface NapkinCalculatorProps {
   siteArea?: number;
   initialRows?: PropertyRow[];
   mapImageUrl?: string;
+  showROIVisualiser?: boolean;
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -98,6 +100,21 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl }: NapkinCalc
   const isSensitivityActive = Object.values(sensitivity).some(v => v !== 0);
   
   const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
+
+  // Show ROI Visualiser if requested
+  if (showROIVisualiser) {
+    return (
+      <section className="py-8 px-4 bg-background">
+        <div className="container mx-auto max-w-7xl">
+          <ROIVisualiser 
+            rows={rows} 
+            inputs={inputs} 
+            values={isSensitivityActive ? adjustedValues : baseValues} 
+          />
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-16 px-4 bg-background" id="calculator">
