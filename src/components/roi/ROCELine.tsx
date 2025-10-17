@@ -85,7 +85,7 @@ export function ROCELine({ rows, inputs, onIncludeInPack }: ROCELineProps) {
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend />
-          <ReferenceLine x={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+          <ReferenceLine x={0} yAxisId="left" stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
           <Line
             yAxisId="left"
             type="monotone"
