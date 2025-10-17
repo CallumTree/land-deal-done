@@ -1,21 +1,26 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
-import { Calculator, DollarSign, TrendingUp, LogOut } from "lucide-react";
+import { Calculator, DollarSign, TrendingUp } from "lucide-react";
 import { PropertyRow } from "@/types/calculator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import GlobalHeader from "@/components/GlobalHeader";
+import { projectStorage } from "@/services/projectStorage";
+import { Project } from "@/types/project";
 
-const Dashboard = () => {
+const ProjectWorkspace = () => {
+  const { id } = useParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [siteArea, setSiteArea] = useState<number>(0);
   const [generatedRows, setGeneratedRows] = useState<PropertyRow[] | undefined>();
   const [mapImageUrl, setMapImageUrl] = useState<string>("");
+  const [activeTab, setActiveTab] = useState("site-map");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,15 +45,19 @@ const Dashboard = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Failed to log out");
-    } else {
-      toast.success("Logged out successfully");
-      navigate("/");
+  useEffect(() => {
+    // Load project data
+    if (id) {
+      const project = projectStorage.getProject(id);
+      if (project) {
+        setCurrentProject(project);
+      } else {
+        toast.error("Project not found—showing dashboard");
+        navigate("/dashboard");
+      }
     }
-  };
+  }, [id, navigate]);
+
 
   if (loading) {
     return (
@@ -64,40 +73,14 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Dashboard Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <h1 className="text-2xl font-bold">
-              BuildFlow <span className="text-primary">Feasibility Dashboard</span>
-            </h1>
-            
-            <nav className="hidden md:flex items-center gap-6">
-              <a href="#calculator" className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors">
-                <Calculator className="h-4 w-4" />
-                GDV Calculator
-              </a>
-              <a href="#cost-estimator" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                <DollarSign className="h-4 w-4" />
-                Build Cost Estimator
-              </a>
-              <a href="#roi" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                <TrendingUp className="h-4 w-4" />
-                ROI Visualiser
-              </a>
-            </nav>
-
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              Log Out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <GlobalHeader 
+        currentProject={currentProject || undefined}
+        currentSection={activeTab}
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="site-map" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="site-map">
               <Calculator className="h-4 w-4 mr-2" />
@@ -155,4 +138,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default ProjectWorkspace;

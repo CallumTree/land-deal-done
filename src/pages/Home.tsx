@@ -4,12 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { User } from "@supabase/supabase-js";
-import { toast } from "sonner";
 import { Project } from "@/types/project";
 import { projectStorage } from "@/services/projectStorage";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import AnalyticsSummary from "@/components/dashboard/AnalyticsSummary";
 import NewProjectModal from "@/components/dashboard/NewProjectModal";
+import GlobalHeader from "@/components/GlobalHeader";
 import {
   Select,
   SelectContent,
@@ -21,7 +21,6 @@ import {
   Plus,
   Search,
   Filter,
-  LogOut,
   Sparkles,
   Grid3x3,
   LayoutList,
@@ -103,15 +102,14 @@ const Home = () => {
     setFilteredProjects(filtered);
   }, [projects, searchQuery, sortBy]);
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Failed to log out");
-    } else {
-      toast.success("Logged out successfully");
-      navigate("/");
-    }
-  };
+  useEffect(() => {
+    const handleNewProject = () => {
+      setShowNewProjectModal(true);
+    };
+    
+    window.addEventListener('new-project', handleNewProject);
+    return () => window.removeEventListener('new-project', handleNewProject);
+  }, []);
 
   const summary = projectStorage.getProjectSummary();
 
@@ -129,29 +127,20 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b shadow-sm">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                BuildFlow
-              </h1>
-            </div>
+      <GlobalHeader />
 
-            <div className="flex items-center gap-3">
-              <Button variant="cta" onClick={() => setShowNewProjectModal(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New Project</span>
-              </Button>
-
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* Quick Actions Bar */}
+      <div className="border-b bg-muted/20">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold">My Projects</h1>
+            <Button onClick={() => setShowNewProjectModal(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Project
+            </Button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
