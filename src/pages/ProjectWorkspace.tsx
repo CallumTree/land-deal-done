@@ -5,12 +5,14 @@ import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
-import { Calculator, DollarSign, TrendingUp } from "lucide-react";
+import LenderExport from "@/components/calculator/LenderExport";
+import { Calculator, FileText, TrendingUp } from "lucide-react";
 import { PropertyRow } from "@/types/calculator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlobalHeader from "@/components/GlobalHeader";
 import { projectStorage } from "@/services/projectStorage";
 import { Project } from "@/types/project";
+import { calculateTotals } from "@/utils/calculatorHelpers";
 
 const ProjectWorkspace = () => {
   const { id } = useParams();
@@ -94,9 +96,9 @@ const ProjectWorkspace = () => {
               <TrendingUp className="h-4 w-4 mr-2" />
               ROI Visualiser
             </TabsTrigger>
-            <TabsTrigger value="build-cost">
-              <DollarSign className="h-4 w-4 mr-2" />
-              Build Cost
+            <TabsTrigger value="lender-export">
+              <FileText className="h-4 w-4 mr-2" />
+              Lender Export
             </TabsTrigger>
           </TabsList>
 
@@ -125,12 +127,23 @@ const ProjectWorkspace = () => {
             />
           </TabsContent>
 
-          <TabsContent value="build-cost">
-            <div className="text-center py-16 px-4 bg-muted/30 rounded-lg">
-              <DollarSign className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-bold mb-2">Build Cost Estimator</h3>
-              <p className="text-muted-foreground">Coming soon</p>
-            </div>
+          <TabsContent value="lender-export">
+            {currentProject ? (
+              <LenderExport
+                values={calculateTotals(currentProject.rows, currentProject.inputs)}
+                inputs={currentProject.inputs}
+                rows={currentProject.rows}
+                siteArea={siteArea}
+                mapImageUrl={mapImageUrl}
+                projectName={currentProject.name}
+              />
+            ) : (
+              <div className="text-center py-16 px-4 bg-muted/30 rounded-lg">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-2xl font-bold mb-2">No Project Data</h3>
+                <p className="text-muted-foreground">Please complete the GDV Calculator first</p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
