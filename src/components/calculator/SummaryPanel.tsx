@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Copy, Activity } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate, useLocation } from "react-router-dom";
 
 interface SummaryPanelProps {
   values: CalculatedValues;
@@ -15,8 +16,22 @@ interface SummaryPanelProps {
 }
 
 const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity, onOpenLenderPack }: SummaryPanelProps) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const isSuccessful = values.profitMarginPercent >= targetMargin;
   const isVariancePositive = values.variance >= 0;
+
+  const handleExportLenderPack = () => {
+    // Check if we're on a project page
+    const projectMatch = location.pathname.match(/\/project\/([^/]+)/);
+    if (projectMatch) {
+      const projectId = projectMatch[1];
+      navigate(`/project/${projectId}?tab=lender-export`);
+    } else if (onOpenLenderPack) {
+      // Fallback to modal if not on project page
+      onOpenLenderPack();
+    }
+  };
 
   const copySummary = () => {
     const sitePrepPercent = values.totalCosts > 0 ? (values.sitePrepTechnical / values.totalCosts) * 100 : 0;
@@ -214,15 +229,13 @@ Variance to Land: ${formatCurrency(values.variance)}
           </div>
 
           <div className="space-y-2 mt-4">
-            {onOpenLenderPack && (
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={onOpenLenderPack}
-              >
-                Export Lender Pack
-              </Button>
-            )}
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={handleExportLenderPack}
+            >
+              Export Lender Pack
+            </Button>
             <Button variant="cta" className="w-full" asChild>
               <a href="#email-capture">Book a Demo</a>
             </Button>

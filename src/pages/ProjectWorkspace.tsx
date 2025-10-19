@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { calculateTotals } from "@/utils/calculatorHelpers";
 
 const ProjectWorkspace = () => {
   const { id } = useParams();
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -24,6 +25,15 @@ const ProjectWorkspace = () => {
   const [mapImageUrl, setMapImageUrl] = useState<string>("");
   const [activeTab, setActiveTab] = useState("site-map");
   const navigate = useNavigate();
+
+  // Read tab from URL query params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     // Check authentication
