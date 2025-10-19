@@ -35,6 +35,34 @@ const ProjectWorkspace = () => {
     }
   }, [location.search]);
 
+  // Sync calculator data with project when switching to lender-export tab
+  useEffect(() => {
+    if (activeTab === "lender-export" && id) {
+      // Load latest calculator data from localStorage
+      try {
+        const calculatorData = localStorage.getItem("napkin-calculator-data");
+        if (calculatorData) {
+          const { rows, inputs } = JSON.parse(calculatorData);
+          
+          // Update the project with latest data
+          const project = projectStorage.getProject(id);
+          if (project && rows && inputs) {
+            const updatedProject = {
+              ...project,
+              rows,
+              inputs,
+              lastUpdated: new Date().toISOString(),
+            };
+            projectStorage.saveProject(updatedProject);
+            setCurrentProject(updatedProject);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync calculator data:", error);
+      }
+    }
+  }, [activeTab, id]);
+
   useEffect(() => {
     // Check authentication
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -63,6 +91,14 @@ const ProjectWorkspace = () => {
       const project = projectStorage.getProject(id);
       if (project) {
         setCurrentProject(project);
+        setSiteArea(project.inputs?.siteArea || 0);
+        setMapImageUrl(project.mapImageUrl || "");
+        
+        // Sync project data to calculator localStorage
+        localStorage.setItem("napkin-calculator-data", JSON.stringify({
+          rows: project.rows,
+          inputs: project.inputs,
+        }));
       } else {
         toast.error("Project not found—showing dashboard");
         navigate("/dashboard");
