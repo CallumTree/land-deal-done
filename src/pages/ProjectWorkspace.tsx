@@ -27,6 +27,8 @@ const ProjectWorkspace = () => {
   const [mapImageUrl, setMapImageUrl] = useState<string>("");
   const [activeTab, setActiveTab] = useState("site-map");
   const [showLocationPresets, setShowLocationPresets] = useState(false);
+  const [detectedLocation, setDetectedLocation] = useState<string>("");
+  const [detectedRegion, setDetectedRegion] = useState<string>("");
   const navigate = useNavigate();
 
   // Read tab from URL query params
@@ -100,6 +102,12 @@ const ProjectWorkspace = () => {
       projectStorage.saveProject(updatedProject);
       setCurrentProject(updatedProject);
     }
+  };
+
+  const handleLocationDetected = (location: string, region: string) => {
+    setDetectedLocation(location);
+    setDetectedRegion(region);
+    toast.success(`Detected region: ${region}`);
   };
 
   useEffect(() => {
@@ -193,6 +201,7 @@ const ProjectWorkspace = () => {
                 onAreaUpdate={setSiteArea} 
                 savedArea={siteArea}
                 onGenerateRows={setGeneratedRows}
+                onLocationDetected={handleLocationDetected}
               />
               
               {currentProject && (
@@ -200,8 +209,8 @@ const ProjectWorkspace = () => {
                   onApply={handleApplyPreset}
                   currentRows={currentProject.rows}
                   currentInputs={currentProject.inputs}
-                  projectLocation={currentProject.location}
-                  detectedRegion={currentProject.presetInfo?.region}
+                  projectLocation={detectedLocation || currentProject.location}
+                  detectedRegion={detectedRegion || currentProject.presetInfo?.region}
                   collapsed={true}
                 />
               )}

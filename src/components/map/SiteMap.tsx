@@ -24,6 +24,7 @@ interface SiteMapProps {
   savedArea?: number;
   onGenerateRows?: (rows: any[]) => void;
   onMapSnapshot?: (imageUrl: string) => void;
+  onLocationDetected?: (location: string, region: string) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
@@ -58,7 +59,7 @@ const MIX_LABELS: Record<MixType, string> = {
   bungalow: 'Bungalow-heavy',
 };
 
-const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
@@ -297,6 +298,22 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot }: Sit
     return perimeter;
   };
 
+  const detectRegionFromCoords = (lat: number, lon: number): string => {
+    // Simple region detection based on coordinates
+    // This is a basic implementation - could be enhanced with actual boundary data
+    if (lat > 53.5 && lon < -3) return "North West";
+    if (lat > 53.5 && lon >= -3 && lon < -1) return "Yorkshire & Humber";
+    if (lat > 53.5 && lon >= -1) return "North East";
+    if (lat > 52 && lat <= 53.5 && lon < -2) return "West Midlands";
+    if (lat > 52 && lat <= 53.5 && lon >= -2) return "East Midlands";
+    if (lat > 51.5 && lat <= 52 && lon < -1) return "South West";
+    if (lat > 51.5 && lat <= 52 && lon >= -1) return "East";
+    if (lat > 51 && lat <= 51.5) return "London";
+    if (lat <= 51 && lon < -2) return "South West";
+    if (lat <= 51 && lon >= -2) return "South East";
+    return "South East"; // default
+  };
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       toast.error('Please enter a UK postcode or address');
@@ -311,9 +328,18 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot }: Sit
       const data = await response.json();
 
       if (data && data.length > 0) {
-        const { lat, lon } = data[0];
-        map.current?.flyTo([parseFloat(lat), parseFloat(lon)], 17);
+        const { lat, lon, display_name } = data[0];
+        const latitude = parseFloat(lat);
+        const longitude = parseFloat(lon);
+        
+        map.current?.flyTo([latitude, longitude], 17);
         toast.success('Location found');
+        
+        // Detect region and notify parent
+        const region = detectRegionFromCoords(latitude, longitude);
+        if (onLocationDetected) {
+          onLocationDetected(display_name, region);
+        }
       } else {
         toast.error('Location not found');
       }
@@ -435,6 +461,18 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot }: Sit
       onAreaUpdate(Math.round(currentArea));
       if (onGenerateRows) {
         onGenerateRows(generatedRows);
+      }
+      
+      // Detect region from polygon centroid if location detection callback provided
+      if (onLocationDetected && drawnItems.current) {
+        const layers = drawnItems.current.getLayers();
+        if (layers.length > 0) {
+          const layer = layers[0] as L.Polygon;
+          const bounds = layer.getBounds();
+          const center = bounds.getCenter();
+          const region = detectRegionFromCoords(center.lat, center.lng);
+          onLocationDetected(searchQuery || 'Site location', region);
+        }
       }
       
       // Capture map snapshot if callback provided
