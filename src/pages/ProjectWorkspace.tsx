@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -15,6 +15,8 @@ import { projectStorage } from "@/services/projectStorage";
 import { Project } from "@/types/project";
 import { calculateTotals } from "@/utils/calculatorHelpers";
 import { Button } from "@/components/ui/button";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { RestoreBanner } from "@/components/RestoreBanner";
 
 const ProjectWorkspace = () => {
   const { id } = useParams();
@@ -29,7 +31,18 @@ const ProjectWorkspace = () => {
   const [showLocationPresets, setShowLocationPresets] = useState(false);
   const [detectedLocation, setDetectedLocation] = useState<string>("");
   const [detectedRegion, setDetectedRegion] = useState<string>("");
+  const [showRestoreBanner, setShowRestoreBanner] = useState(false);
+  const [hasBackup, setHasBackup] = useState(false);
+  const [savedProject, setSavedProject] = useState<Project | null>(null);
   const navigate = useNavigate();
+
+  // Auto-save hook
+  const { saveProject, saveNow, saveStatus, lastSaveTime } = useAutoSave({
+    projectId: id || "",
+    onSave: (timestamp) => {
+      console.log(`Project auto-saved at ${timestamp}`);
+    },
+  });
 
   // Read tab from URL query params
   useEffect(() => {
@@ -110,6 +123,108 @@ const ProjectWorkspace = () => {
     toast.success(`Detected region: ${region}`);
   };
 
+  // Auto-save on project changes
+  useEffect(() => {
+    if (currentProject && id) {
+      saveProject(currentProject);
+    }
+  }, [currentProject, id, saveProject]);
+
+  // Manual controls
+  const handleSaveNow = useCallback(() => {
+    if (currentProject) {
+      saveNow(currentProject);
+    }
+  }, [currentProject, saveNow]);
+
+  const handleLoadLastSave = useCallback(() => {
+    if (!id) return;
+    
+    const savedKey = `buildflow_project_${id}`;
+    const savedData = localStorage.getItem(savedKey);
+    
+    if (savedData) {
+      try {
+        const saved = JSON.parse(savedData) as Project;
+        loadSavedProject(saved);
+      } catch (error) {
+        toast.error("Failed to load last save");
+      }
+    } else {
+      toast.error("No saved version found");
+    }
+  }, [id]);
+
+  const handleResetProject = useCallback(() => {
+    if (!id) return;
+    
+    // Clear saved data
+    localStorage.removeItem(`buildflow_project_${id}`);
+    localStorage.removeItem(`buildflow_project_${id}_backup`);
+    
+    // Remove from index
+    try {
+      const indexKey = "buildflow_projects_index";
+      const stored = localStorage.getItem(indexKey);
+      if (stored) {
+        const index = JSON.parse(stored);
+        const filtered = index.filter((p: any) => p.id !== id);
+        localStorage.setItem(indexKey, JSON.stringify(filtered));
+      }
+    } catch (error) {
+      console.error("Failed to update index:", error);
+    }
+    
+    toast.success("Project reset");
+    navigate("/dashboard");
+  }, [id, navigate]);
+
+  const handleDuplicateProject = useCallback(() => {
+    if (!currentProject) return;
+    
+    const duplicate = projectStorage.duplicateProject(currentProject.id);
+    if (duplicate) {
+      toast.success("Project duplicated");
+      navigate(`/project/${duplicate.id}`);
+    }
+  }, [currentProject, navigate]);
+
+  const handleRestore = useCallback(() => {
+    if (savedProject) {
+      loadSavedProject(savedProject);
+      setShowRestoreBanner(false);
+    }
+  }, [savedProject]);
+
+  const handleRestoreBackup = useCallback(() => {
+    if (!id) return;
+    
+    const backupKey = `buildflow_project_${id}_backup`;
+    const backupData = localStorage.getItem(backupKey);
+    
+    if (backupData) {
+      try {
+        const backup = JSON.parse(backupData) as Project;
+        loadSavedProject(backup);
+        setShowRestoreBanner(false);
+        toast.success("Backup restored");
+      } catch (error) {
+        toast.error("Failed to restore backup");
+      }
+    }
+  }, [id]);
+
+  const handleAutoRestoreChange = useCallback((enabled: boolean) => {
+    if (!id) return;
+    
+    const autoRestoreKey = `buildflow_autorestore_${id}`;
+    if (enabled) {
+      localStorage.setItem(autoRestoreKey, "true");
+    } else {
+      localStorage.removeItem(autoRestoreKey);
+    }
+  }, [id]);
+
   useEffect(() => {
     // Check authentication
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -133,13 +248,42 @@ const ProjectWorkspace = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Load project data
+    // Load project data and check for saved version
     if (id) {
       const project = projectStorage.getProject(id);
       if (project) {
         setCurrentProject(project);
         setSiteArea(project.inputs?.siteArea || 0);
         setMapImageUrl(project.mapImageUrl || "");
+        
+        // Check for saved project
+        const savedKey = `buildflow_project_${id}`;
+        const savedData = localStorage.getItem(savedKey);
+        
+        if (savedData) {
+          try {
+            const saved = JSON.parse(savedData) as Project;
+            setSavedProject(saved);
+            
+            // Check auto-restore preference
+            const autoRestoreKey = `buildflow_autorestore_${id}`;
+            const autoRestore = localStorage.getItem(autoRestoreKey) === "true";
+            
+            if (autoRestore) {
+              // Auto-restore without prompt
+              loadSavedProject(saved);
+            } else {
+              // Show restore banner
+              setShowRestoreBanner(true);
+            }
+          } catch (error) {
+            console.error("Failed to parse saved project:", error);
+          }
+        }
+        
+        // Check for backup
+        const backupKey = `buildflow_project_${id}_backup`;
+        setHasBackup(!!localStorage.getItem(backupKey));
         
         // Sync project data to calculator localStorage
         localStorage.setItem("napkin-calculator-data", JSON.stringify({
@@ -152,6 +296,19 @@ const ProjectWorkspace = () => {
       }
     }
   }, [id, navigate]);
+
+  const loadSavedProject = (saved: Project) => {
+    setCurrentProject(saved);
+    setSiteArea(saved.inputs?.siteArea || 0);
+    setMapImageUrl(saved.mapImageUrl || "");
+    
+    localStorage.setItem("napkin-calculator-data", JSON.stringify({
+      rows: saved.rows,
+      inputs: saved.inputs,
+    }));
+    
+    toast.success("Previous save restored");
+  };
 
 
   if (loading) {
@@ -171,10 +328,29 @@ const ProjectWorkspace = () => {
       <GlobalHeader 
         currentProject={currentProject || undefined}
         currentSection={activeTab}
+        saveStatus={saveStatus}
+        lastSaveTime={lastSaveTime}
+        onSaveNow={handleSaveNow}
+        onLoadLastSave={handleLoadLastSave}
+        onResetProject={handleResetProject}
+        onDuplicateProject={handleDuplicateProject}
       />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
+        {/* Restore Banner */}
+        {showRestoreBanner && savedProject && (
+          <div className="mb-6">
+            <RestoreBanner
+              timestamp={new Date(savedProject.lastUpdated).toLocaleString()}
+              hasBackup={hasBackup}
+              onRestore={handleRestore}
+              onRestoreBackup={handleRestoreBackup}
+              onDismiss={() => setShowRestoreBanner(false)}
+              onAutoRestoreChange={handleAutoRestoreChange}
+            />
+          </div>
+        )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="site-map">

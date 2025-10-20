@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Home, ChevronDown, LayoutDashboard, MessageSquare, User } from "lucide-react";
+import { Home, ChevronDown, LayoutDashboard, MessageSquare, User, Command } from "lucide-react";
+import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
+import { ProjectControls } from "@/components/ProjectControls";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,13 +29,25 @@ interface GlobalHeaderProps {
   currentSection?: string;
   hasUnsavedChanges?: boolean;
   onSave?: () => void;
+  saveStatus?: "idle" | "saving" | "saved";
+  lastSaveTime?: string;
+  onSaveNow?: () => void;
+  onLoadLastSave?: () => void;
+  onResetProject?: () => void;
+  onDuplicateProject?: () => void;
 }
 
 const GlobalHeader = ({ 
   currentProject, 
   currentSection,
   hasUnsavedChanges = false,
-  onSave
+  onSave,
+  saveStatus = "idle",
+  lastSaveTime,
+  onSaveNow,
+  onLoadLastSave,
+  onResetProject,
+  onDuplicateProject,
 }: GlobalHeaderProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,21 +64,30 @@ const GlobalHeader = ({
     setRecentProjects(projects);
   }, []);
 
-  // Keyboard shortcut: D for Dashboard
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = e.target as HTMLElement;
-        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-          e.preventDefault();
-          handleNavigation('/dashboard');
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
+      // D for Dashboard
+      if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputField) {
+        e.preventDefault();
+        handleNavigation('/dashboard');
+      }
+      
+      // Ctrl/Cmd + S for Save Now
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (onSaveNow) {
+          onSaveNow();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, onSaveNow]);
 
   const handleNavigation = (path: string) => {
     if (hasUnsavedChanges && location.pathname !== path) {
@@ -196,6 +219,29 @@ const GlobalHeader = ({
 
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-2">
+              {/* Save Status Indicator */}
+              {currentProject && (
+                <SaveStatusIndicator status={saveStatus} lastSaveTime={lastSaveTime} />
+              )}
+
+              {/* Keyboard Shortcut Hint */}
+              {currentProject && (
+                <div className="hidden xl:flex items-center gap-1 text-xs text-muted-foreground border rounded px-2 py-1">
+                  <Command className="h-3 w-3" />
+                  <span>+S to save</span>
+                </div>
+              )}
+
+              {/* Project Controls */}
+              {currentProject && onSaveNow && onLoadLastSave && onResetProject && onDuplicateProject && (
+                <ProjectControls
+                  onSaveNow={onSaveNow}
+                  onLoadLastSave={onLoadLastSave}
+                  onResetProject={onResetProject}
+                  onDuplicateProject={onDuplicateProject}
+                />
+              )}
+
               <Button
                 variant="ghost"
                 size="sm"
