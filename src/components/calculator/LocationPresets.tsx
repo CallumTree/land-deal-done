@@ -103,10 +103,10 @@ export const LocationPresets = ({
     <>
       <Card className="border-primary/20">
         <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-          <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center gap-3 flex-1 cursor-pointer hover:opacity-80 transition-opacity">
                   <MapPin className="h-5 w-5 text-primary" />
                   <div className="flex-1">
                     <CardTitle className="text-base">📍 Location: {detectedRegion || "Not detected"}</CardTitle>
@@ -118,33 +118,36 @@ export const LocationPresets = ({
                       </div>
                     )}
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsExpanded(true);
-                    }}
-                  >
-                    <Settings className="h-4 w-4 mr-1" />
-                    Change
-                  </Button>
-                  <Button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePreviewApply();
-                    }}
-                    disabled={!preset || currentRows.length === 0}
-                    size="sm"
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    Apply to GDV
-                  </Button>
+                  {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </div>
-                {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              </CollapsibleTrigger>
+              
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded(true);
+                  }}
+                >
+                  <Settings className="h-4 w-4 mr-1" />
+                  Change
+                </Button>
+                <Button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePreviewApply();
+                  }}
+                  disabled={!preset || currentRows.length === 0}
+                  size="sm"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Apply to GDV
+                </Button>
               </div>
-            </CardHeader>
-          </CollapsibleTrigger>
+            </div>
+          </CardHeader>
 
           <CollapsibleContent>
             <CardContent className="space-y-6 pt-0">
