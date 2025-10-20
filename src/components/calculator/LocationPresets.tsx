@@ -3,32 +3,46 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Download, X, Info } from "lucide-react";
+import { MapPin, Download, X, Info, ChevronDown, ChevronUp, Settings } from "lucide-react";
 import { REGION_PRESETS, UK_REGIONS } from "@/types/locationPresets";
 import { GlobalInputs, PropertyRow } from "@/types/calculator";
 import { toast } from "sonner";
+import { PresetDiffModal } from "./PresetDiffModal";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface LocationPresetsProps {
-  onApply: (updatedRows: PropertyRow[], updatedInputs: GlobalInputs, presetSource: string) => void;
-  onClose: () => void;
+  onApply: (updatedRows: PropertyRow[], updatedInputs: GlobalInputs, presetInfo: { region: string; spec: "low" | "medium" | "high"; appliedAt: string }) => void;
   currentRows: PropertyRow[];
   currentInputs: GlobalInputs;
   projectLocation?: string;
+  detectedRegion?: string;
+  collapsed?: boolean;
 }
 
 export const LocationPresets = ({
   onApply,
-  onClose,
   currentRows,
   currentInputs,
   projectLocation,
+  detectedRegion,
+  collapsed = true,
 }: LocationPresetsProps) => {
-  const [selectedRegion, setSelectedRegion] = useState<string>("");
+  const [isExpanded, setIsExpanded] = useState(!collapsed);
+  const [selectedRegion, setSelectedRegion] = useState<string>(detectedRegion || "");
   const [selectedSpec, setSelectedSpec] = useState<"low" | "medium" | "high">("medium");
+  const [showDiffModal, setShowDiffModal] = useState(false);
 
   const preset = selectedRegion ? REGION_PRESETS[selectedRegion] : null;
 
-  const handleApply = () => {
+  const handlePreviewApply = () => {
+    if (!preset || currentRows.length === 0) {
+      toast.error("Please add property rows in GDV first");
+      return;
+    }
+    setShowDiffModal(true);
+  };
+
+  const handleApply = (createScenario: boolean) => {
     if (!preset) return;
 
     // Update rows with new sales and build values
@@ -51,35 +65,89 @@ export const LocationPresets = ({
       contingencyPercent: preset.fees.contingencyPercent,
     };
 
-    const presetSource = `${selectedRegion} • ${selectedSpec.charAt(0).toUpperCase() + selectedSpec.slice(1)} • ${new Date().toLocaleDateString('en-GB')}`;
+    const presetInfo = {
+      region: selectedRegion,
+      spec: selectedSpec,
+      appliedAt: new Date().toISOString(),
+    };
     
-    onApply(updatedRows, updatedInputs, presetSource);
+    onApply(updatedRows, updatedInputs, presetInfo);
     
-    toast.success(`Applied ${selectedRegion} • ${selectedSpec} preset`, {
-      description: "Edit any value to refine. Changes saved to project.",
+    const mode = createScenario ? " as new scenario" : "";
+    toast.success(`Applied ${selectedRegion} – ${selectedSpec.charAt(0).toUpperCase() + selectedSpec.slice(1)} defaults${mode}`, {
+      description: "You can edit any value in GDV.",
       duration: 5000,
     });
   };
 
+  // Prepare proposed values for diff modal
+  const proposedRows = currentRows.map((row) => {
+    const salesPerSqm = preset?.salesPerSqm[row.type as keyof typeof preset.salesPerSqm];
+    const buildPerSqm = preset?.buildPerSqm[selectedSpec];
+
+    return {
+      ...row,
+      salesValue: salesPerSqm ? salesPerSqm * row.giaPerUnit * row.units : row.salesValue,
+      buildPerSqm: buildPerSqm || row.buildPerSqm,
+    };
+  });
+
+  const proposedInputs: GlobalInputs = preset ? {
+    ...currentInputs,
+    professionalFeesPercent: preset.fees.professionalFeesPercent,
+    marketingSalesPercent: preset.fees.marketingSalesPercent,
+    contingencyPercent: preset.fees.contingencyPercent,
+  } : currentInputs;
+
   return (
-    <Card className="border-primary/20">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" />
-            <div>
-              <CardTitle>Location Presets</CardTitle>
-              <CardDescription>
-                Auto-apply regional market data for sales, build costs & fees
-              </CardDescription>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <>
+      <Card className="border-primary/20">
+        <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <div className="flex-1">
+                    <CardTitle className="text-base">📍 Location: {detectedRegion || "Not detected"}</CardTitle>
+                    {selectedRegion && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs">
+                          {selectedRegion} – {selectedSpec.charAt(0).toUpperCase() + selectedSpec.slice(1)}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsExpanded(true);
+                    }}
+                  >
+                    <Settings className="h-4 w-4 mr-1" />
+                    Change
+                  </Button>
+                  <Button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePreviewApply();
+                    }}
+                    disabled={!preset || currentRows.length === 0}
+                    size="sm"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Apply to GDV
+                  </Button>
+                </div>
+                {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent>
+            <CardContent className="space-y-6 pt-0">
         {/* Selection Controls */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -208,25 +276,44 @@ export const LocationPresets = ({
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <Button
-            onClick={handleApply}
-            disabled={!preset}
-            className="flex-1"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Apply to Project
-          </Button>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button
+                  onClick={handlePreviewApply}
+                  disabled={!preset || currentRows.length === 0}
+                  className="flex-1"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Apply to GDV
+                </Button>
+              </div>
 
-        <p className="text-xs text-muted-foreground">
-          Note: Applied values can be edited manually after import. Source tracking will show preset origin.
-        </p>
-      </CardContent>
-    </Card>
+              {/* Future Feature */}
+              <Button variant="ghost" size="sm" className="w-full" disabled>
+                <Info className="h-4 w-4 mr-2" />
+                Fetch Market Data (Beta) – Coming Soon
+              </Button>
+
+              <p className="text-xs text-muted-foreground">
+                Applied values can be edited manually. Preview shows changes before applying.
+              </p>
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
+
+      {/* Diff Modal */}
+      <PresetDiffModal
+        open={showDiffModal}
+        onClose={() => setShowDiffModal(false)}
+        onApply={handleApply}
+        currentRows={currentRows}
+        proposedRows={proposedRows}
+        currentInputs={currentInputs}
+        proposedInputs={proposedInputs}
+        region={selectedRegion}
+        spec={selectedSpec}
+      />
+    </>
   );
 };

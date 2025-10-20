@@ -35,6 +35,13 @@ export interface Project {
   rlv: number;
   
   notes?: string;
+  
+  // Location Preset tracking
+  presetInfo?: {
+    region: string;
+    spec: "low" | "medium" | "high";
+    appliedAt: string;
+  };
 }
 
 export interface ProjectSummary {

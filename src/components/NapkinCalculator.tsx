@@ -9,6 +9,8 @@ import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPan
 import LenderReportModal from "@/components/calculator/LenderReportModal";
 import LenderSummaryPack from "@/components/calculator/LenderSummaryPack";
 import { ROIVisualiser } from "@/components/roi/ROIVisualiser";
+import { MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "napkin-calculator-data";
 
@@ -17,9 +19,14 @@ interface NapkinCalculatorProps {
   initialRows?: PropertyRow[];
   mapImageUrl?: string;
   showROIVisualiser?: boolean;
+  presetInfo?: {
+    region: string;
+    spec: "low" | "medium" | "high";
+    appliedAt: string;
+  };
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, presetInfo }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -127,6 +134,23 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
             Use defaults or tweak assumptions. Export your scenario for lender submission.
           </p>
         </div>
+
+        {/* Preset Info Bar */}
+        {presetInfo && (
+          <div className="mb-4 p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Regional baseline:</span>
+              <span className="font-medium">
+                {presetInfo.region} – {presetInfo.spec.charAt(0).toUpperCase() + presetInfo.spec.slice(1)} (Q4-2025)
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm">Change</Button>
+              <Button variant="ghost" size="sm">Reset</Button>
+            </div>
+          </div>
+        )}
 
         <GlobalInputs inputs={inputs} onChange={setInputs} totalUnits={totalUnits} />
 

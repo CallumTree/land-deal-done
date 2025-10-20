@@ -66,7 +66,11 @@ const ProjectWorkspace = () => {
     }
   }, [activeTab, id]);
 
-  const handleApplyPreset = (updatedRows: PropertyRow[], updatedInputs: GlobalInputs, presetSource: string) => {
+  const handleApplyPreset = (
+    updatedRows: PropertyRow[], 
+    updatedInputs: GlobalInputs, 
+    presetInfo: { region: string; spec: "low" | "medium" | "high"; appliedAt: string }
+  ) => {
     if (!id) return;
 
     // Save to calculator localStorage
@@ -78,20 +82,24 @@ const ProjectWorkspace = () => {
     // Update project
     const project = projectStorage.getProject(id);
     if (project) {
+      const calculatedValues = calculateTotals(updatedRows, updatedInputs);
       const updatedProject = {
         ...project,
         rows: updatedRows,
         inputs: updatedInputs,
+        presetInfo,
+        gdv: calculatedValues.totalGDV,
+        profitMargin: calculatedValues.profitMarginPercent,
+        units: updatedRows.reduce((sum, r) => sum + r.units, 0),
+        buildCost: calculatedValues.buildCost,
+        netProfit: calculatedValues.netProfit,
+        roi: calculatedValues.profitMarginPercent,
+        rlv: calculatedValues.residualLandValue,
         lastUpdated: new Date().toISOString(),
-        notes: project.notes 
-          ? `${project.notes}\n\nPreset Applied: ${presetSource}`
-          : `Preset Applied: ${presetSource}`,
       };
       projectStorage.saveProject(updatedProject);
       setCurrentProject(updatedProject);
     }
-
-    setShowLocationPresets(false);
   };
 
   useEffect(() => {
@@ -181,30 +189,22 @@ const ProjectWorkspace = () => {
 
           <TabsContent value="site-map">
             <div className="space-y-6">
-              {showLocationPresets && currentProject ? (
-                <LocationPresets
-                  onApply={handleApplyPreset}
-                  onClose={() => setShowLocationPresets(false)}
-                  currentRows={currentProject.rows}
-                  currentInputs={currentProject.inputs}
-                  projectLocation={currentProject.location}
-                />
-              ) : (
-                <Button
-                  onClick={() => setShowLocationPresets(true)}
-                  variant="outline"
-                  className="mb-4"
-                >
-                  <MapPin className="mr-2 h-4 w-4" />
-                  Load Location Presets
-                </Button>
-              )}
-              
               <SiteMap 
                 onAreaUpdate={setSiteArea} 
                 savedArea={siteArea}
                 onGenerateRows={setGeneratedRows}
               />
+              
+              {currentProject && (
+                <LocationPresets
+                  onApply={handleApplyPreset}
+                  currentRows={currentProject.rows}
+                  currentInputs={currentProject.inputs}
+                  projectLocation={currentProject.location}
+                  detectedRegion={currentProject.presetInfo?.region}
+                  collapsed={true}
+                />
+              )}
             </div>
           </TabsContent>
 
@@ -212,7 +212,8 @@ const ProjectWorkspace = () => {
             <NapkinCalculator 
               siteArea={siteArea} 
               initialRows={generatedRows} 
-              mapImageUrl={mapImageUrl} 
+              mapImageUrl={mapImageUrl}
+              presetInfo={currentProject?.presetInfo}
             />
           </TabsContent>
 
