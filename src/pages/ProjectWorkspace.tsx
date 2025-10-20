@@ -6,13 +6,15 @@ import { toast } from "sonner";
 import NapkinCalculator from "@/components/NapkinCalculator";
 import SiteMap from "@/components/map/SiteMap";
 import LenderExport from "@/components/calculator/LenderExport";
-import { Calculator, FileText, TrendingUp } from "lucide-react";
-import { PropertyRow } from "@/types/calculator";
+import { LocationPresets } from "@/components/calculator/LocationPresets";
+import { Calculator, FileText, TrendingUp, MapPin } from "lucide-react";
+import { PropertyRow, GlobalInputs } from "@/types/calculator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlobalHeader from "@/components/GlobalHeader";
 import { projectStorage } from "@/services/projectStorage";
 import { Project } from "@/types/project";
 import { calculateTotals } from "@/utils/calculatorHelpers";
+import { Button } from "@/components/ui/button";
 
 const ProjectWorkspace = () => {
   const { id } = useParams();
@@ -24,6 +26,7 @@ const ProjectWorkspace = () => {
   const [generatedRows, setGeneratedRows] = useState<PropertyRow[] | undefined>();
   const [mapImageUrl, setMapImageUrl] = useState<string>("");
   const [activeTab, setActiveTab] = useState("site-map");
+  const [showLocationPresets, setShowLocationPresets] = useState(false);
   const navigate = useNavigate();
 
   // Read tab from URL query params
@@ -62,6 +65,34 @@ const ProjectWorkspace = () => {
       }
     }
   }, [activeTab, id]);
+
+  const handleApplyPreset = (updatedRows: PropertyRow[], updatedInputs: GlobalInputs, presetSource: string) => {
+    if (!id) return;
+
+    // Save to calculator localStorage
+    localStorage.setItem("napkin-calculator-data", JSON.stringify({
+      rows: updatedRows,
+      inputs: updatedInputs,
+    }));
+
+    // Update project
+    const project = projectStorage.getProject(id);
+    if (project) {
+      const updatedProject = {
+        ...project,
+        rows: updatedRows,
+        inputs: updatedInputs,
+        lastUpdated: new Date().toISOString(),
+        notes: project.notes 
+          ? `${project.notes}\n\nPreset Applied: ${presetSource}`
+          : `Preset Applied: ${presetSource}`,
+      };
+      projectStorage.saveProject(updatedProject);
+      setCurrentProject(updatedProject);
+    }
+
+    setShowLocationPresets(false);
+  };
 
   useEffect(() => {
     // Check authentication
@@ -149,11 +180,32 @@ const ProjectWorkspace = () => {
           </TabsList>
 
           <TabsContent value="site-map">
-            <SiteMap 
-              onAreaUpdate={setSiteArea} 
-              savedArea={siteArea}
-              onGenerateRows={setGeneratedRows}
-            />
+            <div className="space-y-6">
+              {showLocationPresets && currentProject ? (
+                <LocationPresets
+                  onApply={handleApplyPreset}
+                  onClose={() => setShowLocationPresets(false)}
+                  currentRows={currentProject.rows}
+                  currentInputs={currentProject.inputs}
+                  projectLocation={currentProject.location}
+                />
+              ) : (
+                <Button
+                  onClick={() => setShowLocationPresets(true)}
+                  variant="outline"
+                  className="mb-4"
+                >
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Load Location Presets
+                </Button>
+              )}
+              
+              <SiteMap 
+                onAreaUpdate={setSiteArea} 
+                savedArea={siteArea}
+                onGenerateRows={setGeneratedRows}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="gdv-calculator">
