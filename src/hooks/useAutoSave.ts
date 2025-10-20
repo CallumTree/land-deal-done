@@ -105,28 +105,19 @@ export const useAutoSave = ({ projectId, onSave, debounceMs = 500 }: AutoSaveOpt
 
 const updateProjectIndex = (project: Project) => {
   try {
-    const indexKey = "buildflow_projects_index";
-    const stored = localStorage.getItem(indexKey);
-    const index = stored ? JSON.parse(stored) : [];
+    // Update the main projects storage to keep dashboard in sync
+    const mainKey = 'buildflow_projects';
+    const mainStored = localStorage.getItem(mainKey);
+    const projects: Project[] = mainStored ? JSON.parse(mainStored) : [];
+    const existingIndex = projects.findIndex((p) => p.id === project.id);
     
-    const projectIndex = {
-      id: project.id,
-      name: project.name,
-      location: project.location,
-      gdv: project.gdv,
-      profitPct: project.profitMargin,
-      units: project.units,
-      updatedAt: new Date().toISOString(),
-    };
-    
-    const existingIndex = index.findIndex((p: any) => p.id === project.id);
     if (existingIndex >= 0) {
-      index[existingIndex] = projectIndex;
+      projects[existingIndex] = { ...project, lastUpdated: new Date().toISOString() };
     } else {
-      index.push(projectIndex);
+      projects.push(project);
     }
     
-    localStorage.setItem(indexKey, JSON.stringify(index));
+    localStorage.setItem(mainKey, JSON.stringify(projects));
   } catch (error) {
     console.error("Failed to update project index:", error);
   }

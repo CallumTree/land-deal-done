@@ -505,7 +505,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         `Recommended mix applied: ${mixName}, ${approxUnits} units @ ${densityRounded} u/ha (ND ${assumptions.netDevelopable}%, Infra ${assumptions.infrastructure}%). Edit any row to refine.`
       );
       
-      setIsOpen(false);
+      // Keep map visible - don't collapse
+      // setIsOpen(false);
       
       // Scroll to calculator
       setTimeout(() => {
