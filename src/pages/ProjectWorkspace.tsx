@@ -129,24 +129,24 @@ const ProjectWorkspace = () => {
   // Sync calculator changes to project with recalculated metrics
   useEffect(() => {
     if (!id) return;
-    
+
     const syncCalculatorData = () => {
       try {
         const calculatorData = localStorage.getItem("napkin-calculator-data");
         if (!calculatorData) return;
-        
+
         const { rows, inputs } = JSON.parse(calculatorData);
-        
+
         // Get fresh project data to avoid stale closure
-        setCurrentProject(prev => {
+        setCurrentProject((prev) => {
           if (!prev) return prev;
-          
+
           // Recalculate all metrics from fresh data
           const calculatedValues = calculateTotals(rows || [], inputs || prev.inputs);
           const totalUnits = (rows || []).reduce((sum: number, r: PropertyRow) => sum + r.units, 0);
           const siteAreaHa = inputs?.siteArea || prev.inputs.siteArea || 0;
           const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
-          
+
           // Create updated project with fresh calculations
           const updatedProject: Project = {
             ...prev,
@@ -163,26 +163,25 @@ const ProjectWorkspace = () => {
             rlv: calculatedValues.residualLandValue,
             lastUpdated: new Date().toISOString(),
           };
-          
+
           // Save the updated project
           saveProject(updatedProject);
-          
+
           return updatedProject;
         });
       } catch (error) {
         console.error("Failed to sync calculator data:", error);
       }
     };
-    
+
     // Set up interval to continuously sync
     const intervalId = setInterval(syncCalculatorData, 3000);
-    
-    // Cleanup: save one final time on unmount
+
+    // Cleanup
     return () => {
       clearInterval(intervalId);
-      syncCalculatorData();
     };
-  }, [id, saveProject]);
+  }, [id]);
 
   // Manual controls
   const handleSaveNow = useCallback(() => {

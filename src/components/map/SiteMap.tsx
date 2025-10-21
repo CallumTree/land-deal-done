@@ -67,7 +67,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
   const currentTileLayer = useRef<L.TileLayer | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [isOpen, setIsOpen] = useState(!savedArea);
+  const [isOpen, setIsOpen] = useState(true);
   const [currentArea, setCurrentArea] = useState<number>(savedArea || 0);
   const [currentPerimeter, setCurrentPerimeter] = useState<number>(0);
   const [mapError, setMapError] = useState(false);
