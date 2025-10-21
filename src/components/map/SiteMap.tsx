@@ -99,6 +99,9 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       // Add initial tile layer
       addTileLayer(basemap);
 
+      // Add scale control for user reference (meters/kilometers)
+      L.control.scale({ metric: true, imperial: false }).addTo(map.current!);
+
       // Initialize feature group for drawn items
       drawnItems.current = new L.FeatureGroup();
       map.current.addLayer(drawnItems.current);
@@ -180,6 +183,34 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
   useEffect(() => {
     localStorage.setItem('siteMapAssumptions', JSON.stringify(assumptions));
   }, [assumptions]);
+
+  // Fix: Leaflet map can render blank when container visibility toggles
+  useEffect(() => {
+    if (!isOpen || !map.current) return;
+    const invalidate = () => {
+      map.current?.invalidateSize();
+      // If a polygon exists, fit bounds to ensure it's visible
+      if (drawnItems.current) {
+        const layers = drawnItems.current.getLayers();
+        if (layers.length > 0) {
+          const layer = layers[0] as L.Polygon;
+          map.current?.fitBounds(layer.getBounds(), { padding: [20, 20] });
+        }
+      }
+    };
+
+    // Slight delay allows the Collapsible to finish layout
+    const t = setTimeout(invalidate, 60);
+
+    // Invalidate on window resize as well
+    const onResize = () => map.current?.invalidateSize();
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [isOpen]);
 
   const getPolygonOptions = () => {
     const isSatellite = basemap === 'satellite';
