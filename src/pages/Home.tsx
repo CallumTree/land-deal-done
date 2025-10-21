@@ -66,7 +66,9 @@ const Home = () => {
 
   const loadProjects = () => {
     const allProjects = projectStorage.getAllProjects();
-    setProjects(allProjects.filter((p) => !p.isArchived));
+    const activeProjects = allProjects.filter((p) => !p.isArchived);
+    console.log("Loaded projects from storage:", activeProjects);
+    setProjects(activeProjects);
   };
 
   useEffect(() => {

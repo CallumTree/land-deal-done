@@ -26,7 +26,7 @@ export const useAutoSave = ({ projectId, onSave, debounceMs = 500 }: AutoSaveOpt
     // Debounced save
     debounceTimerRef.current = setTimeout(() => {
       try {
-        // Save main project
+        // Save to ONE source of truth
         projectStorage.saveProject(project);
         
         // Update backup once per session
@@ -35,9 +35,6 @@ export const useAutoSave = ({ projectId, onSave, debounceMs = 500 }: AutoSaveOpt
           localStorage.setItem(backupKey, JSON.stringify(project));
         }
         saveCountRef.current++;
-        
-        // Update index for dashboard
-        updateProjectIndex(project);
         
         const timestamp = new Date().toLocaleTimeString('en-US', { 
           hour: '2-digit', 
@@ -69,7 +66,6 @@ export const useAutoSave = ({ projectId, onSave, debounceMs = 500 }: AutoSaveOpt
     
     try {
       projectStorage.saveProject(project);
-      updateProjectIndex(project);
       
       const timestamp = new Date().toLocaleTimeString('en-US', { 
         hour: '2-digit', 
@@ -103,22 +99,3 @@ export const useAutoSave = ({ projectId, onSave, debounceMs = 500 }: AutoSaveOpt
   };
 };
 
-const updateProjectIndex = (project: Project) => {
-  try {
-    // Update the main projects storage to keep dashboard in sync
-    const mainKey = 'buildflow_projects';
-    const mainStored = localStorage.getItem(mainKey);
-    const projects: Project[] = mainStored ? JSON.parse(mainStored) : [];
-    const existingIndex = projects.findIndex((p) => p.id === project.id);
-    
-    if (existingIndex >= 0) {
-      projects[existingIndex] = { ...project, lastUpdated: new Date().toISOString() };
-    } else {
-      projects.push(project);
-    }
-    
-    localStorage.setItem(mainKey, JSON.stringify(projects));
-  } catch (error) {
-    console.error("Failed to update project index:", error);
-  }
-};
