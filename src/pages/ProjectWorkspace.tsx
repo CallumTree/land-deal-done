@@ -17,6 +17,8 @@ import { calculateTotals } from "@/utils/calculatorHelpers";
 import { Button } from "@/components/ui/button";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { RestoreBanner } from "@/components/RestoreBanner";
+import QSChatBubble from "@/components/QSChatBubble";
+import QSChatPanel from "@/components/QSChatPanel";
 
 const ProjectWorkspace = () => {
   const { id } = useParams();
@@ -34,6 +36,7 @@ const ProjectWorkspace = () => {
   const [showRestoreBanner, setShowRestoreBanner] = useState(false);
   const [hasBackup, setHasBackup] = useState(false);
   const [savedProject, setSavedProject] = useState<Project | null>(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const navigate = useNavigate();
 
   // Auto-save hook
@@ -355,6 +358,19 @@ const ProjectWorkspace = () => {
     toast.success("Previous save restored");
   };
 
+  const handleSaveChatToNotes = (chatExport: string) => {
+    if (currentProject) {
+      const updatedProject = {
+        ...currentProject,
+        notes: currentProject.notes 
+          ? `${currentProject.notes}\n\n--- QS Chat (${new Date().toLocaleDateString()}) ---\n${chatExport}`
+          : `--- QS Chat (${new Date().toLocaleDateString()}) ---\n${chatExport}`,
+        lastUpdated: new Date().toISOString(),
+      };
+      setCurrentProject(updatedProject);
+      saveProject(updatedProject);
+    }
+  };
 
   if (loading) {
     return (
@@ -476,6 +492,15 @@ const ProjectWorkspace = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* QS Chat */}
+      <QSChatBubble onClick={() => setIsChatOpen(true)} />
+      <QSChatPanel 
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        project={currentProject}
+        onSaveToNotes={handleSaveChatToNotes}
+      />
     </div>
   );
 };
