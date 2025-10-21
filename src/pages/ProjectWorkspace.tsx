@@ -128,7 +128,7 @@ const ProjectWorkspace = () => {
 
   // Sync calculator changes to project with recalculated metrics
   useEffect(() => {
-    if (!id || !currentProject) return;
+    if (!id) return;
     
     const syncCalculatorData = () => {
       try {
@@ -137,46 +137,52 @@ const ProjectWorkspace = () => {
         
         const { rows, inputs } = JSON.parse(calculatorData);
         
-        // Recalculate all metrics from fresh data
-        const calculatedValues = calculateTotals(rows || [], inputs || currentProject.inputs);
-        const totalUnits = (rows || []).reduce((sum: number, r: PropertyRow) => sum + r.units, 0);
-        const siteAreaHa = inputs?.siteArea || currentProject.inputs.siteArea || 0;
-        const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
-        
-        // Create updated project with fresh calculations
-        const updatedProject: Project = {
-          ...currentProject,
-          rows: rows || currentProject.rows,
-          inputs: inputs || currentProject.inputs,
-          gdv: calculatedValues.totalGDV,
-          profitMargin: calculatedValues.profitMarginPercent,
-          units: totalUnits,
-          density: density,
-          buildCost: calculatedValues.buildCost,
-          landCost: calculatedValues.landCost,
-          netProfit: calculatedValues.netProfit,
-          roi: calculatedValues.profitMarginPercent,
-          rlv: calculatedValues.residualLandValue,
-          lastUpdated: new Date().toISOString(),
-        };
-        
-        // Update state and save
-        setCurrentProject(updatedProject);
-        saveProject(updatedProject);
+        // Get fresh project data to avoid stale closure
+        setCurrentProject(prev => {
+          if (!prev) return prev;
+          
+          // Recalculate all metrics from fresh data
+          const calculatedValues = calculateTotals(rows || [], inputs || prev.inputs);
+          const totalUnits = (rows || []).reduce((sum: number, r: PropertyRow) => sum + r.units, 0);
+          const siteAreaHa = inputs?.siteArea || prev.inputs.siteArea || 0;
+          const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
+          
+          // Create updated project with fresh calculations
+          const updatedProject: Project = {
+            ...prev,
+            rows: rows || prev.rows,
+            inputs: inputs || prev.inputs,
+            gdv: calculatedValues.totalGDV,
+            profitMargin: calculatedValues.profitMarginPercent,
+            units: totalUnits,
+            density: density,
+            buildCost: calculatedValues.buildCost,
+            landCost: calculatedValues.landCost,
+            netProfit: calculatedValues.netProfit,
+            roi: calculatedValues.profitMarginPercent,
+            rlv: calculatedValues.residualLandValue,
+            lastUpdated: new Date().toISOString(),
+          };
+          
+          // Save the updated project
+          saveProject(updatedProject);
+          
+          return updatedProject;
+        });
       } catch (error) {
         console.error("Failed to sync calculator data:", error);
       }
     };
     
     // Set up interval to continuously sync
-    const intervalId = setInterval(syncCalculatorData, 1500);
+    const intervalId = setInterval(syncCalculatorData, 3000);
     
     // Cleanup: save one final time on unmount
     return () => {
       clearInterval(intervalId);
-      syncCalculatorData(); // Final sync before unmounting
+      syncCalculatorData();
     };
-  }, [id, currentProject?.id, saveProject]);
+  }, [id, saveProject]);
 
   // Manual controls
   const handleSaveNow = useCallback(() => {
