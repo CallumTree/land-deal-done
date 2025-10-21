@@ -123,12 +123,70 @@ const ProjectWorkspace = () => {
     toast.success(`Detected region: ${region}`);
   };
 
-  // Auto-save on project changes
+  // Sync calculator changes to project with recalculated metrics
   useEffect(() => {
-    if (currentProject && id) {
-      saveProject(currentProject);
-    }
-  }, [currentProject, id, saveProject]);
+    if (!id || !currentProject) return;
+    
+    const syncCalculatorData = () => {
+      try {
+        const calculatorData = localStorage.getItem("napkin-calculator-data");
+        if (calculatorData) {
+          const { rows, inputs } = JSON.parse(calculatorData);
+          
+          // Recalculate metrics
+          const calculatedValues = calculateTotals(rows || [], inputs || currentProject.inputs);
+          const totalUnits = (rows || []).reduce((sum: number, r: PropertyRow) => sum + r.units, 0);
+          const siteAreaHa = inputs?.siteArea || currentProject.inputs.siteArea || 0;
+          const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
+          
+          // Update project with new data and calculated metrics
+          const updatedProject = {
+            ...currentProject,
+            rows: rows || currentProject.rows,
+            inputs: inputs || currentProject.inputs,
+            gdv: calculatedValues.totalGDV,
+            profitMargin: calculatedValues.profitMarginPercent,
+            units: totalUnits,
+            density: density,
+            buildCost: calculatedValues.buildCost,
+            landCost: calculatedValues.landCost,
+            netProfit: calculatedValues.netProfit,
+            roi: calculatedValues.profitMarginPercent,
+            rlv: calculatedValues.residualLandValue,
+            lastUpdated: new Date().toISOString(),
+          };
+          
+          // Only update if data actually changed
+          if (JSON.stringify(updatedProject) !== JSON.stringify(currentProject)) {
+            setCurrentProject(updatedProject);
+            saveProject(updatedProject);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to sync calculator data:", error);
+      }
+    };
+    
+    // Sync on mount and when calculator data changes
+    syncCalculatorData();
+    
+    // Set up storage event listener for calculator changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "napkin-calculator-data") {
+        syncCalculatorData();
+      }
+    };
+    
+    window.addEventListener("storage", handleStorageChange);
+    
+    // Also set up interval to check for changes (storage event doesn't fire in same window)
+    const intervalId = setInterval(syncCalculatorData, 2000);
+    
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      clearInterval(intervalId);
+    };
+  }, [id, currentProject?.id]); // Only depend on id and project id, not full project object
 
   // Manual controls
   const handleSaveNow = useCallback(() => {
