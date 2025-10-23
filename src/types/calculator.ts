@@ -2,14 +2,27 @@ export interface PropertyRow {
   id: string;
   type: string;
   units: number;
+  // Legacy fields (for backward compatibility)
   giaPerUnit: number;
   salesValue: number;
   unitPriceOverride: number;
   buildPerSqm: number;
+  // New fields (preferred)
+  gia_m2_per_unit?: number;
+  sale_value_per_unit?: number;
+  sale_ppm2?: number;
+  build_ppm2?: number;
   notes: string;
+  priceSource?: {
+    region: string;
+    spec: string;
+    localityMultiplier: number;
+    appliedAt: string;
+  };
 }
 
 export interface GlobalInputs {
+  // Legacy fields (for backward compatibility)
   professionalFeesPercent: number;
   marketingSalesPercent: number;
   contingencyPercent: number;
@@ -30,34 +43,60 @@ export interface GlobalInputs {
   abnormalsPercentEnabled: boolean;
   abnormalsPercent: number;
   siteNotes: string;
+  
+  // New fields (preferred)
+  buildBaselineType?: "manual" | "preset";
+  externalsPercent?: number;
+  prelimsPercent?: number;
+  financeInterestApr?: number;
+  financeArrangementFee?: number;
+  financeExitFee?: number;
+  programmeDurationMonths?: number;
+  s278s38Works?: number;
+  planningApplicationFees?: number;
+  buildingControlFees?: number;
+  stampDutyLandTax?: number;
+  legalFeesLand?: number;
+  developerEquityCash?: number;
 }
 
 export interface CalculatedValues {
   totalGDV: number;
+  // Legacy fields
   buildCost: number;
+  finance: number;
+  other: number;
+  // New fields (with full breakdown)
+  baseBuildCost?: number;
+  externals?: number;
+  prelims?: number;
   professionalFees: number;
   marketingSales: number;
   contingency: number;
-  finance: number;
-  other: number;
+  financeInterest?: number;
+  financeFixedFees?: number;
   sitePrepTechnical: number;
+  otherPlanning?: number;
   landCost: number;
+  landAcquisitionCosts?: number;
   totalCosts: number;
   netProfit: number;
   profitMarginPercent: number;
+  costToGDVPercent?: number;
   residualLandValue: number;
   variance: number;
+  roce?: number;
 }
 
 export const PROPERTY_DEFAULTS: Record<string, Partial<PropertyRow>> = {
-  "2-Bed Semi": { giaPerUnit: 75, salesValue: 247500, buildPerSqm: 1650 },
-  "3-Bed Semi": { giaPerUnit: 90, salesValue: 292500, buildPerSqm: 1650 },
-  "3-Bed Detached": { giaPerUnit: 92.5, salesValue: 314500, buildPerSqm: 1700 },
-  "4-Bed Detached": { giaPerUnit: 120, salesValue: 432000, buildPerSqm: 1800 },
-  "2-Bed Bungalow": { giaPerUnit: 84.5, salesValue: 283075, buildPerSqm: 1800 },
-  "3-Bed Bungalow": { giaPerUnit: 109, salesValue: 370600, buildPerSqm: 1900 },
-  "Apartment (1-bed)": { giaPerUnit: 52, salesValue: 208000, buildPerSqm: 2000 },
-  "Apartment (2-bed)": { giaPerUnit: 70, salesValue: 266000, buildPerSqm: 2000 },
+  "2-Bed Semi": { giaPerUnit: 75, salesValue: 247500, buildPerSqm: 1650, unitPriceOverride: 0 },
+  "3-Bed Semi": { giaPerUnit: 90, salesValue: 292500, buildPerSqm: 1650, unitPriceOverride: 0 },
+  "3-Bed Detached": { giaPerUnit: 92.5, salesValue: 314500, buildPerSqm: 1700, unitPriceOverride: 0 },
+  "4-Bed Detached": { giaPerUnit: 120, salesValue: 432000, buildPerSqm: 1800, unitPriceOverride: 0 },
+  "2-Bed Bungalow": { giaPerUnit: 84.5, salesValue: 283075, buildPerSqm: 1800, unitPriceOverride: 0 },
+  "3-Bed Bungalow": { giaPerUnit: 109, salesValue: 370600, buildPerSqm: 1900, unitPriceOverride: 0 },
+  "Apartment (1-bed)": { giaPerUnit: 52, salesValue: 208000, buildPerSqm: 2000, unitPriceOverride: 0 },
+  "Apartment (2-bed)": { giaPerUnit: 70, salesValue: 266000, buildPerSqm: 2000, unitPriceOverride: 0 },
 };
 
 export const PROPERTY_TYPES = [
