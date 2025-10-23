@@ -37,6 +37,7 @@ const ProjectWorkspace = () => {
   const [hasBackup, setHasBackup] = useState(false);
   const [savedProject, setSavedProject] = useState<Project | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [savedPolygon, setSavedPolygon] = useState<any>(null);
   const navigate = useNavigate();
 
   // Auto-save hook
@@ -125,6 +126,25 @@ const ProjectWorkspace = () => {
     setDetectedRegion(region);
     toast.success(`Detected region: ${region}`);
   };
+
+  const handlePolygonUpdate = useCallback((polygon: any) => {
+    if (!id) return;
+    
+    // Update saved polygon state
+    setSavedPolygon(polygon);
+    
+    // Update project with polygon data
+    const project = projectStorage.getProject(id);
+    if (project) {
+      const updatedProject = {
+        ...project,
+        polygon,
+        lastUpdated: new Date().toISOString(),
+      };
+      projectStorage.saveProject(updatedProject);
+      setCurrentProject(updatedProject);
+    }
+  }, [id]);
 
   // Sync calculator changes to project with recalculated metrics
   useEffect(() => {
@@ -308,6 +328,7 @@ const ProjectWorkspace = () => {
         setCurrentProject(project);
         setSiteArea(project.inputs?.siteArea || 0);
         setMapImageUrl(project.mapImageUrl || "");
+        setSavedPolygon(project.polygon || null);
         
         // Check for saved project
         const savedKey = `buildflow_project_${id}`;
@@ -354,6 +375,7 @@ const ProjectWorkspace = () => {
     setCurrentProject(saved);
     setSiteArea(saved.inputs?.siteArea || 0);
     setMapImageUrl(saved.mapImageUrl || "");
+    setSavedPolygon(saved.polygon || null);
     
     localStorage.setItem("napkin-calculator-data", JSON.stringify({
       rows: saved.rows,
@@ -444,6 +466,8 @@ const ProjectWorkspace = () => {
                 savedArea={siteArea}
                 onGenerateRows={setGeneratedRows}
                 onLocationDetected={handleLocationDetected}
+                savedPolygon={savedPolygon}
+                onPolygonUpdate={handlePolygonUpdate}
               />
               
               {currentProject && (

@@ -25,6 +25,8 @@ interface SiteMapProps {
   onGenerateRows?: (rows: any[]) => void;
   onMapSnapshot?: (imageUrl: string) => void;
   onLocationDetected?: (location: string, region: string) => void;
+  savedPolygon?: any;
+  onPolygonUpdate?: (polygon: any) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
@@ -59,7 +61,7 @@ const MIX_LABELS: Record<MixType, string> = {
   bungalow: 'Bungalow-heavy',
 };
 
-const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected, savedPolygon, onPolygonUpdate }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
@@ -133,14 +135,19 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         drawnItems.current?.clearLayers();
         drawnItems.current?.addLayer(layer);
         updateArea();
+        extractAndNotifyPolygon();
       });
 
       map.current.on(L.Draw.Event.EDITED, () => {
         updateArea();
+        extractAndNotifyPolygon();
       });
 
       map.current.on(L.Draw.Event.DELETED, () => {
         updateArea();
+        if (onPolygonUpdate) {
+          onPolygonUpdate(null);
+        }
       });
 
     } catch (error) {
@@ -183,6 +190,35 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
   useEffect(() => {
     localStorage.setItem('siteMapAssumptions', JSON.stringify(assumptions));
   }, [assumptions]);
+
+  // Restore saved polygon on mount
+  useEffect(() => {
+    if (!savedPolygon || !map.current || !drawnItems.current) return;
+    
+    try {
+      // Clear existing layers
+      drawnItems.current.clearLayers();
+      
+      // Create polygon from saved GeoJSON
+      const geoJsonLayer = L.geoJSON(savedPolygon, {
+        style: getPolygonOptions()
+      });
+      
+      // Add to drawn items
+      geoJsonLayer.eachLayer((layer) => {
+        drawnItems.current?.addLayer(layer);
+      });
+      
+      // Fit map to polygon bounds
+      const bounds = geoJsonLayer.getBounds();
+      map.current.fitBounds(bounds, { padding: [50, 50] });
+      
+      // Update area display
+      updateArea();
+    } catch (error) {
+      console.error('Failed to restore polygon:', error);
+    }
+  }, [savedPolygon]);
 
   // Fix: Leaflet map can render blank when container visibility toggles
   useEffect(() => {
@@ -329,6 +365,31 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     return perimeter;
   };
 
+  const extractAndNotifyPolygon = () => {
+    if (!drawnItems.current || !onPolygonUpdate) return;
+    
+    const layers = drawnItems.current.getLayers();
+    if (layers.length > 0) {
+      const layer = layers[0] as L.Polygon;
+      const latlngs = layer.getLatLngs()[0] as L.LatLng[];
+      
+      // Convert to GeoJSON format
+      const coordinates = latlngs.map((latlng: L.LatLng) => [latlng.lng, latlng.lat]);
+      coordinates.push(coordinates[0]); // Close the polygon
+      
+      const geojson = {
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [coordinates]
+        },
+        properties: {}
+      };
+      
+      onPolygonUpdate(geojson);
+    }
+  };
+
   const detectRegionFromCoords = (lat: number, lon: number): string => {
     // Simple region detection based on coordinates
     // This is a basic implementation - could be enhanced with actual boundary data
@@ -381,6 +442,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
 
   const handleUseForGDV = () => {
     if (currentArea > 0) {
+      // Extract and save polygon
+      extractAndNotifyPolygon();
       // Calculate density and compactness
       const grossAreaM2 = currentArea;
       const grossAreaHa = grossAreaM2 / 10000;
@@ -552,6 +615,11 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     drawnItems.current?.clearLayers();
     setCurrentArea(0);
     setCurrentPerimeter(0);
+    
+    // Notify parent that polygon was cleared
+    if (onPolygonUpdate) {
+      onPolygonUpdate(null);
+    }
   };
 
   const handleRetry = () => {
