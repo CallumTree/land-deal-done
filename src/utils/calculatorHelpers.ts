@@ -12,24 +12,18 @@ export const formatPercent = (value: number): string => {
 };
 
 export const calculateRowValues = (row: PropertyRow) => {
-  // Either sale_value_per_unit or sale_ppm2 drives the calculation
-  const saleValuePerUnit = row.sale_value_per_unit ?? 
-    ((row.sale_ppm2 || 0) * (row.gia_m2_per_unit || 0));
-  const salePpm2 = row.sale_ppm2 ?? 
-    ((row.gia_m2_per_unit || 0) > 0 ? (row.sale_value_per_unit || 0) / (row.gia_m2_per_unit || 0) : 0);
-  
-  const buildPerUnit = (row.gia_m2_per_unit || 0) * (row.build_ppm2 || 0);
+  const buildPerUnit = (row.giaPerUnit || 0) * (row.buildPerSqm || 0);
   const buildTotal = (row.units || 0) * buildPerUnit;
-  const gdvTotal = (row.units || 0) * saleValuePerUnit;
-  const marginPct = gdvTotal > 0 ? ((gdvTotal - buildTotal) / gdvTotal) * 100 : 0;
+  const gdvPerUnit = row.unitPriceOverride > 0 
+    ? row.unitPriceOverride 
+    : (row.salesValue || 0);
+  const gdvTotal = (row.units || 0) * gdvPerUnit;
 
   return {
-    saleValuePerUnit: isNaN(saleValuePerUnit) ? 0 : saleValuePerUnit,
-    salePpm2: isNaN(salePpm2) ? 0 : salePpm2,
     buildPerUnit: isNaN(buildPerUnit) ? 0 : buildPerUnit,
     buildTotal: isNaN(buildTotal) ? 0 : buildTotal,
+    gdvPerUnit: isNaN(gdvPerUnit) ? 0 : gdvPerUnit,
     gdvTotal: isNaN(gdvTotal) ? 0 : gdvTotal,
-    marginPct: isNaN(marginPct) ? 0 : marginPct,
   };
 };
 
@@ -52,110 +46,71 @@ export const calculateTotals = (
     programmeDelayMonths: 0,
   };
 
-  // Total GDV = Σ row_gdv
+  // Apply sensitivity adjustments to calculations
   const totalGDV = rows.reduce((sum, row) => {
     const { gdvTotal } = calculateRowValues(row);
     return sum + gdvTotal;
   }, 0) * (1 + sensitivity.salesValuePercent / 100);
 
-  // Base build cost = Σ row_build
-  const baseBuildCost = rows.reduce((sum, row) => {
+  const buildCost = rows.reduce((sum, row) => {
     const { buildTotal } = calculateRowValues(row);
     return sum + buildTotal;
   }, 0) * (1 + sensitivity.buildCostPercent / 100);
 
-  // Externals (applies to base_build_cost)
-  const externals = baseBuildCost * ((inputs.externalsPercent || 0) / 100);
+  const professionalFees = buildCost * (inputs.professionalFeesPercent / 100);
+  const marketingSales = totalGDV * (inputs.marketingSalesPercent / 100);
   
-  // Prelims (applies to base_build_cost)
-  const prelims = baseBuildCost * ((inputs.prelimsPercent || 0) / 100);
+  // Apply contingency adjustment
+  const contingencyRate = inputs.contingencyPercent + sensitivity.contingencyPercent;
+  const contingency = buildCost * (contingencyRate / 100);
   
-  // Professional fees (applies to base_build_cost)
-  const professionalFees = baseBuildCost * ((inputs.professionalFeesPercent || 0) / 100);
+  // Calculate site prep & technical costs
+  let abnormals = inputs.abnormals || 0;
+  if (inputs.abnormalsPercentEnabled && abnormals === 0) {
+    abnormals = buildCost * (inputs.abnormalsPercent / 100);
+  }
   
-  // Contingency (applies to base_build_cost + prelims + externals + prof_fees)
-  const contingencyBase = baseBuildCost + prelims + externals + professionalFees;
-  const contingencyRate = (inputs.contingencyPercent || 0) + sensitivity.contingencyPercent;
-  const contingency = contingencyBase * (contingencyRate / 100);
-  
-  // Marketing & Sales (applies to total_gdv)
-  const marketingSales = totalGDV * ((inputs.marketingSalesPercent || 0) / 100);
-  
-  // Site prep & technical (£ fixed values)
   const sitePrepTechnical = 
     (inputs.demolitionClearance || 0) +
     (inputs.ecologyEnvironmental || 0) +
     (inputs.groundInvestigation || 0) +
+    (inputs.planningStatutoryFees || 0) +
     (inputs.serviceConnections || 0) +
-    (inputs.s278S38Works || 0) +
-    (inputs.abnormals || 0) +
+    abnormals +
     (inputs.siteSecurity || 0) +
     (inputs.miscellaneousAllowance || 0);
   
-  // Other planning (£ fixed values)
-  const otherPlanning = 
-    (inputs.s106CIL || 0) +
-    (inputs.buildingControlFees || 0) +
-    (inputs.planningStatutoryFees || 0);
-  
-  // Finance interest (staged cashflow approximation)
-  const totalSpend = baseBuildCost + externals + prelims + professionalFees + contingency + 
-    marketingSales + sitePrepTechnical + otherPlanning;
-  const avgDrawdown = totalSpend * 0.5; // Assume 50% average exposure
-  const adjustedApr = (inputs.financeInterestApr || 0) + sensitivity.financeRatePercent;
-  const programmeMonths = (inputs.financeProgrammeMonths || 18) + sensitivity.programmeDelayMonths;
-  const financeInterest = avgDrawdown * (adjustedApr / 100) * (programmeMonths / 12);
-  
-  // Finance fees (fixed £)
-  const financeFeesFixed = (inputs.financeArrangementFee || 0) + (inputs.financeExitFee || 0);
-  
-  // Land cost
-  const landCost = inputs.landCost || 0;
-  
-  // Total costs
-  const totalCosts = baseBuildCost + externals + prelims + professionalFees + contingency + 
-    marketingSales + financeInterest + financeFeesFixed + sitePrepTechnical + otherPlanning + landCost;
-  
-  // Net profit
+  // Apply finance rate adjustment and programme delay
+  const financeBase = (buildCost + professionalFees + marketingSales + contingency + sitePrepTechnical) * 0.5;
+  const adjustedFinanceRate = inputs.financePercent + sensitivity.financeRatePercent;
+  const delayMultiplier = 1 + (sensitivity.programmeDelayMonths / 12); // Convert months to years
+  const finance = financeBase * (adjustedFinanceRate / 100) * delayMultiplier;
+
+  const totalCosts = buildCost + professionalFees + marketingSales + contingency + finance + sitePrepTechnical + inputs.s106CIL + inputs.landCost;
   const netProfit = totalGDV - totalCosts;
-  
-  // Profit margin % = net_profit / total_gdv
   const profitMarginPercent = totalGDV > 0 ? (netProfit / totalGDV) * 100 : 0;
-  
-  // Cost-to-GDV %
-  const costToGDVPercent = totalGDV > 0 ? (totalCosts / totalGDV) * 100 : 0;
-  
+
   // RLV at target margin
-  const targetProfit = totalGDV * ((inputs.targetMarginPercent || 0) / 100);
-  const costsExLand = totalCosts - landCost;
-  const residualLandValue = totalGDV - targetProfit - costsExLand;
+  const residualLandValue = totalGDV * (1 - inputs.targetMarginPercent / 100) - 
+    (buildCost + professionalFees + marketingSales + contingency + finance + sitePrepTechnical + inputs.s106CIL);
   
-  // Variance
-  const variance = residualLandValue - landCost;
-  
-  // ROCE (net_profit / land_cost; can add developer equity if available)
-  const roce = landCost > 0 ? (netProfit / landCost) * 100 : 0;
+  const variance = residualLandValue - inputs.landCost;
 
   return {
     totalGDV,
-    baseBuildCost,
-    externals,
-    prelims,
+    buildCost,
     professionalFees,
-    contingency,
     marketingSales,
-    financeInterest,
-    financeFeesFixed,
+    contingency,
+    finance,
+    other: inputs.s106CIL,
     sitePrepTechnical,
-    otherPlanning,
-    landCost,
+    landCost: inputs.landCost,
     totalCosts,
     netProfit,
     profitMarginPercent,
-    costToGDVPercent,
     residualLandValue,
     variance,
-    roce,
   };
 };
 
@@ -163,27 +118,26 @@ export const exportToCSV = (rows: PropertyRow[], filename: string = "napkin-gdv.
   const headers = [
     "Type",
     "Units",
-    "GIA/Unit (m²)",
-    "Sale £/unit",
-    "Sale £/m²",
+    "GIA / Unit (m²)",
+    "Sales Value (£)",
+    "Unit Price Override (£)",
     "Build £/m²",
     "Notes",
   ];
 
   const csvContent = [
     headers.join(","),
-    ...rows.map(row => {
-      const { saleValuePerUnit, salePpm2 } = calculateRowValues(row);
-      return [
+    ...rows.map(row =>
+      [
         row.type,
         row.units,
-        row.gia_m2_per_unit,
-        saleValuePerUnit,
-        salePpm2,
-        row.build_ppm2,
+        row.giaPerUnit,
+        row.salesValue,
+        row.unitPriceOverride,
+        row.buildPerSqm,
         `"${row.notes.replace(/"/g, '""')}"`,
-      ].join(",");
-    }),
+      ].join(",")
+    ),
   ].join("\n");
 
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -200,6 +154,7 @@ export const importFromCSV = (file: File): Promise<PropertyRow[]> => {
       try {
         const text = e.target?.result as string;
         const lines = text.split("\n").filter(line => line.trim());
+        const headers = lines[0].split(",");
         
         const rows: PropertyRow[] = lines.slice(1).map((line, index) => {
           const values = line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
@@ -209,10 +164,10 @@ export const importFromCSV = (file: File): Promise<PropertyRow[]> => {
             id: `imported-${Date.now()}-${index}`,
             type: cleanValues[0] || "Custom",
             units: parseInt(cleanValues[1]) || 0,
-            gia_m2_per_unit: parseFloat(cleanValues[2]) || 0,
-            sale_value_per_unit: parseFloat(cleanValues[3]) || undefined,
-            sale_ppm2: parseFloat(cleanValues[4]) || undefined,
-            build_ppm2: parseFloat(cleanValues[5]) || 0,
+            giaPerUnit: parseFloat(cleanValues[2]) || 0,
+            salesValue: parseFloat(cleanValues[3]) || 0,
+            unitPriceOverride: parseFloat(cleanValues[4]) || 0,
+            buildPerSqm: parseFloat(cleanValues[5]) || 0,
             notes: cleanValues[6] || "",
           };
         });

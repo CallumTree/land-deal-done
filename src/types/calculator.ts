@@ -2,96 +2,62 @@ export interface PropertyRow {
   id: string;
   type: string;
   units: number;
-  gia_m2_per_unit: number;
-  sale_value_per_unit?: number;
-  sale_ppm2?: number;
-  build_ppm2: number;
+  giaPerUnit: number;
+  salesValue: number;
+  unitPriceOverride: number;
+  buildPerSqm: number;
   notes: string;
-  // Source tracking for Market Calibration
-  priceSource?: {
-    region: string;
-    spec: "low" | "medium" | "high";
-    localityMultiplier: number;
-    appliedAt: string;
-  };
 }
 
 export interface GlobalInputs {
-  // Build cost add-ons
-  externalsPercent: number;
-  prelimsPercent: number;
   professionalFeesPercent: number;
-  contingencyPercent: number;
-  
-  // Marketing & Sales
   marketingSalesPercent: number;
-  
-  // Finance
-  financeInterestApr: number;
-  financeProgrammeMonths: number;
-  financeArrangementFee: number;
-  financeExitFee: number;
-  
-  // Site prep & technical (£ values)
+  contingencyPercent: number;
+  financePercent: number;
+  s106CIL: number;
+  landCost: number;
+  targetMarginPercent: number;
+  vatEnabled: boolean;
+  siteArea: number;
   demolitionClearance: number;
   ecologyEnvironmental: number;
   groundInvestigation: number;
+  planningStatutoryFees: number;
   serviceConnections: number;
-  s278S38Works: number;
   abnormals: number;
   siteSecurity: number;
   miscellaneousAllowance: number;
-  
-  // Planning costs (£ values)
-  s106CIL: number;
-  buildingControlFees: number;
-  planningStatutoryFees: number;
-  
-  // Land & Target
-  landCost: number;
-  targetMarginPercent: number;
-  
-  // Other
-  vatEnabled: boolean;
-  siteArea: number;
+  abnormalsPercentEnabled: boolean;
+  abnormalsPercent: number;
   siteNotes: string;
-  
-  // Legacy support
-  abnormalsPercentEnabled?: boolean;
-  abnormalsPercent?: number;
 }
 
 export interface CalculatedValues {
   totalGDV: number;
-  baseBuildCost: number;
-  externals: number;
-  prelims: number;
+  buildCost: number;
   professionalFees: number;
-  contingency: number;
   marketingSales: number;
-  financeInterest: number;
-  financeFeesFixed: number;
+  contingency: number;
+  finance: number;
+  other: number;
   sitePrepTechnical: number;
-  otherPlanning: number;
   landCost: number;
   totalCosts: number;
   netProfit: number;
   profitMarginPercent: number;
-  costToGDVPercent: number;
   residualLandValue: number;
   variance: number;
-  roce: number;
 }
 
 export const PROPERTY_DEFAULTS: Record<string, Partial<PropertyRow>> = {
-  "2-Bed Semi": { gia_m2_per_unit: 75, sale_ppm2: 3300, build_ppm2: 1650 },
-  "3-Bed Semi": { gia_m2_per_unit: 90, sale_ppm2: 3250, build_ppm2: 1650 },
-  "3-Bed Detached": { gia_m2_per_unit: 92.5, sale_ppm2: 3400, build_ppm2: 1700 },
-  "4-Bed Detached": { gia_m2_per_unit: 120, sale_ppm2: 3600, build_ppm2: 1800 },
-  "2-Bed Bungalow": { gia_m2_per_unit: 84.5, sale_ppm2: 3350, build_ppm2: 1900 },
-  "3-Bed Bungalow": { gia_m2_per_unit: 109, sale_ppm2: 3400, build_ppm2: 2000 },
-  "Apartment (1-bed)": { gia_m2_per_unit: 52, sale_ppm2: 4000, build_ppm2: 2100 },
-  "Apartment (2-bed)": { gia_m2_per_unit: 70, sale_ppm2: 3800, build_ppm2: 2100 },
+  "2-Bed Semi": { giaPerUnit: 75, salesValue: 247500, buildPerSqm: 1650 },
+  "3-Bed Semi": { giaPerUnit: 90, salesValue: 292500, buildPerSqm: 1650 },
+  "3-Bed Detached": { giaPerUnit: 92.5, salesValue: 314500, buildPerSqm: 1700 },
+  "4-Bed Detached": { giaPerUnit: 120, salesValue: 432000, buildPerSqm: 1800 },
+  "2-Bed Bungalow": { giaPerUnit: 84.5, salesValue: 283075, buildPerSqm: 1800 },
+  "3-Bed Bungalow": { giaPerUnit: 109, salesValue: 370600, buildPerSqm: 1900 },
+  "Apartment (1-bed)": { giaPerUnit: 52, salesValue: 208000, buildPerSqm: 2000 },
+  "Apartment (2-bed)": { giaPerUnit: 70, salesValue: 266000, buildPerSqm: 2000 },
 };
 
 export const PROPERTY_TYPES = [
