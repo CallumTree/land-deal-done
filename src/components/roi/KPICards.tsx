@@ -41,7 +41,7 @@ export function KPICards({
         <div className="text-2xl font-bold">{formatCurrency(gdvPerUnit)}</div>
       </Card>
       <Card className="p-4">
-        <div className="text-xs text-muted-foreground mb-1">£/unit Build</div>
+        <div className="text-xs text-muted-foreground mb-1">£/unit Build (Base)</div>
         <div className="text-2xl font-bold">{formatCurrency(buildPerUnit)}</div>
       </Card>
     </div>

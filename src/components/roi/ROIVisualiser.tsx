@@ -32,7 +32,7 @@ export function ROIVisualiser({ rows, inputs, values }: ROIVisualiserProps) {
   const costToGDV = values.totalGDV > 0 ? (values.totalCosts / values.totalGDV) * 100 : 0;
   const gdvPerSqm = totalGIA > 0 ? values.totalGDV / totalGIA : 0;
   const gdvPerUnit = totalUnits > 0 ? values.totalGDV / totalUnits : 0;
-  const buildPerUnit = totalUnits > 0 ? values.buildCost / totalUnits : 0;
+  const buildPerUnit = totalUnits > 0 ? values.baseBuildCost / totalUnits : 0;
 
   const handleIncludeInPack = (chart: keyof typeof includeInPack) => (include: boolean) => {
     setIncludeInPack((prev) => ({ ...prev, [chart]: include }));

@@ -41,7 +41,9 @@ const LenderSummaryPack = ({
   const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
 
   const costBreakdown = [
-    { label: "Build Cost", value: values.buildCost },
+    { label: "Build (Base)", value: values.baseBuildCost },
+    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals }] : []),
+    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims }] : []),
     { label: "Professional Fees", value: values.professionalFees },
     { label: "Marketing & Sales", value: values.marketingSales },
     { label: "Contingency", value: values.contingency },
@@ -57,12 +59,16 @@ const LenderSummaryPack = ({
 
   const calculateSensitivity = (salesDelta: number, buildDelta: number) => {
     const adjustedGDV = values.totalGDV * (1 + salesDelta / 100);
-    const adjustedBuildCost = values.buildCost * (1 + buildDelta / 100);
-    const adjustedProfessionalFees = adjustedBuildCost * (inputs.professionalFeesPercent / 100);
-    const adjustedContingency = adjustedBuildCost * (inputs.contingencyPercent / 100);
+    const adjustedBaseBuild = values.baseBuildCost * (1 + buildDelta / 100);
+    const adjustedExternals = adjustedBaseBuild * ((inputs.externalsPercent || 0) / 100);
+    const adjustedPrelims = adjustedBaseBuild * ((inputs.prelimsPercent || 12) / 100);
+    const adjustedProfessionalFees = adjustedBaseBuild * (inputs.professionalFeesPercent / 100);
+    const adjustedContingency = (adjustedBaseBuild + adjustedExternals + adjustedPrelims + adjustedProfessionalFees) * (inputs.contingencyPercent / 100);
     
     const adjustedTotalCosts = 
-      adjustedBuildCost + 
+      adjustedBaseBuild + 
+      adjustedExternals +
+      adjustedPrelims +
       adjustedProfessionalFees + 
       values.marketingSales + 
       adjustedContingency + 

@@ -195,7 +195,7 @@ const ProjectCard = ({ project, onUpdate }: ProjectCardProps) => {
             
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <div className="text-muted-foreground">Build Cost</div>
+                <div className="text-muted-foreground">Build (Base)</div>
                 <div className="font-medium">{formatCurrency(project.buildCost)}</div>
               </div>
               <div>

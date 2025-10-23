@@ -39,7 +39,9 @@ const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensi
 Napkin GDV Summary
 ==================
 Total GDV: ${formatCurrency(values.totalGDV)}
-Build Cost: ${formatCurrency(values.buildCost)}
+Build (Base): ${formatCurrency(values.baseBuildCost)}
+${values.externals > 0 ? `Externals: ${formatCurrency(values.externals)}` : ''}
+${values.prelims > 0 ? `Prelims: ${formatCurrency(values.prelims)}` : ''}
 Professional Fees: ${formatCurrency(values.professionalFees)}
 Marketing & Sales: ${formatCurrency(values.marketingSales)}
 Contingency: ${formatCurrency(values.contingency)}
@@ -61,13 +63,15 @@ Variance to Land: ${formatCurrency(values.variance)}
   };
 
   const costBreakdown = [
-    { label: "Build", value: values.buildCost, color: "bg-primary" },
-    { label: "Fees", value: values.professionalFees, color: "bg-accent" },
-    { label: "Marketing", value: values.marketingSales, color: "bg-secondary" },
+    { label: "Build (Base)", value: values.baseBuildCost, color: "bg-primary" },
+    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "bg-primary/80" }] : []),
+    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "bg-primary/60" }] : []),
+    { label: "Professional Fees", value: values.professionalFees, color: "bg-accent" },
+    { label: "Marketing & Sales", value: values.marketingSales, color: "bg-secondary" },
     { label: "Contingency", value: values.contingency, color: "bg-muted" },
-    { label: "Finance", value: values.finance, color: "bg-primary/60" },
+    { label: "Finance", value: values.finance, color: "bg-destructive/60" },
     ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep & Technical", value: values.sitePrepTechnical, color: "bg-orange-500" }] : []),
-    { label: "Other", value: values.other, color: "bg-accent/60" },
+    { label: "Other (S106/CIL)", value: values.other, color: "bg-accent/60" },
     { label: "Land", value: values.landCost, color: "bg-secondary/60" },
   ].filter(item => item.value > 0);
 

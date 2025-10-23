@@ -16,13 +16,33 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
 
   const waterfallData = [
     { name: "GDV", value: values.totalGDV, isPositive: true, color: "hsl(var(--chart-1))" },
-    { name: "Build", value: -values.buildCost, isNegative: true, color: "hsl(var(--chart-2))" },
+    { name: "Build (Base)", value: -values.baseBuildCost, isNegative: true, color: "hsl(var(--chart-2))" },
+  ];
+
+  if (values.externals > 0) {
+    waterfallData.push({
+      name: "Externals",
+      value: -values.externals,
+      isNegative: true,
+      color: "hsl(var(--chart-2)) / 0.8",
+    });
+  }
+
+  if (values.prelims > 0) {
+    waterfallData.push({
+      name: "Prelims",
+      value: -values.prelims,
+      isNegative: true,
+      color: "hsl(var(--chart-2)) / 0.6",
+    });
+  }
+
+  waterfallData.push(
     { name: "Professional Fees", value: -values.professionalFees, isNegative: true, color: "hsl(var(--chart-3))" },
     { name: "Marketing & Sales", value: -values.marketingSales, isNegative: true, color: "hsl(var(--chart-4))" },
     { name: "Contingency", value: -values.contingency, isNegative: true, color: "hsl(var(--chart-5))" },
-    { name: "Finance", value: -values.finance, isNegative: true, color: "hsl(var(--destructive))" },
-    { name: "Land", value: -values.landCost, isNegative: true, color: "hsl(var(--primary))" },
-  ];
+    { name: "Finance", value: -values.finance, isNegative: true, color: "hsl(var(--destructive))" }
+  );
 
   if (values.sitePrepTechnical > 0) {
     waterfallData.push({
@@ -42,12 +62,10 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
     });
   }
 
-  waterfallData.push({
-    name: "Net Profit",
-    value: values.netProfit,
-    isPositive: true,
-    color: "hsl(var(--success))",
-  });
+  waterfallData.push(
+    { name: "Land", value: -values.landCost, isNegative: true, color: "hsl(var(--primary))" },
+    { name: "Net Profit", value: values.netProfit, isPositive: true, color: "hsl(var(--success))" }
+  );
 
   const baseValue = showPercentOfCost ? values.totalCosts : values.totalGDV;
 
