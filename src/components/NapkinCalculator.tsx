@@ -27,9 +27,16 @@ interface NapkinCalculatorProps {
     spec: "low" | "medium" | "high";
     appliedAt: string;
   };
+  suggestionMetadata?: {
+    source: string;
+    localAuthority?: string;
+    region: string;
+    baseBand: string;
+    generatedAt: string;
+  };
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, presetInfo }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, presetInfo, suggestionMetadata }: NapkinCalculatorProps) => {
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
@@ -209,6 +216,24 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">1</span>
                 Unit Mix & GDV
               </h3>
+              
+              {suggestionMetadata && (
+                <div className="mb-4 p-3 rounded-lg border border-primary/30 bg-primary/5">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        Mix adjusted from {suggestionMetadata.baseBand}
+                        {suggestionMetadata.localAuthority && ` for ${suggestionMetadata.localAuthority}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Based on {suggestionMetadata.source} • {suggestionMetadata.region}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <GDVTable rows={rows} onChange={setRows} />
             </div>
 

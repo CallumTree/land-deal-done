@@ -27,6 +27,13 @@ const ProjectWorkspace = () => {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [siteArea, setSiteArea] = useState<number>(0);
   const [generatedRows, setGeneratedRows] = useState<PropertyRow[] | undefined>();
+  const [suggestionMetadata, setSuggestionMetadata] = useState<{
+    source: string;
+    localAuthority?: string;
+    region: string;
+    baseBand: string;
+    generatedAt: string;
+  } | undefined>();
   const [mapImageUrl, setMapImageUrl] = useState<string>("");
   const [activeTab, setActiveTab] = useState("site-map");
   const [showLocationPresets, setShowLocationPresets] = useState(false);
@@ -392,7 +399,24 @@ const ProjectWorkspace = () => {
               <SiteMap 
                 onAreaUpdate={setSiteArea} 
                 savedArea={siteArea}
-                onGenerateRows={setGeneratedRows}
+                onGenerateRows={(rows, metadata) => {
+                  setGeneratedRows(rows);
+                  setSuggestionMetadata(metadata);
+                  
+                  // Save metadata to project
+                  if (id && metadata) {
+                    const project = projectStorage.getProject(id);
+                    if (project) {
+                      const updatedProject = {
+                        ...project,
+                        suggestionMetadata: metadata,
+                        lastUpdated: new Date().toISOString(),
+                      };
+                      projectStorage.saveProject(updatedProject);
+                      setCurrentProject(updatedProject);
+                    }
+                  }
+                }}
                 onLocationDetected={handleLocationDetected}
                 savedPolygon={savedPolygon}
                 onPolygonUpdate={handlePolygonUpdate}
@@ -417,6 +441,7 @@ const ProjectWorkspace = () => {
               initialRows={generatedRows} 
               mapImageUrl={mapImageUrl}
               presetInfo={currentProject?.presetInfo}
+              suggestionMetadata={currentProject?.suggestionMetadata}
             />
           </TabsContent>
 

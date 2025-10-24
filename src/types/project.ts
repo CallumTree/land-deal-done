@@ -42,6 +42,16 @@ export interface Project {
     spec: "low" | "medium" | "high";
     appliedAt: string;
   };
+  
+  // Unit mix suggestion metadata
+  suggestionMetadata?: {
+    source: string; // e.g., "LA completions 2022-24" or "Regional defaults"
+    localAuthority?: string;
+    region: string;
+    baseBand: string; // e.g., "Balanced Mixed"
+    generatedAt: string;
+    useStandardMix?: boolean; // User opted for standard mix instead
+  };
 }
 
 export interface ProjectSummary {

@@ -18,11 +18,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { detectLocalAuthority, getLAHousingData, calculateAdjustedMix } from '@/utils/localAuthorityData';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
   savedArea?: number;
-  onGenerateRows?: (rows: any[]) => void;
+  onGenerateRows?: (rows: any[], metadata?: {
+    source: string;
+    localAuthority?: string;
+    region: string;
+    baseBand: string;
+    generatedAt: string;
+  }) => void;
   onMapSnapshot?: (imageUrl: string) => void;
   onLocationDetected?: (location: string, region: string) => void;
   savedPolygon?: any;
@@ -440,7 +448,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     }
   };
 
-  const handleUseForGDV = () => {
+  const handleUseForGDV = async () => {
     if (currentArea > 0) {
       // Extract and save polygon
       extractAndNotifyPolygon();
@@ -463,14 +471,41 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       const isCompact = compactness >= 0.65;
       const isIrregular = !isCompact;
       
-      // Determine mix based on density
+      // Try to detect local authority and get region
+      let localAuthority: string | null = null;
+      let detectedRegion = "South East"; // default
+      
+      // Get centroid for location detection
+      if (drawnItems.current) {
+        const layers = drawnItems.current.getLayers();
+        if (layers.length > 0) {
+          const layer = layers[0] as L.Polygon;
+          const bounds = layer.getBounds();
+          const center = bounds.getCenter();
+          detectedRegion = detectRegionFromCoords(center.lat, center.lng);
+          
+          // Try to detect LA from search query if available
+          if (searchQuery) {
+            try {
+              localAuthority = await detectLocalAuthority(searchQuery);
+            } catch (error) {
+              console.warn("Failed to detect LA:", error);
+            }
+          }
+        }
+      }
+      
+      // Get LA housing data (with fallback to regional/national)
+      const laData = getLAHousingData(localAuthority || undefined, detectedRegion);
+      
+      // Determine base mix band based on density
       let mixName = "";
-      let mixConfig: Array<{ type: string; percent: number; gia: number }> = [];
+      let baseMixConfig: Array<{ type: string; percent: number; gia: number }> = [];
       
       if (impliedDensity < 28) {
         // 20-28 u/ha: Family Suburban
         mixName = "Family Suburban";
-        mixConfig = [
+        baseMixConfig = [
           { type: "3-Bed Semi", percent: isIrregular ? 60 : 50, gia: 90 },
           { type: "4-Bed Detached", percent: isIrregular ? 20 : 30, gia: 120 },
           { type: "2-Bed Semi", percent: 20, gia: 75 },
@@ -478,96 +513,88 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       } else if (impliedDensity < 36) {
         // 28-36 u/ha: Balanced Mixed (default suburban)
         mixName = "Balanced Mixed";
-        mixConfig = [
+        baseMixConfig = [
           { type: "3-Bed Semi", percent: 50, gia: 90 },
           { type: "2-Bed Semi", percent: 30, gia: 75 },
-          { type: "2-Bed Semi", percent: isIrregular ? 20 : 10, gia: 75 },
-          { type: "4-Bed Detached", percent: isIrregular ? 0 : 10, gia: 120 },
-        ].filter(m => m.percent > 0);
+          { type: "4-Bed Detached", percent: 20, gia: 120 },
+        ];
       } else if (impliedDensity < 45) {
         // 36-45 u/ha: Compact Mixed
         mixName = "Compact Mixed";
-        mixConfig = [
+        baseMixConfig = [
           { type: "2-Bed Semi", percent: isCompact ? 30 : 40, gia: 75 },
           { type: "3-Bed Semi", percent: isCompact ? 50 : 40, gia: 90 },
-          { type: "2-Bed Semi", percent: 20, gia: 75 },
+          { type: "3-Bed Detached", percent: 20, gia: 105 },
         ];
       } else {
         // >45 u/ha: Urban Edge
         mixName = "Urban Edge";
-        mixConfig = [
+        baseMixConfig = [
           { type: "2-Bed Semi", percent: 60, gia: 75 },
           { type: "3-Bed Semi", percent: 20, gia: 85 },
-          { type: "2-Bed Semi", percent: 20, gia: 75 },
+          { type: "3-Bed Detached", percent: 20, gia: 105 },
         ];
       }
       
-      // Calculate units per type and round
-      let generatedRows = mixConfig.map((config, idx) => {
-        const units = Math.round((approxUnits * config.percent) / 100);
+      // Adjust mix based on LA data
+      const adjustedMix = calculateAdjustedMix(baseMixConfig, laData, approxUnits);
+      
+      // Create scenario name with LA context
+      const scenarioName = localAuthority 
+        ? `Suggested mix • ${mixName} • ${localAuthority}`
+        : `Suggested mix • ${mixName} • ${detectedRegion}`;
+      
+      // Calculate units per type and create rows
+      let generatedRows = adjustedMix.map((config, idx) => {
         const defaults: Record<string, { salesValue: number; buildPerSqm: number }> = {
           "2-Bed Semi": { salesValue: 247500, buildPerSqm: 1650 },
           "3-Bed Semi": { salesValue: 292500, buildPerSqm: 1650 },
+          "3-Bed Detached": { salesValue: 369000, buildPerSqm: 1750 },
           "4-Bed Detached": { salesValue: 432000, buildPerSqm: 1800 },
+          "2-Bed Bungalow": { salesValue: 228000, buildPerSqm: 1650 },
+          "3-Bed Bungalow": { salesValue: 291000, buildPerSqm: 1700 },
         };
         const typeDefaults = defaults[config.type] || { salesValue: 0, buildPerSqm: 1650 };
         
         return {
           id: `mix-${Date.now()}-${idx}`,
           type: config.type,
-          units,
+          units: config.units,
           giaPerUnit: config.gia,
           salesValue: typeDefaults.salesValue,
           unitPriceOverride: 0,
           buildPerSqm: typeDefaults.buildPerSqm,
-          notes: "",
+          notes: config.adjustedFrom === "LA data" ? `${laData.dataSource}` : "",
         };
       });
       
-      // Ensure total matches approxUnits
-      const totalGenerated = generatedRows.reduce((sum, r) => sum + r.units, 0);
-      if (totalGenerated !== approxUnits) {
-        const diff = approxUnits - totalGenerated;
-        // Adjust largest row
-        const largestIdx = generatedRows.reduce((maxIdx, row, idx, arr) => 
-          row.units > arr[maxIdx].units ? idx : maxIdx, 0);
-        generatedRows[largestIdx].units += diff;
-      }
-      
-      // Ensure at least 10-20% are 2-beds
-      const twoBedCount = generatedRows
-        .filter(r => r.type.includes("2-Bed"))
-        .reduce((sum, r) => sum + r.units, 0);
-      const twoBedPercent = (twoBedCount / approxUnits) * 100;
-      
-      if (twoBedPercent < 10 && impliedDensity < 45) {
-        // Add some 2-beds if missing
-        const adjustAmount = Math.ceil(approxUnits * 0.1) - twoBedCount;
-        const existingTwoBed = generatedRows.find(r => r.type.includes("2-Bed"));
-        if (existingTwoBed && adjustAmount > 0) {
-          existingTwoBed.units += adjustAmount;
-          // Reduce from largest other type
-          const otherRow = generatedRows.find(r => r !== existingTwoBed && r.units > adjustAmount);
-          if (otherRow) otherRow.units -= adjustAmount;
-        }
-      }
-      
       onAreaUpdate(Math.round(currentArea));
       if (onGenerateRows) {
-        onGenerateRows(generatedRows);
+        const metadata = {
+          source: laData.dataSource,
+          localAuthority: localAuthority || undefined,
+          region: detectedRegion,
+          baseBand: mixName,
+          generatedAt: new Date().toISOString(),
+        };
+        onGenerateRows(generatedRows, metadata);
       }
       
       // Detect region from polygon centroid if location detection callback provided
-      if (onLocationDetected && drawnItems.current) {
-        const layers = drawnItems.current.getLayers();
-        if (layers.length > 0) {
-          const layer = layers[0] as L.Polygon;
-          const bounds = layer.getBounds();
-          const center = bounds.getCenter();
-          const region = detectRegionFromCoords(center.lat, center.lng);
-          onLocationDetected(searchQuery || 'Site location', region);
-        }
+      if (onLocationDetected) {
+        const locationName = localAuthority || searchQuery || 'Site location';
+        onLocationDetected(locationName, detectedRegion);
       }
+      
+      // Show success message with LA context
+      const sourceInfo = localAuthority 
+        ? `Mix adjusted from ${mixName} based on ${laData.dataSource}`
+        : `Using ${mixName} with regional defaults`;
+      
+      toast.success("Unit mix generated from map", {
+        description: sourceInfo,
+        duration: 6000,
+      });
       
       // Capture map snapshot if callback provided
       if (onMapSnapshot && map.current) {
@@ -897,14 +924,27 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
 
             {/* Action buttons */}
             <div className="flex gap-2">
-              <Button 
-                onClick={handleUseForGDV} 
-                className="flex-1"
-                disabled={currentArea === 0}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Use for GDV
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      onClick={handleUseForGDV} 
+                      className="flex-1"
+                      disabled={currentArea === 0}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Send to GDV
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p className="font-semibold mb-1">Smart Mix Generation</p>
+                    <p className="text-xs">
+                      Generates unit mix adjusted using local authority new-build completion data 
+                      when available, reducing duplicates and improving realism.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button 
                 onClick={handleClear} 
                 variant="outline"
