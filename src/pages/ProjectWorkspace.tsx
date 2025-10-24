@@ -16,7 +16,6 @@ import { Project } from "@/types/project";
 import { calculateTotals } from "@/utils/calculatorHelpers";
 import { Button } from "@/components/ui/button";
 import { useAutoSave } from "@/hooks/useAutoSave";
-import { RestoreBanner } from "@/components/RestoreBanner";
 import QSChatBubble from "@/components/QSChatBubble";
 import QSChatPanel from "@/components/QSChatPanel";
 
@@ -33,9 +32,6 @@ const ProjectWorkspace = () => {
   const [showLocationPresets, setShowLocationPresets] = useState(false);
   const [detectedLocation, setDetectedLocation] = useState<string>("");
   const [detectedRegion, setDetectedRegion] = useState<string>("");
-  const [showRestoreBanner, setShowRestoreBanner] = useState(false);
-  const [hasBackup, setHasBackup] = useState(false);
-  const [savedProject, setSavedProject] = useState<Project | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [savedPolygon, setSavedPolygon] = useState<any>(null);
   const navigate = useNavigate();
@@ -146,7 +142,7 @@ const ProjectWorkspace = () => {
     }
   }, [id]);
 
-  // Sync calculator changes to project with recalculated metrics
+  // Sync calculator changes to project - triggered by auto-save hook
   useEffect(() => {
     if (!id) return;
 
@@ -184,7 +180,7 @@ const ProjectWorkspace = () => {
             lastUpdated: new Date().toISOString(),
           };
 
-          // Save the updated project
+          // Save via auto-save hook
           saveProject(updatedProject);
 
           return updatedProject;
@@ -194,14 +190,14 @@ const ProjectWorkspace = () => {
       }
     };
 
-    // Set up interval to continuously sync
-    const intervalId = setInterval(syncCalculatorData, 3000);
+    // Sync every 2 seconds (reduced from 3)
+    const intervalId = setInterval(syncCalculatorData, 2000);
 
     // Cleanup
     return () => {
       clearInterval(intervalId);
     };
-  }, [id]);
+  }, [id, saveProject]);
 
   // Manual controls
   const handleSaveNow = useCallback(() => {
@@ -213,42 +209,35 @@ const ProjectWorkspace = () => {
   const handleLoadLastSave = useCallback(() => {
     if (!id) return;
     
-    const savedKey = `buildflow_project_${id}`;
-    const savedData = localStorage.getItem(savedKey);
-    
-    if (savedData) {
-      try {
-        const saved = JSON.parse(savedData) as Project;
-        loadSavedProject(saved);
-      } catch (error) {
-        toast.error("Failed to load last save");
-      }
+    // Reload from projectStorage (single source of truth)
+    const project = projectStorage.getProject(id);
+    if (project) {
+      setCurrentProject(project);
+      setSiteArea(project.inputs?.siteArea || 0);
+      setMapImageUrl(project.mapImageUrl || "");
+      setSavedPolygon(project.polygon || null);
+      
+      localStorage.setItem("napkin-calculator-data", JSON.stringify({
+        rows: project.rows,
+        inputs: project.inputs,
+      }));
+      
+      toast.success("Project reloaded");
     } else {
-      toast.error("No saved version found");
+      toast.error("Project not found");
     }
   }, [id]);
 
   const handleResetProject = useCallback(() => {
     if (!id) return;
     
-    // Clear saved data
-    localStorage.removeItem(`buildflow_project_${id}`);
+    // Delete from projectStorage (single source of truth)
+    projectStorage.deleteProject(id);
+    
+    // Clear backup
     localStorage.removeItem(`buildflow_project_${id}_backup`);
     
-    // Remove from index
-    try {
-      const indexKey = "buildflow_projects_index";
-      const stored = localStorage.getItem(indexKey);
-      if (stored) {
-        const index = JSON.parse(stored);
-        const filtered = index.filter((p: any) => p.id !== id);
-        localStorage.setItem(indexKey, JSON.stringify(filtered));
-      }
-    } catch (error) {
-      console.error("Failed to update index:", error);
-    }
-    
-    toast.success("Project reset");
+    toast.success("Project deleted");
     navigate("/dashboard");
   }, [id, navigate]);
 
@@ -262,13 +251,6 @@ const ProjectWorkspace = () => {
     }
   }, [currentProject, navigate]);
 
-  const handleRestore = useCallback(() => {
-    if (savedProject) {
-      loadSavedProject(savedProject);
-      setShowRestoreBanner(false);
-    }
-  }, [savedProject]);
-
   const handleRestoreBackup = useCallback(() => {
     if (!id) return;
     
@@ -278,23 +260,25 @@ const ProjectWorkspace = () => {
     if (backupData) {
       try {
         const backup = JSON.parse(backupData) as Project;
-        loadSavedProject(backup);
-        setShowRestoreBanner(false);
+        setCurrentProject(backup);
+        setSiteArea(backup.inputs?.siteArea || 0);
+        setMapImageUrl(backup.mapImageUrl || "");
+        setSavedPolygon(backup.polygon || null);
+        
+        localStorage.setItem("napkin-calculator-data", JSON.stringify({
+          rows: backup.rows,
+          inputs: backup.inputs,
+        }));
+        
+        // Save to projectStorage
+        projectStorage.saveProject(backup);
+        
         toast.success("Backup restored");
       } catch (error) {
         toast.error("Failed to restore backup");
       }
-    }
-  }, [id]);
-
-  const handleAutoRestoreChange = useCallback((enabled: boolean) => {
-    if (!id) return;
-    
-    const autoRestoreKey = `buildflow_autorestore_${id}`;
-    if (enabled) {
-      localStorage.setItem(autoRestoreKey, "true");
     } else {
-      localStorage.removeItem(autoRestoreKey);
+      toast.error("No backup found");
     }
   }, [id]);
 
@@ -321,7 +305,7 @@ const ProjectWorkspace = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Load project data and check for saved version
+    // Load project data from projectStorage (single source of truth)
     if (id) {
       const project = projectStorage.getProject(id);
       if (project) {
@@ -329,35 +313,6 @@ const ProjectWorkspace = () => {
         setSiteArea(project.inputs?.siteArea || 0);
         setMapImageUrl(project.mapImageUrl || "");
         setSavedPolygon(project.polygon || null);
-        
-        // Check for saved project
-        const savedKey = `buildflow_project_${id}`;
-        const savedData = localStorage.getItem(savedKey);
-        
-        if (savedData) {
-          try {
-            const saved = JSON.parse(savedData) as Project;
-            setSavedProject(saved);
-            
-            // Check auto-restore preference
-            const autoRestoreKey = `buildflow_autorestore_${id}`;
-            const autoRestore = localStorage.getItem(autoRestoreKey) === "true";
-            
-            if (autoRestore) {
-              // Auto-restore without prompt
-              loadSavedProject(saved);
-            } else {
-              // Show restore banner
-              setShowRestoreBanner(true);
-            }
-          } catch (error) {
-            console.error("Failed to parse saved project:", error);
-          }
-        }
-        
-        // Check for backup
-        const backupKey = `buildflow_project_${id}_backup`;
-        setHasBackup(!!localStorage.getItem(backupKey));
         
         // Sync project data to calculator localStorage
         localStorage.setItem("napkin-calculator-data", JSON.stringify({
@@ -370,20 +325,6 @@ const ProjectWorkspace = () => {
       }
     }
   }, [id, navigate]);
-
-  const loadSavedProject = (saved: Project) => {
-    setCurrentProject(saved);
-    setSiteArea(saved.inputs?.siteArea || 0);
-    setMapImageUrl(saved.mapImageUrl || "");
-    setSavedPolygon(saved.polygon || null);
-    
-    localStorage.setItem("napkin-calculator-data", JSON.stringify({
-      rows: saved.rows,
-      inputs: saved.inputs,
-    }));
-    
-    toast.success("Previous save restored");
-  };
 
   const handleSaveChatToNotes = (chatExport: string) => {
     if (currentProject) {
@@ -426,19 +367,6 @@ const ProjectWorkspace = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Restore Banner */}
-        {showRestoreBanner && savedProject && (
-          <div className="mb-6">
-            <RestoreBanner
-              timestamp={new Date(savedProject.lastUpdated).toLocaleString()}
-              hasBackup={hasBackup}
-              onRestore={handleRestore}
-              onRestoreBackup={handleRestoreBackup}
-              onDismiss={() => setShowRestoreBanner(false)}
-              onAutoRestoreChange={handleAutoRestoreChange}
-            />
-          </div>
-        )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="site-map">

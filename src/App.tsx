@@ -3,13 +3,18 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
 import NotFound from "./pages/NotFound";
+import { projectStorage } from "@/services/projectStorage";
 
 const queryClient = new QueryClient();
+
+// Run migration once on app startup
+projectStorage.migrateOldStorage();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

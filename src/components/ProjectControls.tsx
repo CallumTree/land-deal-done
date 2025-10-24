@@ -58,7 +58,7 @@ export const ProjectControls = ({
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onLoadLastSave}>
             <FolderOpen className="h-4 w-4 mr-2" />
-            Load Last Save
+            Reload Project
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onDuplicateProject}>
             <Copy className="h-4 w-4 mr-2" />
@@ -77,7 +77,7 @@ export const ProjectControls = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Reset Project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will clear the current project state and remove the local save.
+              This will permanently delete the project and all its data.
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

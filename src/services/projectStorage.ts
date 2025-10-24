@@ -145,4 +145,50 @@ export const projectStorage = {
       estimatedCombinedRLV,
     };
   },
+
+  migrateOldStorage(): void {
+    const migrationKey = 'buildflow_storage_migrated_v2';
+    if (localStorage.getItem(migrationKey)) return; // Already migrated
+    
+    console.log("Running storage migration...");
+    
+    // Find all old individual project keys
+    const oldKeys = Object.keys(localStorage).filter(k => 
+      k.startsWith('buildflow_project_') && !k.includes('backup') && !k.includes('autorestore')
+    );
+    
+    // Load current projects array
+    const currentProjects = this.getAllProjects();
+    const projectIds = new Set(currentProjects.map(p => p.id));
+    
+    // Import any projects from old keys that aren't in the array
+    oldKeys.forEach(key => {
+      const id = key.replace('buildflow_project_', '');
+      if (!projectIds.has(id)) {
+        try {
+          const projectData = localStorage.getItem(key);
+          if (projectData) {
+            const project = JSON.parse(projectData);
+            currentProjects.push(project);
+            console.log(`Migrated project: ${project.name}`);
+          }
+        } catch (e) {
+          console.error('Failed to migrate project:', key);
+        }
+      }
+      // Remove old individual save key after migration
+      localStorage.removeItem(key);
+    });
+    
+    // Save consolidated array
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentProjects));
+    
+    // Remove old index
+    localStorage.removeItem('buildflow_projects_index');
+    
+    // Mark migration as complete
+    localStorage.setItem(migrationKey, 'true');
+    
+    console.log(`Migration complete. Total projects: ${currentProjects.length}`);
+  },
 };
