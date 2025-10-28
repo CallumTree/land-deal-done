@@ -105,12 +105,12 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
     }
   }, [siteArea]);
 
-  // Apply initialRows when provided (from "Use for GDV")
+  // Apply initialRows when provided (from "Use for GDV") - only once on mount
   useEffect(() => {
-    if (initialRows && initialRows.length > 0) {
+    if (initialRows && initialRows.length > 0 && rows.length === 0) {
       setRows(initialRows);
     }
-  }, [initialRows]);
+  }, []);
 
   const baseValues = calculateTotals(rows, inputs);
   const adjustedValues = calculateTotals(rows, inputs, sensitivity);

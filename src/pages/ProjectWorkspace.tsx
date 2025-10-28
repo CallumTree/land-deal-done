@@ -448,7 +448,6 @@ const ProjectWorkspace = () => {
           <TabsContent value="roi-visualiser">
             <NapkinCalculator 
               siteArea={siteArea} 
-              initialRows={generatedRows} 
               mapImageUrl={mapImageUrl}
               showROIVisualiser
             />
