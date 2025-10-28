@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PropertyRow, GlobalInputs as GlobalInputsType } from "@/types/calculator";
 import { SensitivityAdjustments, DEFAULT_SENSITIVITY } from "@/types/sensitivity";
 import { calculateTotals } from "@/utils/calculatorHelpers";
@@ -15,13 +15,14 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
-const STORAGE_KEY = "napkin-calculator-data";
+// removed static STORAGE_KEY in favor of per-project key
 
 interface NapkinCalculatorProps {
   siteArea?: number;
   initialRows?: PropertyRow[];
   mapImageUrl?: string;
   showROIVisualiser?: boolean;
+  projectId?: string; // Add projectId for proper per-project storage
   presetInfo?: {
     region: string;
     spec: "low" | "medium" | "high";
@@ -36,7 +37,12 @@ interface NapkinCalculatorProps {
   };
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, presetInfo, suggestionMetadata }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, projectId, presetInfo, suggestionMetadata }: NapkinCalculatorProps) => {
+  // Create per-project storage key
+  const storageKey = useMemo(() => 
+    projectId ? `napkin-calculator-data-${projectId}` : "napkin-calculator-data"
+  , [projectId]);
+
   const [rows, setRows] = useState<PropertyRow[]>([]);
   const [inputs, setInputs] = useState<GlobalInputsType>({
     professionalFeesPercent: 10,
