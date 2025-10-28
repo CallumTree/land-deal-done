@@ -111,12 +111,19 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
     }
   }, [siteArea]);
 
-  // Apply initialRows when provided (from "Use for GDV") - only once on mount
+  // Apply initialRows when provided (from "Use for GDV") - only if no saved data exists
   useEffect(() => {
-    if (initialRows && initialRows.length > 0 && rows.length === 0) {
-      setRows(initialRows);
+    if (!initialRows || initialRows.length === 0) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      const hasSaved = !!saved && (() => { try { return (JSON.parse(saved).rows || []).length > 0; } catch { return false; } })();
+      if (!hasSaved && rows.length === 0) {
+        setRows(initialRows);
+      }
+    } catch {
+      if (rows.length === 0) setRows(initialRows);
     }
-  }, []);
+  }, [storageKey, initialRows]);
 
   const baseValues = calculateTotals(rows, inputs);
   const adjustedValues = calculateTotals(rows, inputs, sensitivity);
