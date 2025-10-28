@@ -63,9 +63,10 @@ const ProjectWorkspace = () => {
   // Sync calculator data with project when switching to lender-export tab
   useEffect(() => {
     if (activeTab === "lender-export" && id) {
-      // Load latest calculator data from localStorage
+      // Load latest calculator data from per-project localStorage
       try {
-        const calculatorData = localStorage.getItem("napkin-calculator-data");
+        const storageKey = `napkin-calculator-data-${id}`;
+        const calculatorData = localStorage.getItem(storageKey);
         if (calculatorData) {
           const { rows, inputs } = JSON.parse(calculatorData);
           
@@ -95,8 +96,9 @@ const ProjectWorkspace = () => {
   ) => {
     if (!id) return;
 
-    // Save to calculator localStorage
-    localStorage.setItem("napkin-calculator-data", JSON.stringify({
+    // Save to per-project calculator localStorage
+    const storageKey = `napkin-calculator-data-${id}`;
+    localStorage.setItem(storageKey, JSON.stringify({
       rows: updatedRows,
       inputs: updatedInputs,
     }));
@@ -155,7 +157,8 @@ const ProjectWorkspace = () => {
 
     const syncCalculatorData = () => {
       try {
-        const calculatorData = localStorage.getItem("napkin-calculator-data");
+        const storageKey = `napkin-calculator-data-${id}`;
+        const calculatorData = localStorage.getItem(storageKey);
         if (!calculatorData) return;
 
         const { rows, inputs } = JSON.parse(calculatorData);
@@ -224,7 +227,8 @@ const ProjectWorkspace = () => {
       setMapImageUrl(project.mapImageUrl || "");
       setSavedPolygon(project.polygon || null);
       
-      localStorage.setItem("napkin-calculator-data", JSON.stringify({
+      const storageKey = `napkin-calculator-data-${id}`;
+      localStorage.setItem(storageKey, JSON.stringify({
         rows: project.rows,
         inputs: project.inputs,
       }));
@@ -272,7 +276,8 @@ const ProjectWorkspace = () => {
         setMapImageUrl(backup.mapImageUrl || "");
         setSavedPolygon(backup.polygon || null);
         
-        localStorage.setItem("napkin-calculator-data", JSON.stringify({
+        const storageKey = `napkin-calculator-data-${id}`;
+        localStorage.setItem(storageKey, JSON.stringify({
           rows: backup.rows,
           inputs: backup.inputs,
         }));
@@ -321,8 +326,9 @@ const ProjectWorkspace = () => {
         setMapImageUrl(project.mapImageUrl || "");
         setSavedPolygon(project.polygon || null);
         
-        // Sync project data to calculator localStorage
-        localStorage.setItem("napkin-calculator-data", JSON.stringify({
+        // Sync project data to per-project calculator localStorage
+        const storageKey = `napkin-calculator-data-${id}`;
+        localStorage.setItem(storageKey, JSON.stringify({
           rows: project.rows,
           inputs: project.inputs,
         }));
@@ -438,7 +444,8 @@ const ProjectWorkspace = () => {
           <TabsContent value="gdv-calculator">
             <NapkinCalculator 
               siteArea={siteArea} 
-              initialRows={generatedRows} 
+              initialRows={generatedRows}
+              projectId={id}
               mapImageUrl={mapImageUrl}
               presetInfo={currentProject?.presetInfo}
               suggestionMetadata={currentProject?.suggestionMetadata}
@@ -447,7 +454,8 @@ const ProjectWorkspace = () => {
 
           <TabsContent value="roi-visualiser">
             <NapkinCalculator 
-              siteArea={siteArea} 
+              siteArea={siteArea}
+              projectId={id}
               mapImageUrl={mapImageUrl}
               showROIVisualiser
             />

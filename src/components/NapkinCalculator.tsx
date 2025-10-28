@@ -73,7 +73,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
   // Load from localStorage on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const data = JSON.parse(saved);
         // Migrate old data: convert salesPerSqm to salesValue if needed
@@ -93,16 +93,16 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
     } catch (error) {
       console.error("Failed to load saved data:", error);
     }
-  }, []);
+  }, [storageKey]);
 
   // Save to localStorage when data changes
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rows, inputs }));
+      localStorage.setItem(storageKey, JSON.stringify({ rows, inputs }));
     } catch (error) {
       console.error("Failed to save data:", error);
     }
-  }, [rows, inputs]);
+  }, [rows, inputs, storageKey]);
 
   // Update siteArea when prop changes
   useEffect(() => {
