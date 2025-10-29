@@ -285,7 +285,12 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
               <PlanningUpliftInsight
                 rlv={baseValues.residualLandValue}
                 siteArea={inputs.siteArea}
-                data={inputs.planningUplift!}
+                data={inputs.planningUplift || {
+                  currentValueType: "Agricultural",
+                  planningCosts: 25000,
+                  successProbability: 60,
+                  includeInLenderPack: false,
+                }}
                 onChange={(planningUplift) => setInputs({ ...inputs, planningUplift })}
               />
             </div>
