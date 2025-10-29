@@ -9,6 +9,7 @@ import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPan
 import LenderReportModal from "@/components/calculator/LenderReportModal";
 import LenderSummaryPack from "@/components/calculator/LenderSummaryPack";
 import { ROIVisualiser } from "@/components/roi/ROIVisualiser";
+import { PlanningUpliftInsight } from "@/components/calculator/PlanningUpliftInsight";
 import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -65,6 +66,12 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
     abnormalsPercentEnabled: false,
     abnormalsPercent: 5,
     siteNotes: "",
+    planningUplift: {
+      currentValueType: "Agricultural",
+      planningCosts: 25000,
+      successProbability: 60,
+      includeInLenderPack: false,
+    },
   });
   const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -262,7 +269,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
 
           {/* Right: Summary Sidebar (Sticky) */}
           <div className="lg:col-span-4">
-            <div className="lg:sticky lg:top-4">
+            <div className="lg:sticky lg:top-4 space-y-4">
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">3</span>
                 Live Summary
@@ -273,6 +280,13 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
                 isSensitivityActive={isSensitivityActive}
                 sensitivity={sensitivity}
                 onOpenLenderPack={() => setShowLenderPack(true)}
+              />
+              
+              <PlanningUpliftInsight
+                rlv={baseValues.residualLandValue}
+                siteArea={inputs.siteArea}
+                data={inputs.planningUplift!}
+                onChange={(planningUplift) => setInputs({ ...inputs, planningUplift })}
               />
             </div>
           </div>

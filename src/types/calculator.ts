@@ -21,6 +21,14 @@ export interface PropertyRow {
   };
 }
 
+export interface PlanningUpliftData {
+  currentValueType: "Agricultural" | "Brownfield" | "Industrial" | "Yard" | "Custom";
+  currentValueOverride?: number;
+  planningCosts: number;
+  successProbability: number;
+  includeInLenderPack: boolean;
+}
+
 export interface GlobalInputs {
   // Legacy fields (for backward compatibility)
   professionalFeesPercent: number;
@@ -58,6 +66,7 @@ export interface GlobalInputs {
   stampDutyLandTax?: number;
   legalFeesLand?: number;
   developerEquityCash?: number;
+  planningUplift?: PlanningUpliftData;
 }
 
 export interface CalculatedValues {

@@ -1,10 +1,10 @@
-import { CalculatedValues, GlobalInputs, PropertyRow } from "@/types/calculator";
+import { CalculatedValues, GlobalInputs, PropertyRow, PlanningUpliftData } from "@/types/calculator";
 import { formatCurrency, formatPercent } from "@/utils/calculatorHelpers";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Printer, FileText } from "lucide-react";
+import { Printer, FileText, TrendingUp } from "lucide-react";
 import { useState } from "react";
 
 interface LenderExportProps {
@@ -422,6 +422,104 @@ const LenderExport = ({
             />
           </div>
         </div>
+
+        {/* Planning Uplift Appendix (Conditional) */}
+        {inputs.planningUplift?.includeInLenderPack && (() => {
+          const siteAreaHa = siteArea / 10000;
+          const EUV_PRESETS: Record<string, number> = {
+            Agricultural: 25000,
+            Brownfield: 150000,
+            Industrial: 300000,
+            Yard: 200000,
+          };
+          
+          const getCurrentValue = () => {
+            if (inputs.planningUplift!.currentValueType === "Custom" && inputs.planningUplift!.currentValueOverride) {
+              return inputs.planningUplift!.currentValueOverride;
+            }
+            return EUV_PRESETS[inputs.planningUplift!.currentValueType] * siteAreaHa;
+          };
+          
+          const currentValue = getCurrentValue();
+          const grossUplift = values.residualLandValue - currentValue - inputs.planningUplift!.planningCosts;
+          const adjustedUplift = grossUplift * (inputs.planningUplift!.successProbability / 100);
+          
+          return (
+            <div className="break-before-page space-y-4 mt-8">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-6 w-6 text-primary" />
+                <h2 className="text-2xl font-semibold">Appendix: Planning Uplift Analysis</h2>
+              </div>
+              
+              <Card className="p-4 bg-muted/30">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Site Area</p>
+                    <p className="text-lg font-semibold">{siteAreaHa.toFixed(2)} hectares</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Current Use</p>
+                    <p className="text-lg font-semibold">{inputs.planningUplift!.currentValueType}</p>
+                  </div>
+                </div>
+              </Card>
+
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Valuation Breakdown</h3>
+                
+                <table className="w-full">
+                  <tbody className="divide-y">
+                    <tr>
+                      <td className="py-2 text-muted-foreground">Residual Land Value (RLV)</td>
+                      <td className="py-2 text-right font-semibold">{formatCurrency(values.residualLandValue)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 text-muted-foreground">
+                        Existing Use Value (EUV)
+                        <span className="text-xs block">
+                          {inputs.planningUplift!.currentValueType !== "Custom" 
+                            ? `${inputs.planningUplift!.currentValueType}: ${formatCurrency(EUV_PRESETS[inputs.planningUplift!.currentValueType])}/ha × ${siteAreaHa.toFixed(2)} ha`
+                            : "Custom value"
+                          }
+                        </span>
+                      </td>
+                      <td className="py-2 text-right font-semibold">({formatCurrency(currentValue)})</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 text-muted-foreground">Planning Costs</td>
+                      <td className="py-2 text-right font-semibold">({formatCurrency(inputs.planningUplift!.planningCosts)})</td>
+                    </tr>
+                    <tr className="border-t-2 border-primary/20">
+                      <td className="py-2 font-semibold">Gross Planning Uplift</td>
+                      <td className="py-2 text-right font-bold text-lg">{formatCurrency(grossUplift)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 text-muted-foreground">Success Probability</td>
+                      <td className="py-2 text-right font-semibold">{inputs.planningUplift!.successProbability}%</td>
+                    </tr>
+                    <tr className={`border-t-2 ${adjustedUplift > 0 ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+                      <td className="py-3 font-bold">Risk-Adjusted Uplift</td>
+                      <td className={`py-3 text-right font-bold text-xl ${adjustedUplift > 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                        {formatCurrency(adjustedUplift)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <h4 className="font-semibold text-amber-900 mb-2">Assumptions & Disclaimer</h4>
+                <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                  <li>EUV based on typical market rates for stated use class</li>
+                  <li>Planning costs include fees, consultant costs, and section obligations</li>
+                  <li>Success probability reflects planning risk, policy compliance, and local factors</li>
+                  <li>Uplift figures are indicative and subject to market conditions</li>
+                  <li>Professional valuation and planning advice recommended before proceeding</li>
+                </ul>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Footer */}
         <div className="border-t pt-4 mt-8 text-xs text-muted-foreground">
