@@ -77,7 +77,7 @@ Variance to Land: ${formatCurrency(values.variance)}
 
   return (
     <div className="space-y-4">
-      <Card className={`shadow-medium transition-all ${isSensitivityActive ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+      <Card className={`border border-border shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] rounded-lg transition-all ${isSensitivityActive ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center justify-between">
             <div className="flex items-center gap-2">

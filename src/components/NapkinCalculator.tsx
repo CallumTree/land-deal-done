@@ -228,9 +228,9 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
         </div>
 
         {/* Main Layout: Unit Mix + Summary Sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
           {/* Left: Unit Mix Table */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-4">
             <div>
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">1</span>
@@ -270,11 +270,11 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
           {/* Right: Summary Sidebar (Sticky) */}
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-4 space-y-4">
-              <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+              <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">3</span>
                 Live Summary
               </h3>
-              <SummaryPanel 
+              <SummaryPanel
                 values={isSensitivityActive ? adjustedValues : baseValues} 
                 targetMargin={inputs.targetMarginPercent}
                 isSensitivityActive={isSensitivityActive}
@@ -298,8 +298,8 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
         </div>
 
         {/* Market Sensitivity (Collapsed by default) */}
-        <div className="mb-6">
-          <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+        <div className="mb-4">
+          <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-sm font-bold">4</span>
             Scenario Testing (Optional)
           </h3>
