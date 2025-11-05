@@ -10,12 +10,12 @@ const DesiredOutcome = () => {
   };
 
   return (
-    <section className="py-16 sm:py-24 bg-background" id="features">
+    <section className="py-16 sm:py-24 bg-[#1B1B1D]" id="features">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 sm:mb-16 animate-fade-in">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#F5F5F7] mb-4">
             Imagine knowing instantly if a site is{" "}
-            <span className="bg-gradient-accent bg-clip-text text-transparent">worth your time.</span>
+            <span className="text-[#5BC199]">worth your time.</span>
           </h2>
         </div>
 
@@ -37,8 +37,8 @@ const DesiredOutcome = () => {
           />
         </div>
 
-        <div className="max-w-3xl mx-auto text-center bg-gradient-to-br from-accent/10 to-primary/10 rounded-2xl p-6 sm:p-8 shadow-medium animate-fade-in border border-accent/20">
-          <p className="text-lg sm:text-xl font-semibold text-foreground mb-6">
+        <div className="max-w-3xl mx-auto text-center bg-gradient-to-br from-[#5BC199]/10 to-[#5BC199]/5 rounded-2xl p-6 sm:p-8 shadow-[0_10px_30px_-10px_rgba(91,193,153,0.3)] animate-fade-in border border-[#5BC199]/20">
+          <p className="text-lg sm:text-xl font-semibold font-['Inter'] text-[#F5F5F7] mb-6">
             Forget spreadsheets. Forget hours lost to data entry. Welcome to feasibility in one flow — 
             where AI, data, and design finally work together to make development simple.
           </p>
@@ -56,12 +56,12 @@ const DesiredOutcome = () => {
 };
 
 const OutcomeCard = ({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) => (
-  <div className="bg-card rounded-xl p-6 sm:p-8 shadow-soft hover:shadow-medium transition-all animate-fade-in border border-border group hover:border-accent/50">
-    <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent mb-4 group-hover:bg-accent/20 transition-colors">
+  <div className="bg-[#252528]/50 rounded-xl p-6 sm:p-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3)] hover:shadow-[0_10px_30px_-10px_rgba(91,193,153,0.3)] transition-all animate-fade-in border border-border group hover:border-[#5BC199]/50">
+    <div className="w-12 h-12 rounded-xl bg-[#5BC199]/10 flex items-center justify-center text-[#5BC199] mb-4 group-hover:bg-[#5BC199]/20 transition-colors">
       {icon}
     </div>
-    <h3 className="text-xl font-bold text-foreground mb-3">{title}</h3>
-    <p className="text-muted-foreground leading-relaxed">{description}</p>
+    <h3 className="text-xl font-bold font-['Poppins'] text-[#F5F5F7] mb-3">{title}</h3>
+    <p className="text-[#888] leading-relaxed font-['Inter']">{description}</p>
   </div>
 );
 

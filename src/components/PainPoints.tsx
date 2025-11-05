@@ -10,10 +10,10 @@ const PainPoints = () => {
   };
 
   return (
-    <section className="py-16 sm:py-24 bg-secondary/30">
+    <section className="py-16 sm:py-24 bg-[#252528]/30">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12 sm:mb-16 animate-fade-in">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#F5F5F7] mb-4">
             Still buried in spreadsheets and uncertainty?
           </h2>
         </div>
@@ -36,10 +36,10 @@ const PainPoints = () => {
           />
         </div>
 
-        <div className="max-w-3xl mx-auto text-center bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-soft animate-fade-in">
-          <p className="text-lg text-muted-foreground mb-6">
+        <div className="max-w-3xl mx-auto text-center bg-[#252528]/50 border border-[#5BC199]/20 rounded-2xl p-6 sm:p-8 shadow-[0_10px_30px_-10px_rgba(91,193,153,0.3)] animate-fade-in">
+          <p className="text-lg text-[#888] mb-6 font-['Inter']">
             Everyone tells you "just use Excel" or "hire a QS," but that's not realistic for small developers. 
-            You don't need more spreadsheets — you need <span className="font-semibold text-foreground">clarity, automation, and speed</span>.
+            You don't need more spreadsheets — you need <span className="font-semibold text-[#F5F5F7]">clarity, automation, and speed</span>.
           </p>
           <Button
             variant="ctaOutline"
@@ -55,12 +55,12 @@ const PainPoints = () => {
 };
 
 const PainCard = ({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) => (
-  <div className="bg-card rounded-xl p-6 sm:p-8 shadow-soft hover:shadow-medium transition-all animate-fade-in border border-border">
-    <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive mb-4">
+  <div className="bg-[#252528]/50 rounded-xl p-6 sm:p-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3)] hover:shadow-[0_10px_30px_-10px_rgba(91,193,153,0.3)] hover:border-[#5BC199]/50 transition-all animate-fade-in border border-border">
+    <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500 mb-4">
       {icon}
     </div>
-    <h3 className="text-xl font-bold text-foreground mb-3">{title}</h3>
-    <p className="text-muted-foreground leading-relaxed">{description}</p>
+    <h3 className="text-xl font-bold font-['Poppins'] text-[#F5F5F7] mb-3">{title}</h3>
+    <p className="text-[#888] leading-relaxed font-['Inter']">{description}</p>
   </div>
 );
 
