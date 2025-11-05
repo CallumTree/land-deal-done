@@ -42,7 +42,7 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
   }, 0);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-muted/30 rounded-lg mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-card/30 rounded-lg mb-6 border border-border">
       <div className="space-y-2">
         <Label htmlFor="profFees" className="text-sm font-medium">
           Professional Fees %
@@ -164,9 +164,9 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
           className="text-sm"
           placeholder="From map or manual entry"
         />
-        {inputs.siteArea > 0 && (
+            {inputs.siteArea > 0 && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-foreground/70">
               {(inputs.siteArea / 10000).toFixed(2)} hectares
             </span>
             {totalUnits > 0 && inputs.siteArea > 0 && (
@@ -192,10 +192,10 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
       {/* Site Prep & Technical Costs - Collapsible */}
       <div className="md:col-span-2 lg:col-span-4">
         <Collapsible open={isSitePrepOpen} onOpenChange={setIsSitePrepOpen}>
-          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-card/50 hover:bg-card transition-colors border border-border">
             <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Site Preparation & Technical Costs</span>
+              <Settings className="h-4 w-4 text-foreground/70" />
+              <span className="text-sm font-semibold text-foreground">Site Preparation & Technical Costs</span>
               {sitePrepTotal > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   £{sitePrepTotal.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -206,7 +206,7 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
           </CollapsibleTrigger>
           
           <CollapsibleContent className="mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-muted/20 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-card/20 rounded-lg border border-border">
               {sitePrepFields.map((field) => (
                 <div key={field.key} className="space-y-2">
                   <Label htmlFor={field.key} className="text-sm font-medium">
@@ -221,7 +221,7 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
                     className="text-sm"
                     placeholder="£0"
                   />
-                  <p className="text-xs text-muted-foreground">{field.desc}</p>
+                  <p className="text-xs text-foreground/60">{field.desc}</p>
                 </div>
               ))}
               
