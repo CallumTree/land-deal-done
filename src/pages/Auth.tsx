@@ -80,13 +80,13 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-subtle px-4">
-      <Card className="w-full max-w-md shadow-elegant">
+    <div className="min-h-screen flex items-center justify-center bg-[#1B1B1D] px-4">
+      <Card className="w-full max-w-md bg-[#252528] border-border/50 shadow-soft">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
+          <CardTitle className="text-2xl font-bold text-center text-[#F5F5F7] font-heading">
             {isLogin ? "Welcome Back" : "Create Account"}
           </CardTitle>
-          <CardDescription className="text-center">
+          <CardDescription className="text-center text-[#888]">
             {isLogin
               ? "Sign in to access your feasibility dashboard"
               : "Get started with your free account"}
@@ -95,31 +95,32 @@ const Auth = () => {
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-[#F5F5F7]">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="bg-card border-border text-foreground"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-[#F5F5F7]">Password</Label>
               <Input
                 id="password"
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="bg-card border-border text-foreground"
                 required
               />
             </div>
             <Button
               type="submit"
-              className="w-full"
-              variant="cta"
+              className="w-full bg-[#5BC199] hover:bg-[#4BA585] text-[#1B1B1D]"
               disabled={loading}
             >
               {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
@@ -130,7 +131,7 @@ const Auth = () => {
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
-              className="text-primary hover:underline"
+              className="text-[#5BC199] hover:underline"
             >
               {isLogin
                 ? "Don't have an account? Sign up"
