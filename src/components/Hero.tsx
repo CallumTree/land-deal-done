@@ -62,6 +62,14 @@ const Hero = () => {
               >
                 <a href="/auth">Start My Free Feasibility Check</a>
               </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 h-auto"
+                asChild
+              >
+                <a href="/register-interest">Join Early Access Program</a>
+              </Button>
             </div>
             
             <p className="text-sm text-muted-foreground mt-4">

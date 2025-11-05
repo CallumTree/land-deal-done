@@ -79,6 +79,13 @@ const Navigation = () => {
                   How It Works
                 </Button>
                 <Button
+                  variant="outline"
+                  className="hidden md:inline-flex"
+                  onClick={() => navigate('/register-interest')}
+                >
+                  Early Access
+                </Button>
+                <Button
                   variant="cta"
                   size="lg"
                   onClick={() => scrollToSection("get-started")}

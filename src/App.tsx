@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
+import RegisterInterest from "./pages/RegisterInterest";
 import NotFound from "./pages/NotFound";
 import { projectStorage } from "@/services/projectStorage";
 
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Home />} />
           <Route path="/project/:id" element={<ProjectWorkspace />} />
+          <Route path="/register-interest" element={<RegisterInterest />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
