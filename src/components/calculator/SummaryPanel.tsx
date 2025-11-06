@@ -66,12 +66,12 @@ Variance to Land: ${formatCurrency(values.variance)}
     { label: "Build (Base)", value: values.baseBuildCost, color: "bg-primary" },
     ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "bg-primary/80" }] : []),
     ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "bg-primary/60" }] : []),
-    { label: "Professional Fees", value: values.professionalFees, color: "bg-accent" },
-    { label: "Marketing & Sales", value: values.marketingSales, color: "bg-secondary" },
+    { label: "Pro Fees", value: values.professionalFees, color: "bg-accent" },
+    { label: "Marketing", value: values.marketingSales, color: "bg-secondary" },
     { label: "Contingency", value: values.contingency, color: "bg-muted" },
     { label: "Finance", value: values.finance, color: "bg-destructive/60" },
-    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep & Technical", value: values.sitePrepTechnical, color: "bg-orange-500" }] : []),
-    { label: "Other (S106/CIL)", value: values.other, color: "bg-accent/60" },
+    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "bg-orange-500" }] : []),
+    { label: "S106/CIL", value: values.other, color: "bg-accent/60" },
     { label: "Land", value: values.landCost, color: "bg-secondary/60" },
   ].filter(item => item.value > 0);
 

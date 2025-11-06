@@ -42,11 +42,11 @@ const LenderSummaryPack = ({
 
   const costBreakdown = [
     { label: "Build (Base)", value: values.baseBuildCost },
-    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals }] : []),
-    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims }] : []),
-    { label: "Professional Fees", value: values.professionalFees },
-    { label: "Marketing & Sales", value: values.marketingSales },
-    { label: "Contingency", value: values.contingency },
+    ...(values.externals > 0 ? [{ label: `Externals (${inputs.externalsPercent || 0}% of Base Build)`, value: values.externals }] : []),
+    ...(values.prelims > 0 ? [{ label: `Prelims (${inputs.prelimsPercent || 12}% of Base Build)`, value: values.prelims }] : []),
+    { label: `Professional Fees (${inputs.professionalFeesPercent}% of Base Build)`, value: values.professionalFees },
+    { label: `Marketing & Sales (${inputs.marketingSalesPercent}% of GDV)`, value: values.marketingSales },
+    { label: `Contingency (${inputs.contingencyPercent}% of Build+Prelims+Externals+Fees)`, value: values.contingency },
     { label: "Finance", value: values.finance },
     ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep & Technical", value: values.sitePrepTechnical }] : []),
     { label: "Other (S106/CIL)", value: values.other },
@@ -353,19 +353,19 @@ const LenderSummaryPack = ({
             <h2 className="text-xl font-semibold mb-3">Assumptions Summary</h2>
             <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
               <div className="flex justify-between border-b pb-1">
-                <span className="text-muted-foreground">Professional Fees:</span>
+                <span className="text-muted-foreground">Professional Fees (% of Base Build):</span>
                 <span className="font-medium">{formatPercent(inputs.professionalFeesPercent)}</span>
               </div>
               <div className="flex justify-between border-b pb-1">
-                <span className="text-muted-foreground">Marketing & Sales:</span>
+                <span className="text-muted-foreground">Marketing & Sales (% of GDV):</span>
                 <span className="font-medium">{formatPercent(inputs.marketingSalesPercent)}</span>
               </div>
               <div className="flex justify-between border-b pb-1">
-                <span className="text-muted-foreground">Contingency:</span>
+                <span className="text-muted-foreground">Contingency (% of Build Stack):</span>
                 <span className="font-medium">{formatPercent(inputs.contingencyPercent)}</span>
               </div>
               <div className="flex justify-between border-b pb-1">
-                <span className="text-muted-foreground">Finance Rate:</span>
+                <span className="text-muted-foreground">Finance Rate (Annual %):</span>
                 <span className="font-medium">{formatPercent(inputs.financePercent)}</span>
               </div>
               <div className="flex justify-between border-b pb-1">
