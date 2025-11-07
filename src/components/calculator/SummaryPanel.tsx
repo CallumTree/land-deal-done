@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Copy, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router-dom";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 interface SummaryPanelProps {
   values: CalculatedValues;
@@ -63,17 +64,23 @@ Variance to Land: ${formatCurrency(values.variance)}
   };
 
   const costBreakdown = [
-    { label: "Build (Base)", value: values.baseBuildCost, color: "bg-primary" },
-    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "bg-primary/80" }] : []),
-    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "bg-primary/60" }] : []),
-    { label: "Pro Fees", value: values.professionalFees, color: "bg-accent" },
-    { label: "Marketing", value: values.marketingSales, color: "bg-secondary" },
-    { label: "Contingency", value: values.contingency, color: "bg-muted" },
-    { label: "Finance", value: values.finance, color: "bg-destructive/60" },
-    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "bg-orange-500" }] : []),
-    { label: "S106/CIL", value: values.other, color: "bg-accent/60" },
-    { label: "Land", value: values.landCost, color: "bg-secondary/60" },
+    { label: "Build (Base)", value: values.baseBuildCost, color: "#5BC199" },
+    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "#4AA786" }] : []),
+    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "#3D8F73" }] : []),
+    { label: "Pro Fees", value: values.professionalFees, color: "#7C88CC" },
+    { label: "Marketing", value: values.marketingSales, color: "#A888CC" },
+    { label: "Contingency", value: values.contingency, color: "#6B7280" },
+    { label: "Finance", value: values.finance, color: "#F59E0B" },
+    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "#EA580C" }] : []),
+    { label: "S106/CIL", value: values.other, color: "#8B5CF6" },
+    { label: "Land", value: values.landCost, color: "#EC4899" },
   ].filter(item => item.value > 0);
+
+  const chartData = costBreakdown.map(item => ({
+    name: item.label,
+    value: item.value,
+    fill: item.color,
+  }));
 
   return (
     <div className="space-y-4">
@@ -178,57 +185,47 @@ Variance to Land: ${formatCurrency(values.variance)}
             </div>
           </div>
 
-          {/* Stacked bar chart */}
+          {/* Doughnut chart */}
           <div className="border-t pt-4">
-            <h4 className="text-sm font-semibold mb-3">Visual Breakdown</h4>
-            <div className="space-y-2">
-              <div className="relative h-8 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="absolute h-full bg-primary transition-all"
-                  style={{ width: '100%' }}
+            <h4 className="text-sm font-semibold mb-3">Cost Breakdown</h4>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
                 >
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-primary-foreground">
-                    GDV: {formatCurrency(values.totalGDV)}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Stacked costs bar */}
-              <div className="relative h-8 bg-muted rounded-full overflow-hidden">
-                {(() => {
-                  let offset = 0;
-                  return costBreakdown.map((item, idx) => {
-                    const width = (item.value / values.totalGDV) * 100;
-                    const element = (
-                      <div
-                        key={item.label}
-                        className={`absolute h-full ${item.color} transition-all`}
-                        style={{ 
-                          left: `${offset}%`,
-                          width: `${width}%`
-                        }}
-                        title={`${item.label}: ${formatCurrency(item.value)}`}
-                      />
-                    );
-                    offset += width;
-                    return element;
-                  });
-                })()}
-                <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white mix-blend-difference">
-                  Costs: {formatCurrency(values.totalCosts)}
-                </span>
-              </div>
-              
-              <div className="relative h-8 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`absolute h-full transition-all ${isSuccessful ? 'bg-green-600' : 'bg-amber-600'}`}
-                  style={{ width: `${(values.netProfit / values.totalGDV) * 100}%` }}
-                >
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
-                    Profit: {formatCurrency(values.netProfit)}
-                  </span>
-                </div>
-              </div>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '0.5rem',
+                    color: 'hsl(var(--foreground))',
+                  }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  formatter={(value, entry: any) => (
+                    <span className="text-xs text-muted-foreground">
+                      {value}
+                    </span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="text-center mt-2 space-y-1">
+              <div className="text-xs text-muted-foreground">Total GDV</div>
+              <div className="text-xl font-bold text-primary">{formatCurrency(values.totalGDV)}</div>
             </div>
           </div>
 
