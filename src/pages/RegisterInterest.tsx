@@ -34,9 +34,9 @@ const RegisterInterest = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    password: "",
     companyType: "",
     region: "",
-    betaAccess: false,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -48,10 +48,19 @@ const RegisterInterest = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.email) {
+    if (!formData.name || !formData.email || !formData.password) {
       toast({
         title: "Missing information",
-        description: "Please provide your name and email.",
+        description: "Please provide your name, email, and password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters.",
         variant: "destructive",
       });
       return;
@@ -60,35 +69,66 @@ const RegisterInterest = () => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("early_interest").insert({
+      // Create auth account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: {
+            full_name: formData.name,
+            company_name: formData.companyType,
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      // Update profile with additional data
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            role: formData.companyType || null,
+            region: formData.region || null,
+          })
+          .eq("id", authData.user.id);
+
+        if (profileError) console.error("Profile update error:", profileError);
+      }
+
+      // Also save to early_interest table for tracking
+      await supabase.from("early_interest").insert({
         name: formData.name,
         email: formData.email,
         company_type: formData.companyType || null,
         region: formData.region || null,
-        beta_access: formData.betaAccess,
+        beta_access: true,
       });
 
-      if (error) throw error;
-
-      setIsSubmitted(true);
       toast({
-        title: "Welcome to BuildFlow!",
-        description: "We'll notify you when your region is ready.",
+        title: "Account created!",
+        description: "Redirecting to your dashboard...",
       });
 
       // Track analytics event
       if (typeof (window as any).gtag === "function") {
-        (window as any).gtag("event", "register_interest_submitted", {
+        (window as any).gtag("event", "signup_completed", {
           company_type: formData.companyType,
           region: formData.region,
-          beta_access: formData.betaAccess,
         });
       }
-    } catch (error) {
-      console.error("Error submitting form:", error);
+
+      // Redirect to dashboard
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+
+    } catch (error: any) {
+      console.error("Error creating account:", error);
       toast({
-        title: "Submission failed",
-        description: "Please try again or contact support.",
+        title: "Registration failed",
+        description: error.message || "Please try again or contact support.",
         variant: "destructive",
       });
     } finally {
@@ -412,10 +452,10 @@ const RegisterInterest = () => {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-2xl">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
-              Register for Early Access
+              Get Instant Access
             </h2>
             <p className="text-lg text-[#888]">
-              Join the waitlist to access BuildFlow before public launch and receive exclusive launch pricing.
+              Create your free account and start running feasibility checks immediately.
             </p>
           </div>
 
@@ -425,9 +465,9 @@ const RegisterInterest = () => {
                 <div className="w-16 h-16 mx-auto rounded-full bg-[#5BC199]/20 flex items-center justify-center">
                   <CheckCircle2 className="h-8 w-8 text-[#5BC199]" />
                 </div>
-                <h3 className="text-2xl font-bold font-['Poppins']">Thanks for joining!</h3>
+                <h3 className="text-2xl font-bold font-['Poppins']">Account Created!</h3>
                 <p className="text-[#888]">
-                  We'll notify you when your region is ready. Check your email for next steps.
+                  Redirecting you to your dashboard...
                 </p>
                 <Button
                   onClick={() => navigate("/")}
@@ -469,6 +509,22 @@ const RegisterInterest = () => {
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="bg-[#1B1B1D] border-[#333] focus:border-[#5BC199] text-[#F5F5F7]"
                       placeholder="your.email@example.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-[#F5F5F7]">
+                      Password *
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="bg-[#1B1B1D] border-[#333] focus:border-[#5BC199] text-[#F5F5F7]"
+                      placeholder="Minimum 6 characters"
+                      minLength={6}
                     />
                   </div>
 
@@ -518,28 +574,12 @@ const RegisterInterest = () => {
                     </Select>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="betaAccess"
-                      checked={formData.betaAccess}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, betaAccess: checked as boolean })
-                      }
-                    />
-                    <Label
-                      htmlFor="betaAccess"
-                      className="text-sm text-[#888] cursor-pointer"
-                    >
-                      I'm interested in early beta access
-                    </Label>
-                  </div>
-
                   <Button
                     type="submit"
                     disabled={isSubmitting}
                     className="w-full bg-[#5BC199] hover:bg-[#4BA080] text-[#1B1B1D] font-semibold py-6 text-lg rounded-lg shadow-lg shadow-[#5BC199]/20 hover:shadow-xl hover:shadow-[#5BC199]/30 transition-all"
                   >
-                    {isSubmitting ? "Submitting..." : "Join Early Access"}
+                    {isSubmitting ? "Creating Account..." : "Create Free Account"}
                   </Button>
                 </form>
               </CardContent>
@@ -559,7 +599,7 @@ const RegisterInterest = () => {
             size="lg"
             className="bg-[#5BC199] hover:bg-[#4BA080] text-[#1B1B1D] font-semibold px-8 py-6 text-lg rounded-lg shadow-lg shadow-[#5BC199]/20 hover:shadow-xl hover:shadow-[#5BC199]/30"
           >
-            Join the Waitlist
+            Get Started Free
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>
