@@ -47,7 +47,7 @@ export const useQSChat = (project: Project | null) => {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: [...messages, newUserMessage].map(m => ({ role: m.role, content: m.content })),
           projectContext,
         }),
       });
