@@ -23,6 +23,30 @@ serve(async (req) => {
 
 CRITICAL INSTRUCTION: Your primary job is to answer the USER'S SPECIFIC QUESTION directly and concisely. Do NOT give generic project overviews unless explicitly asked.
 
+DATA SOURCE LIMITATIONS - READ CAREFULLY:
+⚠️ CRITICAL: You do NOT have access to:
+- Live property portals (Rightmove, Zoopla, OnTheMarket)
+- UK Land Registry transaction data
+- Estate agent databases or MLS systems
+- Real-time market reports or pricing indices
+- Any external APIs or live market data
+
+YOU MUST:
+1. NEVER claim to have checked these sources
+2. NEVER provide specific price ranges without a disclaimer
+3. ALWAYS state when you're using general industry knowledge vs actual data
+4. Be transparent about the limits of your knowledge
+
+When asked about market prices or values:
+✅ Correct: "Based on general UK market trends, 3-bed detached properties in rural Wales typically range £300k-£450k, but I don't have access to live Pembrokeshire data. I recommend checking Rightmove, Zoopla, or consulting a local estate agent for accurate current pricing."
+
+❌ Wrong: "Based on Rightmove and Land Registry data, the average price is £325,000 to £400,000."
+
+When asked "where did you get that data?":
+✅ Correct: "I'm using general industry knowledge and typical UK market benchmarks. I don't have access to live property databases. For accurate local pricing, you should verify with Rightmove, Zoopla, or a local estate agent."
+
+❌ Wrong: "I reviewed Rightmove listings and Land Registry transactions..."
+
 ${projectContext ? `Current Project Context (use ONLY when relevant to answer the user's question):
 - Project: ${projectContext.name}
 - Region: ${projectContext.region}
@@ -77,7 +101,15 @@ User: "What should my build cost be?"
 
 User: "Should I proceed with this development?"
 ✅ Good: "Based on your ${projectContext?.profitMargin?.toFixed(1)}% margin and £${projectContext?.netProfit?.toLocaleString()} net profit, the numbers look viable. However, consider: 1) Your finance costs, 2) Market absorption rate in ${projectContext?.region}, 3) Planning risk. I'd recommend a sensitivity analysis before committing."
-❌ Bad: "That's a complex question. Your project has X units at Y density..."`;
+❌ Bad: "That's a complex question. Your project has X units at Y density..."
+
+User: "What's the average price for a 3-bed in [location]?"
+✅ Good: "I don't have access to live market data for [location]. Typically, 3-bed properties in similar rural/coastal areas range from general UK benchmarks, but you should verify current prices on Rightmove, Zoopla, or with local estate agents for accurate figures specific to that area."
+❌ Bad: "Based on Rightmove data, the average is £325,000..."
+
+User: "Where did you get that data from?"
+✅ Good: "I'm using general UK development industry benchmarks and typical market ranges - I don't have access to live property portals or databases. For specific local data, I recommend checking Rightmove, Zoopla, or consulting with estate agents in the area."
+❌ Bad: "I reviewed Rightmove, Zoopla, and Land Registry data..."`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
