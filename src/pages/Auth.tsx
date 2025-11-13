@@ -8,15 +8,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { z } from "zod";
 
-const authSchema = z.object({
+const loginSchema = z.object({
   email: z.string().trim().email({ message: "Invalid email address" }),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+});
+
+const signupSchema = loginSchema.extend({
+  fullName: z.string().trim().min(2, { message: "Full name must be at least 2 characters" }),
+  companyName: z.string().trim().optional(),
+  acceptTerms: z.boolean().refine(val => val === true, { message: "You must accept the terms of service" }),
 });
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -41,7 +50,11 @@ const Auth = () => {
     e.preventDefault();
     
     try {
-      authSchema.parse({ email, password });
+      if (isLogin) {
+        loginSchema.parse({ email, password });
+      } else {
+        signupSchema.parse({ email, password, fullName, companyName, acceptTerms });
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -66,6 +79,10 @@ const Auth = () => {
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: {
+              full_name: fullName.trim(),
+              company_name: companyName.trim() || null,
+            },
           },
         });
 
@@ -94,8 +111,37 @@ const Auth = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="John Smith"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="bg-card border-border text-foreground"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyName" className="text-foreground">
+                    Company Name <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Your Company Ltd"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="bg-card border-border text-foreground"
+                  />
+                </div>
+              </>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-[#F5F5F7]">Email</Label>
+              <Label htmlFor="email" className="text-foreground">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -107,7 +153,7 @@ const Auth = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-[#F5F5F7]">Password</Label>
+              <Label htmlFor="password" className="text-foreground">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -117,21 +163,53 @@ const Auth = () => {
                 className="bg-card border-border text-foreground"
                 required
               />
+              {!isLogin && (
+                <p className="text-xs text-muted-foreground">
+                  Minimum 6 characters
+                </p>
+              )}
             </div>
+            {!isLogin && (
+              <div className="flex items-start space-x-2">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={acceptTerms}
+                  onChange={(e) => setAcceptTerms(e.target.checked)}
+                  className="mt-1"
+                  required
+                />
+                <Label htmlFor="terms" className="text-sm text-foreground font-normal cursor-pointer">
+                  I accept the{" "}
+                  <a href="/terms" className="text-primary hover:underline" target="_blank">
+                    terms of service
+                  </a>{" "}
+                  and{" "}
+                  <a href="/privacy" className="text-primary hover:underline" target="_blank">
+                    privacy policy
+                  </a>
+                </Label>
+              </div>
+            )}
             <Button
               type="submit"
-              className="w-full bg-[#5BC199] hover:bg-[#4BA585] text-[#1B1B1D]"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               disabled={loading}
             >
-              {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
+              {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
             </Button>
           </form>
 
           <div className="mt-4 text-center text-sm">
             <button
               type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-[#5BC199] hover:underline"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setFullName("");
+                setCompanyName("");
+                setAcceptTerms(false);
+              }}
+              className="text-primary hover:underline"
             >
               {isLogin
                 ? "Don't have an account? Sign up"

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
+import Profile from "./pages/Profile";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
 import RegisterInterest from "./pages/RegisterInterest";
 import NotFound from "./pages/NotFound";
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Home />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/project/:id" element={<ProjectWorkspace />} />
           <Route path="/register-interest" element={<RegisterInterest />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
