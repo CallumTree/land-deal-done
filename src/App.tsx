@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Profile from "./pages/Profile";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
 import RegisterInterest from "./pages/RegisterInterest";
+import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import { projectStorage } from "@/services/projectStorage";
 
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/profile" element={<Profile />} />
           <Route path="/project/:id" element={<ProjectWorkspace />} />
           <Route path="/register-interest" element={<RegisterInterest />} />
+          <Route path="/pricing" element={<Pricing />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
