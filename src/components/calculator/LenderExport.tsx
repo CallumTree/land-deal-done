@@ -6,6 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Printer, FileText, TrendingUp } from "lucide-react";
 import { useState } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 interface LenderExportProps {
   values: CalculatedValues;
@@ -31,6 +34,9 @@ const LenderExport = ({
   const [utilitiesAbnormals, setUtilitiesAbnormals] = useState("");
   const [marketCommentary, setMarketCommentary] = useState("");
   const [exitStrategy, setExitStrategy] = useState("");
+  
+  const { tier, loading } = useSubscription();
+  const canExportPDF = checkFeatureAccess(tier, 'pdf_export');
 
   const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
   const siteAreaHa = siteArea / 10000;
@@ -84,16 +90,20 @@ const LenderExport = ({
   return (
     <div className="space-y-6">
       {/* Header Controls */}
-      <div className="flex justify-between items-center print:hidden bg-card p-4 rounded-lg border">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">Lender Summary Pack</h2>
+      {!canExportPDF && !loading ? (
+        <UpgradePrompt feature="pdf_export" />
+      ) : (
+        <div className="flex justify-between items-center print:hidden bg-card p-4 rounded-lg border">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Lender Summary Pack</h2>
+          </div>
+          <Button onClick={handlePrint} size="default" disabled={loading}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print / Save PDF
+          </Button>
         </div>
-        <Button onClick={handlePrint} size="default">
-          <Printer className="h-4 w-4 mr-2" />
-          Print / Save PDF
-        </Button>
-      </div>
+      )}
 
       {/* Print Content */}
       <div className="print:p-8 space-y-6 bg-background" id="lender-pack">

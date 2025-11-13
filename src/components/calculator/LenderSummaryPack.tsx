@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Printer, Download } from "lucide-react";
 import { useState } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 interface LenderSummaryPackProps {
   open: boolean;
@@ -35,6 +38,9 @@ const LenderSummaryPack = ({
   const [utilitiesAbnormals, setUtilitiesAbnormals] = useState("");
   const [marketCommentary, setMarketCommentary] = useState("");
   const [exitStrategy, setExitStrategy] = useState("");
+  
+  const { tier, loading } = useSubscription();
+  const canExportPDF = checkFeatureAccess(tier, 'pdf_export');
 
   const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
   const siteAreaHa = siteArea / 10000;
@@ -90,15 +96,22 @@ const LenderSummaryPack = ({
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto print:max-w-full print:max-h-full">
         <DialogHeader className="print:hidden">
           <DialogTitle>Lender Summary Pack</DialogTitle>
-          <div className="flex gap-2 mt-2">
-            <Button onClick={handlePrint} size="sm">
-              <Printer className="h-4 w-4 mr-2" />
-              Print / Save PDF
-            </Button>
-            <Button onClick={onClose} variant="outline" size="sm">
-              Close
-            </Button>
-          </div>
+          
+          {!canExportPDF && !loading ? (
+            <div className="mt-4">
+              <UpgradePrompt feature="pdf_export" />
+            </div>
+          ) : (
+            <div className="flex gap-2 mt-2">
+              <Button onClick={handlePrint} size="sm" disabled={loading}>
+                <Printer className="h-4 w-4 mr-2" />
+                Print / Save PDF
+              </Button>
+              <Button onClick={onClose} variant="outline" size="sm">
+                Close
+              </Button>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="print:p-8 space-y-6" id="lender-pack">

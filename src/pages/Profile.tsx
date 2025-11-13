@@ -50,10 +50,22 @@ const Profile = () => {
 
       if (error) throw error;
 
-      setProfile(data);
-      setFullName(data.full_name || "");
-      setCompanyName(data.company_name || "");
-      setRegion(data.region || "");
+      if (data) {
+        const profileData = data as any;
+        setProfile({
+          id: profileData.id,
+          full_name: profileData.full_name,
+          company_name: profileData.company_name,
+          role: profileData.role,
+          region: profileData.region,
+          subscription_tier: profileData.subscription_tier || 'free',
+          subscription_status: profileData.subscription_status || 'active',
+          current_period_end: profileData.current_period_end,
+        });
+        setFullName(profileData.full_name || "");
+        setCompanyName(profileData.company_name || "");
+        setRegion(profileData.region || "");
+      }
     } catch (error: any) {
       toast.error("Failed to load profile");
       console.error(error);
