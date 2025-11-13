@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowRight, Download, X } from "lucide-react";
 import { toast } from "sonner";
+import { useSubscription } from "@/hooks/useSubscription";
+import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 interface LenderReportModalProps {
   isOpen: boolean;
@@ -24,6 +27,8 @@ const LenderReportModal = ({
   adjustments,
 }: LenderReportModalProps) => {
   const [notes, setNotes] = useState("");
+  const { tier, loading } = useSubscription();
+  const canExportPDF = checkFeatureAccess(tier, 'pdf_export');
 
   const getAdjustmentsSummary = () => {
     const parts = [];
@@ -46,18 +51,17 @@ const LenderReportModal = ({
   };
 
   const handleExport = () => {
-    // For free users, show upsell
-    toast.info("Export full lender-ready reports with BuildFlow Pro", {
-      description: "Upgrade to unlock professional PDF exports with custom branding",
-      duration: 5000,
+    if (!canExportPDF) {
+      toast.error("PDF export requires Pro tier or higher");
+      return;
+    }
+    
+    // In production, this would generate and download the PDF
+    toast.success("Generating PDF export...", {
+      description: "Your lender report will download shortly",
     });
     
-    // In production, this would:
-    // 1. Check user subscription tier
-    // 2. Generate PDF with base + adjusted cases
-    // 3. Include company logo and branding
-    // 4. Download the report
-    
+    // TODO: Implement actual PDF generation
     onClose();
   };
 
@@ -157,25 +161,28 @@ const LenderReportModal = ({
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button variant="cta" onClick={handleExport} className="flex-1">
-              <Download className="h-4 w-4 mr-2" />
-              Generate PDF Report
-            </Button>
-          </div>
-
-          {/* Pro Upsell */}
-          <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-            <p className="text-sm font-medium text-primary mb-2">🚀 BuildFlow Pro</p>
-            <p className="text-sm text-muted-foreground">
-              Unlock unlimited exports, custom branding, and shareable report links. From £19/month.
-            </p>
-          </div>
+          {/* Action Buttons or Upgrade Prompt */}
+          {!canExportPDF && !loading ? (
+            <div className="pt-4 border-t">
+              <UpgradePrompt feature="pdf_export" />
+            </div>
+          ) : (
+            <div className="flex gap-3 pt-4 border-t">
+              <Button variant="outline" onClick={onClose} className="flex-1">
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button 
+                variant="cta" 
+                onClick={handleExport} 
+                className="flex-1"
+                disabled={loading}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Generate PDF Report
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
