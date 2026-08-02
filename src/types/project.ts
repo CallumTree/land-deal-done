@@ -1,4 +1,5 @@
 import { PropertyRow, GlobalInputs } from "./calculator";
+import { LayoutResult } from "./siteLayout";
 
 export type ProjectStatus = "Draft" | "Under Review" | "Approved" | "Completed";
 export type ProjectTag = "Residential" | "Mixed-Use" | "Bungalows" | "Apartments" | "Custom";
@@ -18,6 +19,7 @@ export interface Project {
   // Map data
   mapImageUrl?: string;
   polygon?: any;
+  siteLayout?: LayoutResult;
   
   // Calculator data
   rows: PropertyRow[];

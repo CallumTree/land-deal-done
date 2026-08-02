@@ -15,11 +15,21 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings } from 'lucide-react';
+import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { detectLocalAuthority, getLAHousingData, calculateAdjustedMix } from '@/utils/localAuthorityData';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  ContextPreset,
+  MixType,
+  CONTEXT_DENSITY,
+  MIX_LABELS,
+  generateSiteLayoutCandidates,
+} from '@/utils/siteLayoutEngine';
+import { LayoutGenerationOutput, LayoutResult } from '@/types/siteLayout';
+import { PROPERTY_DEFAULTS } from '@/types/calculator';
+import LayoutSummaryPanel from './LayoutSummaryPanel';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
@@ -35,25 +45,17 @@ interface SiteMapProps {
   onLocationDetected?: (location: string, region: string) => void;
   savedPolygon?: any;
   onPolygonUpdate?: (polygon: any) => void;
+  onLayoutGenerated?: (layout: LayoutResult | null) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
-type ContextPreset = 'rural' | 'suburban' | 'urban';
-type MixType = 'semis' | 'mixed' | 'terrace' | 'bungalow';
 
-interface DensityBand { low: number; high: number; }
 interface UnitAssumptions {
   netDevelopable: number;
   infrastructure: number;
   context: ContextPreset;
   mixType: MixType;
 }
-
-const CONTEXT_DENSITY: Record<ContextPreset, DensityBand> = {
-  rural: { low: 22, high: 30 },
-  suburban: { low: 30, high: 35 },
-  urban: { low: 35, high: 60 },
-};
 
 const MIX_PLOT_AREA: Record<MixType, number> = {
   semis: 220,
@@ -62,20 +64,16 @@ const MIX_PLOT_AREA: Record<MixType, number> = {
   bungalow: 260,
 };
 
-const MIX_LABELS: Record<MixType, string> = {
-  semis: 'Semis',
-  mixed: 'Mixed',
-  terrace: 'Terrace-led',
-  bungalow: 'Bungalow-heavy',
-};
-
-const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected, savedPolygon, onPolygonUpdate }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected, savedPolygon, onPolygonUpdate, onLayoutGenerated }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
   const drawControl = useRef<L.Control.Draw | null>(null);
   const currentTileLayer = useRef<L.TileLayer | null>(null);
-  
+  const layoutLayerGroup = useRef<L.FeatureGroup | null>(null);
+  const [layoutOutput, setLayoutOutput] = useState<LayoutGenerationOutput | null>(null);
+  const [isGeneratingLayout, setIsGeneratingLayout] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(true);
   const [currentArea, setCurrentArea] = useState<number>(savedArea || 0);
@@ -116,6 +114,10 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       drawnItems.current = new L.FeatureGroup();
       map.current.addLayer(drawnItems.current);
 
+      // Feature group for the generated smart layout overlay (road, plots, gardens)
+      layoutLayerGroup.current = new L.FeatureGroup();
+      map.current.addLayer(layoutLayerGroup.current);
+
       // Initialize draw control with higher contrast styles for satellite
       const polygonOptions = getPolygonOptions();
       drawControl.current = new L.Control.Draw({
@@ -144,11 +146,13 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         drawnItems.current?.addLayer(layer);
         updateArea();
         extractAndNotifyPolygon();
+        clearGeneratedLayout();
       });
 
       map.current.on(L.Draw.Event.EDITED, () => {
         updateArea();
         extractAndNotifyPolygon();
+        clearGeneratedLayout();
       });
 
       map.current.on(L.Draw.Event.DELETED, () => {
@@ -156,6 +160,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         if (onPolygonUpdate) {
           onPolygonUpdate(null);
         }
+        clearGeneratedLayout();
       });
 
     } catch (error) {
@@ -396,6 +401,111 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       
       onPolygonUpdate(geojson);
     }
+  };
+
+  const getCurrentPolygonFeature = (): GeoJSON.Feature<GeoJSON.Polygon> | null => {
+    if (!drawnItems.current) return null;
+    const layers = drawnItems.current.getLayers();
+    if (layers.length === 0) return null;
+
+    const layer = layers[0] as L.Polygon;
+    const latlngs = layer.getLatLngs()[0] as L.LatLng[];
+    const coordinates = latlngs.map((latlng: L.LatLng) => [latlng.lng, latlng.lat] as [number, number]);
+    coordinates.push(coordinates[0]);
+
+    return {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [coordinates] },
+      properties: {},
+    };
+  };
+
+  const clearGeneratedLayout = () => {
+    setLayoutOutput(null);
+    layoutLayerGroup.current?.clearLayers();
+    if (onLayoutGenerated) onLayoutGenerated(null);
+  };
+
+  const renderLayoutOnMap = (layout: LayoutResult) => {
+    if (!layoutLayerGroup.current) return;
+    layoutLayerGroup.current.clearLayers();
+
+    if (layout.roadPolygon) {
+      L.geoJSON(layout.roadPolygon, {
+        style: { color: '#4b5563', fillColor: '#6b7280', fillOpacity: 0.6, weight: 1 },
+      }).addTo(layoutLayerGroup.current);
+    }
+
+    layout.plots.forEach((plot) => {
+      L.geoJSON(plot.plotPolygon, {
+        style: { color: '#1f2937', weight: 1, fillOpacity: 0, dashArray: '3,3' },
+      }).addTo(layoutLayerGroup.current!);
+
+      L.geoJSON(plot.housePolygon, {
+        style: { color: '#b45309', fillColor: '#f59e0b', fillOpacity: 0.8, weight: 1 },
+      })
+        .bindTooltip(plot.houseType, { sticky: true })
+        .addTo(layoutLayerGroup.current!);
+
+      if (plot.gardenPolygon) {
+        L.geoJSON(plot.gardenPolygon, {
+          style: { color: '#15803d', fillColor: '#22c55e', fillOpacity: 0.35, weight: 1 },
+        }).addTo(layoutLayerGroup.current!);
+      }
+    });
+  };
+
+  const handleGenerateLayout = () => {
+    const polygonFeature = getCurrentPolygonFeature();
+    if (!polygonFeature) {
+      toast.error('Please draw a boundary first');
+      return;
+    }
+
+    setIsGeneratingLayout(true);
+    try {
+      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context);
+      setLayoutOutput(output);
+
+      if (output.winner) {
+        renderLayoutOnMap(output.winner);
+        if (onLayoutGenerated) onLayoutGenerated(output.winner);
+        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label}`);
+      } else {
+        layoutLayerGroup.current?.clearLayers();
+        if (onLayoutGenerated) onLayoutGenerated(null);
+        toast.error(output.warning || 'Could not generate a layout for this boundary');
+      }
+    } finally {
+      setIsGeneratingLayout(false);
+    }
+  };
+
+  const handleUseLayout = (layout: LayoutResult) => {
+    if (!onGenerateRows) return;
+
+    const rows = Object.entries(layout.summary.mixCounts).map(([type, units], idx) => {
+      const defaults = PROPERTY_DEFAULTS[type] || { giaPerUnit: 0, salesValue: 0, buildPerSqm: 0 };
+      return {
+        id: `layout-${Date.now()}-${idx}`,
+        type,
+        units,
+        giaPerUnit: defaults.giaPerUnit ?? 0,
+        salesValue: defaults.salesValue ?? 0,
+        unitPriceOverride: 0,
+        buildPerSqm: defaults.buildPerSqm ?? 0,
+        notes: `From smart layout • ${layout.label}`,
+      };
+    });
+
+    onGenerateRows(rows, {
+      source: 'Smart layout generator (rule-based)',
+      region: '',
+      baseBand: layout.label,
+      generatedAt: new Date().toISOString(),
+    });
+
+    toast.success('Layout applied to unit mix — head to the GDV Calculator to review');
   };
 
   const detectRegionFromCoords = (lat: number, lon: number): string => {
@@ -642,7 +752,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     drawnItems.current?.clearLayers();
     setCurrentArea(0);
     setCurrentPerimeter(0);
-    
+    clearGeneratedLayout();
+
     // Notify parent that polygon was cleared
     if (onPolygonUpdate) {
       onPolygonUpdate(null);
@@ -945,8 +1056,31 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <Button 
-                onClick={handleClear} 
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={handleGenerateLayout}
+                      variant="secondary"
+                      className="flex-1"
+                      disabled={currentArea === 0 || isGeneratingLayout}
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      {isGeneratingLayout ? 'Generating…' : 'Generate Smart Layout'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p className="font-semibold mb-1">Smart Layout Generator</p>
+                    <p className="text-xs">
+                      Places an access road plus rows of house plots (each with a compliant rear garden) inside
+                      your boundary, compares mix/orientation options against planning rules, and picks the
+                      highest-profit compliant layout.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Button
+                onClick={handleClear}
                 variant="outline"
                 disabled={currentArea === 0}
               >
@@ -954,6 +1088,10 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                 Clear
               </Button>
             </div>
+
+            {layoutOutput && (
+              <LayoutSummaryPanel output={layoutOutput} onUseLayout={handleUseLayout} />
+            )}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
