@@ -27,8 +27,8 @@ import {
   MIX_LABELS,
   generateSiteLayoutCandidates,
 } from '@/utils/siteLayoutEngine';
+import { BuildSpec, getUnitEconomics } from '@/utils/houseTypeLibrary';
 import { LayoutGenerationOutput, LayoutResult } from '@/types/siteLayout';
-import { PROPERTY_DEFAULTS } from '@/types/calculator';
 import LayoutSummaryPanel from './LayoutSummaryPanel';
 
 interface SiteMapProps {
@@ -55,6 +55,7 @@ interface UnitAssumptions {
   infrastructure: number;
   context: ContextPreset;
   mixType: MixType;
+  buildSpec: BuildSpec;
 }
 
 const MIX_PLOT_AREA: Record<MixType, number> = {
@@ -87,13 +88,15 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     return saved ? parseFloat(saved) : 0.3;
   });
   const [assumptions, setAssumptions] = useState<UnitAssumptions>(() => {
-    const saved = localStorage.getItem('siteMapAssumptions');
-    return saved ? JSON.parse(saved) : {
+    const defaults: UnitAssumptions = {
       netDevelopable: 70,
       infrastructure: 25,
       context: 'suburban' as ContextPreset,
       mixType: 'semis' as MixType,
+      buildSpec: 'medium' as BuildSpec,
     };
+    const saved = localStorage.getItem('siteMapAssumptions');
+    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
   });
 
   // Initialize map
@@ -455,7 +458,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     });
   };
 
-  const handleGenerateLayout = () => {
+  const handleGenerateLayout = async () => {
     const polygonFeature = getCurrentPolygonFeature();
     if (!polygonFeature) {
       toast.error('Please draw a boundary first');
@@ -464,13 +467,18 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
 
     setIsGeneratingLayout(true);
     try {
-      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context);
+      const ring = polygonFeature.geometry.coordinates[0];
+      const centroidLng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+      const centroidLat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+      const region = await detectRegionFromCoords(centroidLat, centroidLng);
+
+      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context, region, assumptions.buildSpec);
       setLayoutOutput(output);
 
       if (output.winner) {
         renderLayoutOnMap(output.winner);
         if (onLayoutGenerated) onLayoutGenerated(output.winner);
-        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label}`);
+        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label} (${region} pricing)`);
       } else {
         layoutLayerGroup.current?.clearLayers();
         if (onLayoutGenerated) onLayoutGenerated(null);
@@ -485,22 +493,22 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     if (!onGenerateRows) return;
 
     const rows = Object.entries(layout.summary.mixCounts).map(([type, units], idx) => {
-      const defaults = PROPERTY_DEFAULTS[type] || { giaPerUnit: 0, salesValue: 0, buildPerSqm: 0 };
+      const economics = getUnitEconomics(type, layout.region, (layout.buildSpec as BuildSpec) || 'medium');
       return {
         id: `layout-${Date.now()}-${idx}`,
         type,
         units,
-        giaPerUnit: defaults.giaPerUnit ?? 0,
-        salesValue: defaults.salesValue ?? 0,
+        giaPerUnit: economics.gia,
+        salesValue: economics.salesValue,
         unitPriceOverride: 0,
-        buildPerSqm: defaults.buildPerSqm ?? 0,
+        buildPerSqm: economics.gia > 0 ? economics.buildCost / economics.gia : 0,
         notes: `From smart layout • ${layout.label}`,
       };
     });
 
     onGenerateRows(rows, {
-      source: 'Smart layout generator (rule-based)',
-      region: '',
+      source: `Smart layout generator (rule-based) • ${layout.region || 'national'} pricing`,
+      region: layout.region || '',
       baseBand: layout.label,
       generatedAt: new Date().toISOString(),
     });
@@ -508,9 +516,10 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     toast.success('Layout applied to unit mix — head to the GDV Calculator to review');
   };
 
-  const detectRegionFromCoords = (lat: number, lon: number): string => {
-    // Simple region detection based on coordinates
-    // This is a basic implementation - could be enhanced with actual boundary data
+  // Coarse fallback only — used when the postcodes.io reverse-geocode lookup
+  // fails (offline, rate-limited). It cannot distinguish Wales/Scotland from
+  // neighbouring English regions, so the API lookup below is always tried first.
+  const detectRegionFromCoordsFallback = (lat: number, lon: number): string => {
     if (lat > 53.5 && lon < -3) return "North West";
     if (lat > 53.5 && lon >= -3 && lon < -1) return "Yorkshire & Humber";
     if (lat > 53.5 && lon >= -1) return "North East";
@@ -522,6 +531,45 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     if (lat <= 51 && lon < -2) return "South West";
     if (lat <= 51 && lon >= -2) return "South East";
     return "South East"; // default
+  };
+
+  // Maps postcodes.io's `region` (England only) and `country` (Wales/Scotland/NI,
+  // where `region` is null) onto our REGION_PRESETS keys, so build/sales £/m²
+  // rates are keyed to the site's actual UK region rather than a lat/lon guess.
+  const POSTCODES_IO_REGION_MAP: Record<string, string> = {
+    "London": "London",
+    "South East": "South East",
+    "South West": "South West",
+    "East of England": "East",
+    "East Midlands": "East Midlands",
+    "West Midlands": "West Midlands",
+    "North West": "North West",
+    "North East": "North East",
+    "Yorkshire and The Humber": "Yorkshire & Humber",
+  };
+
+  const POSTCODES_IO_COUNTRY_MAP: Record<string, string> = {
+    "Wales": "Wales",
+    "Scotland": "Scotland",
+  };
+
+  const detectRegionFromCoords = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const response = await fetch(`https://api.postcodes.io/postcodes?lon=${lon}&lat=${lat}&limit=1`);
+      const data = await response.json();
+      const result = data?.result?.[0];
+      if (result) {
+        if (result.region && POSTCODES_IO_REGION_MAP[result.region]) {
+          return POSTCODES_IO_REGION_MAP[result.region];
+        }
+        if (result.country && POSTCODES_IO_COUNTRY_MAP[result.country]) {
+          return POSTCODES_IO_COUNTRY_MAP[result.country];
+        }
+      }
+    } catch (error) {
+      console.warn('Region reverse-geocode failed, falling back to coordinate heuristic:', error);
+    }
+    return detectRegionFromCoordsFallback(lat, lon);
   };
 
   const handleSearch = async () => {
@@ -546,7 +594,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         toast.success('Location found');
         
         // Detect region and notify parent
-        const region = detectRegionFromCoords(latitude, longitude);
+        const region = await detectRegionFromCoords(latitude, longitude);
         if (onLocationDetected) {
           onLocationDetected(display_name, region);
         }
@@ -592,7 +640,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
           const layer = layers[0] as L.Polygon;
           const bounds = layer.getBounds();
           const center = bounds.getCenter();
-          detectedRegion = detectRegionFromCoords(center.lat, center.lng);
+          detectedRegion = await detectRegionFromCoords(center.lat, center.lng);
           
           // Try to detect LA from search query if available
           if (searchQuery) {
@@ -1012,7 +1060,24 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                                   </SelectContent>
                                 </Select>
                               </div>
-                              
+
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Build Spec (Smart Layout)</Label>
+                                <Select
+                                  value={assumptions.buildSpec}
+                                  onValueChange={(value: BuildSpec) => setAssumptions({ ...assumptions, buildSpec: value })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Low (Volume)</SelectItem>
+                                    <SelectItem value="medium">Medium (Standard)</SelectItem>
+                                    <SelectItem value="high">High (Premium)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
                               <div className="pt-4 border-t border-border/50 space-y-1 text-xs text-muted-foreground">
                                 <div className="flex justify-between">
                                   <span>Parking (rough):</span>

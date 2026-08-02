@@ -48,6 +48,8 @@ export interface LayoutResult {
   roadPolygon: RingGeoJSON | null;
   summary: LayoutSummary;
   isWinner: boolean;
+  region?: string;
+  buildSpec?: string;
 }
 
 export interface LayoutGenerationOutput {

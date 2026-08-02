@@ -10,7 +10,6 @@
 // raw degrees would distort shapes away from the equator. Everything is
 // converted back to GeoJSON (WGS84) for rendering on the Leaflet map.
 
-import { PROPERTY_DEFAULTS } from "@/types/calculator";
 import {
   ComplianceCheck,
   LayoutGenerationOutput,
@@ -19,6 +18,13 @@ import {
   PlacedPlot,
   RingGeoJSON,
 } from "@/types/siteLayout";
+import {
+  BuildSpec,
+  HOUSE_TYPE_MAP,
+  deriveFootprint,
+  garageWidthFor,
+  getUnitEconomics,
+} from "@/utils/houseTypeLibrary";
 
 export type ContextPreset = "rural" | "suburban" | "urban";
 export type MixType = "semis" | "mixed" | "terrace" | "bungalow";
@@ -81,45 +87,40 @@ export const PLANNING_RULES: Record<ContextPreset, PlanningRules> = {
   },
 };
 
-interface HouseTypeSpec {
-  frontageM: number;
-  depthM: number;
-}
-
-export const HOUSE_TYPE_SPECS: Record<string, HouseTypeSpec> = {
-  "2-Bed Semi": { frontageM: 6.0, depthM: 8.0 },
-  "3-Bed Semi": { frontageM: 6.5, depthM: 9.0 },
-  "3-Bed Detached": { frontageM: 9.0, depthM: 9.5 },
-  "4-Bed Detached": { frontageM: 10.5, depthM: 10.5 },
-  "2-Bed Bungalow": { frontageM: 8.5, depthM: 9.5 },
-  "3-Bed Bungalow": { frontageM: 10.0, depthM: 10.5 },
-};
-
 interface MixSequenceItem {
   type: string;
   weight: number;
-  frontageOverrideM?: number;
+  frontageOverrideM?: number; // used by terrace-style narrow-frontage variants only
 }
 
 export const MIX_SEQUENCES: Record<MixType, MixSequenceItem[]> = {
   semis: [
-    { type: "3-Bed Semi", weight: 0.55 },
-    { type: "2-Bed Semi", weight: 0.3 },
+    { type: "3-Bed Semi", weight: 0.3 },
+    { type: "3-Bed Semi with Garage", weight: 0.25 },
+    { type: "2-Bed Semi", weight: 0.2 },
     { type: "4-Bed Detached", weight: 0.15 },
+    { type: "4-Bed Detached Executive", weight: 0.1 },
   ],
   mixed: [
-    { type: "3-Bed Semi", weight: 0.4 },
-    { type: "2-Bed Semi", weight: 0.25 },
-    { type: "3-Bed Detached", weight: 0.2 },
-    { type: "2-Bed Bungalow", weight: 0.15 },
+    { type: "3-Bed Semi", weight: 0.25 },
+    { type: "2-Bed Semi", weight: 0.15 },
+    { type: "3-Bed Semi with Garage", weight: 0.15 },
+    { type: "3-Bed Detached", weight: 0.15 },
+    { type: "4-Bed Detached", weight: 0.1 },
+    { type: "2-Bed Bungalow", weight: 0.1 },
+    { type: "1-Bed Bungalow", weight: 0.1 },
   ],
   terrace: [
-    { type: "2-Bed Semi", weight: 0.65, frontageOverrideM: 5.0 },
-    { type: "3-Bed Semi", weight: 0.35, frontageOverrideM: 5.5 },
+    { type: "2-Bed Semi", weight: 0.55, frontageOverrideM: 5.0 },
+    { type: "3-Bed Semi", weight: 0.3, frontageOverrideM: 5.5 },
+    { type: "1-Bed Bungalow", weight: 0.15, frontageOverrideM: 5.5 },
   ],
   bungalow: [
-    { type: "2-Bed Bungalow", weight: 0.55 },
-    { type: "3-Bed Bungalow", weight: 0.45 },
+    { type: "2-Bed Bungalow", weight: 0.3 },
+    { type: "1-Bed Bungalow", weight: 0.15 },
+    { type: "3-Bed Bungalow", weight: 0.2 },
+    { type: "2-Bed Bungalow with Garage", weight: 0.2 },
+    { type: "3-Bed Bungalow with Garage", weight: 0.15 },
   ],
 };
 
@@ -284,13 +285,18 @@ function layoutRow(
     guard++;
     const item = weightedSeq[cursorRef.i % weightedSeq.length];
     cursorRef.i++;
-    const spec = HOUSE_TYPE_SPECS[item.type];
-    const plotWidth = item.frontageOverrideM ?? spec.frontageM;
+    const def = HOUSE_TYPE_MAP[item.type];
+    const footprint = deriveFootprint(def);
+    const garageWidthM = garageWidthFor(def);
+    const houseFootprintWidthM = item.frontageOverrideM ?? footprint.frontageM;
+    const plotWidth = houseFootprintWidthM + garageWidthM;
     const stride = plotWidth + rules.gapBetweenPlotsM;
 
     if (x + plotWidth > xMax) break;
 
-    const totalDepth = rules.frontSetbackM + spec.depthM + rules.minGardenDepthM;
+    const frontSetbackM = rules.frontSetbackM + (def.driveBonusM ?? 0);
+    const gardenDepthM = rules.minGardenDepthM + (def.gardenBonusM ?? 0);
+    const totalDepth = frontSetbackM + footprint.depthM + gardenDepthM;
     const yFar = rowNearY + direction * totalDepth;
     const y0 = Math.min(rowNearY, yFar);
     const y1 = Math.max(rowNearY, yFar);
@@ -303,24 +309,24 @@ function layoutRow(
     ];
 
     if (corners.every((c) => pointInPolygon(c, polyRot))) {
-      const houseFarY = rowNearY + direction * (rules.frontSetbackM + spec.depthM);
+      const houseFarY = rowNearY + direction * (frontSetbackM + footprint.depthM);
       const hy0 = Math.min(rowNearY, houseFarY);
       const hy1 = Math.max(rowNearY, houseFarY);
       const gy0 = Math.min(houseFarY, yFar);
       const gy1 = Math.max(houseFarY, yFar);
-      const gardenAreaM2 = plotWidth * rules.minGardenDepthM;
+      const gardenAreaM2 = plotWidth * gardenDepthM;
 
       plots.push({
         id: `plot-${side}-${plots.length}-${Math.round(x * 10)}`,
         houseType: item.type,
         plotPolygon: rotatedRectToFeature(x, x + plotWidth, y0, y1, angleRad, origin),
-        housePolygon: rotatedRectToFeature(x, x + plotWidth, hy0, hy1, angleRad, origin),
+        housePolygon: rotatedRectToFeature(x, x + houseFootprintWidthM, hy0, hy1, angleRad, origin),
         gardenPolygon: rotatedRectToFeature(x, x + plotWidth, gy0, gy1, angleRad, origin),
         frontageM: plotWidth,
         plotDepthM: totalDepth,
-        gardenDepthM: rules.minGardenDepthM,
+        gardenDepthM,
         gardenAreaM2,
-        gia: PROPERTY_DEFAULTS[item.type]?.giaPerUnit ?? 0,
+        gia: def.gia,
         side,
       });
     }
@@ -340,11 +346,12 @@ function buildComplianceChecks(
 ): ComplianceCheck[] {
   const checks: ComplianceCheck[] = [];
 
+  const minGardenDepth = plots.length ? Math.min(...plots.map((p) => p.gardenDepthM)) : rules.minGardenDepthM;
   checks.push({
     id: "garden-depth",
     label: "Rear garden depth",
     pass: true,
-    detail: `${rules.minGardenDepthM}m provided on every plot (National Design Guide indicative minimum for a ${context} setting is met by construction).`,
+    detail: `${minGardenDepth.toFixed(1)}m+ provided on every plot (National Design Guide indicative minimum for a ${context} setting is ${rules.minGardenDepthM}m, met by construction).`,
   });
 
   checks.push({
@@ -391,7 +398,9 @@ function buildLayout(
   angleRad: number,
   mixType: MixType,
   context: ContextPreset,
-  grossAreaM2: number
+  grossAreaM2: number,
+  region: string | undefined,
+  buildSpec: BuildSpec
 ): LayoutResult {
   const rules = PLANNING_RULES[context];
   const densityBand = CONTEXT_DENSITY[context];
@@ -433,20 +442,20 @@ function buildLayout(
 
   for (const plot of plots) {
     mixCounts[plot.houseType] = (mixCounts[plot.houseType] ?? 0) + 1;
-    const defaults = PROPERTY_DEFAULTS[plot.houseType];
-    if (defaults) {
-      estimatedGDV += defaults.salesValue ?? 0;
-      estimatedBuildCost += (defaults.giaPerUnit ?? 0) * (defaults.buildPerSqm ?? 0);
-    }
+    const economics = getUnitEconomics(plot.houseType, region, buildSpec);
+    estimatedGDV += economics.salesValue;
+    estimatedBuildCost += economics.buildCost;
     totalGardenAreaM2 += plot.gardenAreaM2;
   }
+
+  const averageGardenDepthM = plots.length ? plots.reduce((s, p) => s + p.gardenDepthM, 0) / plots.length : rules.minGardenDepthM;
 
   const summary: LayoutSummary = {
     totalUnits: plots.length,
     achievedDensityUprHa,
     roadLengthM: Math.max(0, maxX - minX),
     totalGardenAreaM2,
-    averageGardenDepthM: rules.minGardenDepthM,
+    averageGardenDepthM,
     mixCounts,
     estimatedGDV,
     estimatedBuildCost,
@@ -465,6 +474,8 @@ function buildLayout(
     roadPolygon,
     summary,
     isWinner: false,
+    region,
+    buildSpec,
   };
 }
 
@@ -476,7 +487,9 @@ function buildLayout(
  */
 export function generateSiteLayoutCandidates(
   polygonFeature: GeoJSON.Feature<GeoJSON.Polygon>,
-  context: ContextPreset
+  context: ContextPreset,
+  region?: string,
+  buildSpec: BuildSpec = "medium"
 ): LayoutGenerationOutput {
   const ring = polygonFeature?.geometry?.coordinates?.[0];
   if (!ring || ring.length < 4) {
@@ -506,7 +519,7 @@ export function generateSiteLayoutCandidates(
   const candidates: LayoutResult[] = [];
   for (const angle of candidateAngles) {
     for (const mixType of mixTypes) {
-      candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2));
+      candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2, region, buildSpec));
     }
   }
 

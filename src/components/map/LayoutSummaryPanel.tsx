@@ -36,6 +36,12 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
         <CardDescription>
           Highest profit proxy among {candidates.length} candidates tested, subject to garden, road and density
           rules. {winner.summary.totalUnits} units, {Math.round(winner.summary.roadLengthM)}m access road.
+          {winner.region && (
+            <>
+              {" "}Priced on <span className="font-medium">{winner.region}</span> £/m² rates
+              {winner.buildSpec ? ` (${winner.buildSpec} build spec)` : ""} — not a flat national average.
+            </>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
