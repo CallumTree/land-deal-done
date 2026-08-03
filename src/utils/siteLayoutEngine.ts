@@ -25,6 +25,8 @@ import {
   garageWidthFor,
   getUnitEconomics,
 } from "@/utils/houseTypeLibrary";
+import { XY, toLocalXY, toLngLat, rotatePoint, pointInPolygon } from "@/utils/geo";
+import { FrontageInfo } from "@/utils/roadNetwork";
 
 export type ContextPreset = "rural" | "suburban" | "urban";
 export type MixType = "semis" | "mixed" | "terrace" | "bungalow";
@@ -124,28 +126,6 @@ export const MIX_SEQUENCES: Record<MixType, MixSequenceItem[]> = {
   ],
 };
 
-type XY = [number, number];
-
-const M_PER_DEG_LAT = 110540;
-
-function toLocalXY([lng, lat]: XY, origin: XY): XY {
-  const latRad = (origin[1] * Math.PI) / 180;
-  const mPerDegLng = 111320 * Math.cos(latRad);
-  return [(lng - origin[0]) * mPerDegLng, (lat - origin[1]) * M_PER_DEG_LAT];
-}
-
-function toLngLat([x, y]: XY, origin: XY): XY {
-  const latRad = (origin[1] * Math.PI) / 180;
-  const mPerDegLng = 111320 * Math.cos(latRad);
-  return [origin[0] + x / mPerDegLng, origin[1] + y / M_PER_DEG_LAT];
-}
-
-function rotatePoint([x, y]: XY, angleRad: number): XY {
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-  return [x * cos - y * sin, x * sin + y * cos];
-}
-
 function crossProduct(o: XY, a: XY, b: XY): number {
   return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 }
@@ -202,17 +182,6 @@ function minAreaOrientation(hull: XY[]): number {
   }
 
   return bestAngle;
-}
-
-function pointInPolygon([x, y]: XY, ring: XY[]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
 }
 
 function shoelaceArea(points: XY[]): number {
@@ -337,14 +306,43 @@ function layoutRow(
   return plots;
 }
 
+const HIGHWAY_TYPE_LABELS: Record<string, string> = {
+  primary: "A-road",
+  secondary: "B-road",
+  tertiary: "local distributor road",
+  unclassified: "unclassified road",
+  residential: "residential street",
+  living_street: "living street",
+  service: "service road",
+};
+
 function buildComplianceChecks(
   plots: PlacedPlot[],
   rules: PlanningRules,
   densityBand: DensityBand,
   context: ContextPreset,
-  achievedDensity: number
+  achievedDensity: number,
+  entrance?: FrontageInfo | null
 ): ComplianceCheck[] {
   const checks: ComplianceCheck[] = [];
+
+  checks.push(
+    entrance
+      ? {
+          id: "highway-access",
+          label: "Connects to an existing public highway",
+          pass: true,
+          detail: `Access road joins ${entrance.roadName ? `"${entrance.roadName}"` : "the adjacent highway"} (${
+            HIGHWAY_TYPE_LABELS[entrance.highwayType] ?? entrance.highwayType
+          }, ${entrance.distanceToRoadM.toFixed(0)}m from the boundary) at a single point, set back for a visibility splay.`,
+        }
+      : {
+          id: "highway-access",
+          label: "Connects to an existing public highway",
+          pass: false,
+          detail: "No adjacent public highway could be verified from mapping data — this layout's road position is geometry-only and does not represent a confirmed site access.",
+        }
+  );
 
   const minGardenDepth = plots.length ? Math.min(...plots.map((p) => p.gardenDepthM)) : rules.minGardenDepthM;
   checks.push({
@@ -392,6 +390,13 @@ function buildComplianceChecks(
   return checks;
 }
 
+// Visibility splay / sightline clearance at the mouth of a new junction —
+// no plot should sit right at the point where the estate road meets the
+// existing highway.
+const JUNCTION_CLEARANCE_M = 12;
+
+export type RoadTopology = "straight-in" | "parallel" | "geometric";
+
 function buildLayout(
   polyLocal: XY[],
   origin: XY,
@@ -400,7 +405,9 @@ function buildLayout(
   context: ContextPreset,
   grossAreaM2: number,
   region: string | undefined,
-  buildSpec: BuildSpec
+  buildSpec: BuildSpec,
+  entrance: FrontageInfo | null,
+  topology: RoadTopology
 ): LayoutResult {
   const rules = PLANNING_RULES[context];
   const densityBand = CONTEXT_DENSITY[context];
@@ -414,23 +421,67 @@ function buildLayout(
   const maxY = Math.max(...ys);
 
   const halfCorridor = rules.roadCarriagewayWidthM / 2 + rules.roadVergeWidthM;
-  const roadY = (minY + maxY) / 2;
+
+  let roadY = (minY + maxY) / 2;
+  let rowXMin = minX;
+  let rowXMax = maxX;
+  const roadPolygons: RingGeoJSON[] = [];
+
+  if (entrance && topology === "straight-in") {
+    // Road runs perpendicular to the frontage, straight into the site from
+    // the real entry point — its cross-position follows where the entrance
+    // actually sits (clamped to stay inside the boundary) rather than
+    // always sitting dead-centre. Plots are kept clear of the junction
+    // mouth on whichever end the entrance falls on.
+    const entryRot = rotatePoint(entrance.entryPointLocal, -angleRad);
+    const margin = halfCorridor + 3;
+    if (maxY - minY > 2 * margin) {
+      roadY = Math.min(Math.max(entryRot[1], minY + margin), maxY - margin);
+    }
+    const distToMin = entryRot[0] - minX;
+    const distToMax = maxX - entryRot[0];
+    if (distToMin <= distToMax) {
+      rowXMin = minX + JUNCTION_CLEARANCE_M;
+    } else {
+      rowXMax = maxX - JUNCTION_CLEARANCE_M;
+    }
+    if (maxX > minX) {
+      roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
+    }
+  } else if (entrance && topology === "parallel") {
+    // Road runs parallel to the frontage (better for a wide/shallow site,
+    // where a single straight-in spine would leave most of the width
+    // unserved), fed by a short perpendicular stub from the real entry
+    // point — so the estate road still genuinely joins the highway at one
+    // point rather than floating alongside it with no connection.
+    roadY = (minY + maxY) / 2;
+    const entryRot = rotatePoint(entrance.entryPointLocal, -angleRad);
+    const yFrontage = Math.abs(entryRot[1] - minY) <= Math.abs(entryRot[1] - maxY) ? minY : maxY;
+    const spineNearEdge = yFrontage < roadY ? roadY - halfCorridor : roadY + halfCorridor;
+    const stubY0 = Math.min(yFrontage, spineNearEdge);
+    const stubY1 = Math.max(yFrontage, spineNearEdge);
+    const stubX0 = entryRot[0] - halfCorridor;
+    const stubX1 = entryRot[0] + halfCorridor;
+    if (maxX > minX) {
+      roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
+    }
+    if (stubY1 > stubY0) {
+      roadPolygons.push(rotatedRectToFeature(stubX0, stubX1, stubY0, stubY1, angleRad, origin));
+    }
+  } else if (maxX > minX) {
+    roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
+  }
 
   const sequence = buildWeightedSequence(MIX_SEQUENCES[mixType], 400);
   const cursor = { i: 0 };
 
   let plots: PlacedPlot[] = [];
 
-  if (maxY - minY > 2 * halfCorridor + rules.frontSetbackM + rules.minGardenDepthM + 6) {
-    const northPlots = layoutRow(polyRot, roadY + halfCorridor, 1, minX, maxX, sequence, cursor, rules, angleRad, origin, "north");
-    const southPlots = layoutRow(polyRot, roadY - halfCorridor, -1, minX, maxX, sequence, cursor, rules, angleRad, origin, "south");
+  if (maxY - minY > 2 * halfCorridor + rules.frontSetbackM + rules.minGardenDepthM + 6 && rowXMax > rowXMin) {
+    const northPlots = layoutRow(polyRot, roadY + halfCorridor, 1, rowXMin, rowXMax, sequence, cursor, rules, angleRad, origin, "north");
+    const southPlots = layoutRow(polyRot, roadY - halfCorridor, -1, rowXMin, rowXMax, sequence, cursor, rules, angleRad, origin, "south");
     plots = [...northPlots, ...southPlots];
   }
-
-  const roadPolygon =
-    maxX > minX
-      ? rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin)
-      : null;
 
   const grossAreaHa = grossAreaM2 / 10000;
   const achievedDensityUprHa = grossAreaHa > 0 ? plots.length / grossAreaHa : 0;
@@ -460,22 +511,28 @@ function buildLayout(
     estimatedGDV,
     estimatedBuildCost,
     profitProxy: estimatedGDV - estimatedBuildCost,
-    compliance: buildComplianceChecks(plots, rules, densityBand, context, achievedDensityUprHa),
+    compliance: buildComplianceChecks(plots, rules, densityBand, context, achievedDensityUprHa, entrance),
   };
 
   const orientationDeg = ((angleRad * 180) / Math.PI + 360) % 360;
+  const topologyLabel = topology === "straight-in" ? "straight-in" : topology === "parallel" ? "parallel" : undefined;
+  const label = entrance
+    ? `${MIX_LABELS[mixType]} • from ${entrance.roadName ?? "adjacent highway"} (${topologyLabel})`
+    : `${MIX_LABELS[mixType]} • ${Math.round(orientationDeg)}° orientation`;
 
   return {
-    id: `${mixType}-${Math.round(orientationDeg)}`,
-    label: `${MIX_LABELS[mixType]} • ${Math.round(orientationDeg)}° orientation`,
+    id: entrance ? `${mixType}-${topology}` : `${mixType}-${Math.round(orientationDeg)}`,
+    label,
     mixType,
     orientationDeg,
     plots,
-    roadPolygon,
+    roadPolygons,
     summary,
     isWinner: false,
     region,
     buildSpec,
+    entrancePoint: entrance ? toLngLat(entrance.entryPointLocal, origin) : null,
+    accessRoadName: entrance?.roadName,
   };
 }
 
@@ -485,11 +542,28 @@ function buildLayout(
  * the density band for the given context, along with all candidates
  * considered (for transparency).
  */
+/**
+ * The local-plane origin (ring centroid) used for all of this module's
+ * geometry. Exposed so callers can project other data (e.g. nearby roads
+ * for frontage detection) into the exact same coordinate frame before the
+ * engine runs.
+ */
+export function computeOrigin(polygonFeature: GeoJSON.Feature<GeoJSON.Polygon>): XY | null {
+  const ring = polygonFeature?.geometry?.coordinates?.[0] as XY[] | undefined;
+  if (!ring || ring.length < 4) return null;
+  const openRing = ring.slice(0, -1);
+  return [
+    openRing.reduce((s, p) => s + p[0], 0) / openRing.length,
+    openRing.reduce((s, p) => s + p[1], 0) / openRing.length,
+  ];
+}
+
 export function generateSiteLayoutCandidates(
   polygonFeature: GeoJSON.Feature<GeoJSON.Polygon>,
   context: ContextPreset,
   region?: string,
-  buildSpec: BuildSpec = "medium"
+  buildSpec: BuildSpec = "medium",
+  frontage?: FrontageInfo | null
 ): LayoutGenerationOutput {
   const ring = polygonFeature?.geometry?.coordinates?.[0];
   if (!ring || ring.length < 4) {
@@ -498,11 +572,7 @@ export function generateSiteLayoutCandidates(
 
   const closedRing = ring as XY[];
   const openRing = closedRing.slice(0, -1);
-
-  const origin: XY = [
-    openRing.reduce((s, p) => s + p[0], 0) / openRing.length,
-    openRing.reduce((s, p) => s + p[1], 0) / openRing.length,
-  ];
+  const origin = computeOrigin(polygonFeature)!;
 
   const polyLocal = openRing.map((p) => toLocalXY(p, origin));
   const grossAreaM2 = shoelaceArea(polyLocal);
@@ -511,15 +581,34 @@ export function generateSiteLayoutCandidates(
     return { winner: null, candidates: [], warning: "Boundary is too small to generate a layout — draw a larger site." };
   }
 
-  const hull = convexHull(polyLocal);
-  const baseAngle = minAreaOrientation(hull);
-  const candidateAngles = [baseAngle, baseAngle + Math.PI / 2];
   const mixTypes: MixType[] = ["semis", "mixed", "terrace", "bungalow"];
-
   const candidates: LayoutResult[] = [];
-  for (const angle of candidateAngles) {
+
+  if (frontage) {
+    // A genuine highway was detected: the access road has to actually join
+    // it, so orientation is no longer a free geometric variable. Two real
+    // topologies are compared — a spine running straight in from the entry
+    // point (best for a narrow-frontage, deep site) and a spine parallel to
+    // the frontage fed by a short entrance stub (best for a wide, shallow
+    // site, where a single straight-in road would leave most of the width
+    // unserved) — each still genuinely grounded in the detected highway.
+    const straightInAngle = frontage.edgeBearingRad + Math.PI / 2;
+    const parallelAngle = frontage.edgeBearingRad;
     for (const mixType of mixTypes) {
-      candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2, region, buildSpec));
+      candidates.push(buildLayout(polyLocal, origin, straightInAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "straight-in"));
+      candidates.push(buildLayout(polyLocal, origin, parallelAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "parallel"));
+    }
+  } else {
+    // No verified adjacent highway — fall back to picking an orientation
+    // from the boundary shape alone (flagged as unverified via the
+    // highway-access compliance check on each candidate).
+    const hull = convexHull(polyLocal);
+    const baseAngle = minAreaOrientation(hull);
+    const candidateAngles = [baseAngle, baseAngle + Math.PI / 2];
+    for (const angle of candidateAngles) {
+      for (const mixType of mixTypes) {
+        candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2, region, buildSpec, null, "geometric"));
+      }
     }
   }
 
@@ -545,9 +634,12 @@ export function generateSiteLayoutCandidates(
   const winner = pool.reduce((best, c) => (c.summary.profitProxy > best.summary.profitProxy ? c : best));
   winner.isWinner = true;
 
-  return {
-    winner,
-    candidates: sorted,
-    warning: fullyCompliant.length === 0 ? "No candidate met every planning check — showing the closest compliant option." : undefined,
-  };
+  let warning: string | undefined;
+  if (!frontage) {
+    warning = "No adjacent public highway was found near this boundary — road position is geometry-only and not a confirmed access point.";
+  } else if (fullyCompliant.length === 0) {
+    warning = "No candidate met every planning check — showing the closest compliant option.";
+  }
+
+  return { winner, candidates: sorted, warning };
 }
