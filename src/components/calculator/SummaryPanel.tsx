@@ -64,15 +64,15 @@ Variance to Land: ${formatCurrency(values.variance)}
   };
 
   const costBreakdown = [
-    { label: "Build (Base)", value: values.baseBuildCost, color: "#5BC199" },
-    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "#4AA786" }] : []),
-    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "#3D8F73" }] : []),
-    { label: "Pro Fees", value: values.professionalFees, color: "#7C88CC" },
-    { label: "Marketing", value: values.marketingSales, color: "#A888CC" },
-    { label: "Contingency", value: values.contingency, color: "#6B7280" },
+    { label: "Build (Base)", value: values.baseBuildCost, color: "#3B82F6" },
+    ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "#06B6D4" }] : []),
+    ...(values.prelims > 0 ? [{ label: "Prelims", value: values.prelims, color: "#14B8A6" }] : []),
+    { label: "Pro Fees", value: values.professionalFees, color: "#6366F1" },
+    { label: "Marketing", value: values.marketingSales, color: "#8B5CF6" },
+    { label: "Contingency", value: values.contingency, color: "#64748B" },
     { label: "Finance", value: values.finance, color: "#F59E0B" },
-    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "#EA580C" }] : []),
-    { label: "S106/CIL", value: values.other, color: "#8B5CF6" },
+    ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "#F97316" }] : []),
+    { label: "S106/CIL", value: values.other, color: "#A855F7" },
     { label: "Land", value: values.landCost, color: "#EC4899" },
   ].filter(item => item.value > 0);
 
@@ -84,7 +84,7 @@ Variance to Land: ${formatCurrency(values.variance)}
 
   return (
     <div className="space-y-4">
-      <Card className={`border border-border shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] rounded-lg transition-all ${isSensitivityActive ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+      <Card className={`shadow-soft rounded-lg transition-all ${isSensitivityActive ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -133,14 +133,14 @@ Variance to Land: ${formatCurrency(values.variance)}
             <div className="border-t pt-2 mt-2">
               <div className="flex justify-between items-baseline">
                 <span className="text-sm font-medium">Net Profit</span>
-                <span className={`text-2xl font-bold ${isSuccessful ? 'text-green-600' : 'text-amber-600'}`}>
+                <span className={`text-2xl font-bold ${isSuccessful ? 'text-success' : 'text-warning'}`}>
                   {formatCurrency(values.netProfit)}
                 </span>
               </div>
               
               <div className="flex justify-between items-baseline mt-1">
                 <span className="text-sm text-muted-foreground">Profit Margin</span>
-                <span className={`text-lg font-semibold ${isSuccessful ? 'text-green-600' : 'text-amber-600'}`}>
+                <span className={`text-lg font-semibold ${isSuccessful ? 'text-success' : 'text-warning'}`}>
                   {formatPercent(values.profitMarginPercent)}
                 </span>
               </div>
@@ -168,17 +168,17 @@ Variance to Land: ${formatCurrency(values.variance)}
               </span>
             </div>
             
-            <div className={`flex items-center justify-between p-3 rounded-lg ${
-              isVariancePositive ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'
+            <div className={`flex items-center justify-between p-3 rounded-lg border ${
+              isVariancePositive ? 'bg-success/10 border-success/30' : 'bg-warning/10 border-warning/30'
             }`}>
-              <span className="text-sm font-medium">Variance to Land</span>
+              <span className="text-sm font-medium text-foreground">Variance to Land</span>
               <div className="flex items-center gap-2">
                 {isVariancePositive ? (
-                  <TrendingUp className="h-5 w-5 text-green-600" />
+                  <TrendingUp className="h-5 w-5 text-success" />
                 ) : (
-                  <TrendingDown className="h-5 w-5 text-amber-600" />
+                  <TrendingDown className="h-5 w-5 text-warning" />
                 )}
-                <span className={`text-lg font-bold ${isVariancePositive ? 'text-green-600' : 'text-amber-600'}`}>
+                <span className={`text-lg font-bold ${isVariancePositive ? 'text-success' : 'text-warning'}`}>
                   {formatCurrency(values.variance)}
                 </span>
               </div>

@@ -79,7 +79,7 @@ const MarketSensitivityPanel = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Sales Value</label>
-                    <span className={`text-sm font-semibold ${adjustments.salesValuePercent > 0 ? 'text-green-600' : adjustments.salesValuePercent < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-sm font-semibold ${adjustments.salesValuePercent > 0 ? 'text-success' : adjustments.salesValuePercent < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {adjustments.salesValuePercent > 0 ? '+' : ''}{adjustments.salesValuePercent}%
                     </span>
                   </div>
@@ -97,7 +97,7 @@ const MarketSensitivityPanel = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Build Cost</label>
-                    <span className={`text-sm font-semibold ${adjustments.buildCostPercent > 0 ? 'text-red-600' : adjustments.buildCostPercent < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-sm font-semibold ${adjustments.buildCostPercent > 0 ? 'text-destructive' : adjustments.buildCostPercent < 0 ? 'text-success' : 'text-muted-foreground'}`}>
                       {adjustments.buildCostPercent > 0 ? '+' : ''}{adjustments.buildCostPercent}%
                     </span>
                   </div>
@@ -115,7 +115,7 @@ const MarketSensitivityPanel = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Finance Rate</label>
-                    <span className={`text-sm font-semibold ${adjustments.financeRatePercent > 0 ? 'text-red-600' : adjustments.financeRatePercent < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-sm font-semibold ${adjustments.financeRatePercent > 0 ? 'text-destructive' : adjustments.financeRatePercent < 0 ? 'text-success' : 'text-muted-foreground'}`}>
                       {adjustments.financeRatePercent > 0 ? '+' : ''}{adjustments.financeRatePercent}%
                     </span>
                   </div>
@@ -133,7 +133,7 @@ const MarketSensitivityPanel = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Contingency</label>
-                    <span className={`text-sm font-semibold ${adjustments.contingencyPercent > 0 ? 'text-red-600' : adjustments.contingencyPercent < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-sm font-semibold ${adjustments.contingencyPercent > 0 ? 'text-destructive' : adjustments.contingencyPercent < 0 ? 'text-success' : 'text-muted-foreground'}`}>
                       {adjustments.contingencyPercent > 0 ? '+' : ''}{adjustments.contingencyPercent}%
                     </span>
                   </div>
@@ -151,7 +151,7 @@ const MarketSensitivityPanel = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Programme Delay</label>
-                    <span className={`text-sm font-semibold ${adjustments.programmeDelayMonths > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                    <span className={`text-sm font-semibold ${adjustments.programmeDelayMonths > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                       {adjustments.programmeDelayMonths} months
                     </span>
                   </div>

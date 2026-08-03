@@ -97,13 +97,13 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#1B1B1D] px-4">
-      <Card className="w-full max-w-md bg-[#252528] border-border/50 shadow-soft">
+    <div className="min-h-screen flex items-center justify-center bg-muted/40 px-4">
+      <Card className="w-full max-w-md shadow-medium">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center text-[#F5F5F7] font-heading">
+          <CardTitle className="text-2xl font-bold text-center">
             {isLogin ? "Welcome Back" : "Create Account"}
           </CardTitle>
-          <CardDescription className="text-center text-[#888]">
+          <CardDescription className="text-center">
             {isLogin
               ? "Sign in to access your feasibility dashboard"
               : "Get started with your free account"}
@@ -193,7 +193,7 @@ const Auth = () => {
             )}
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+              className="w-full"
               disabled={loading}
             >
               {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}

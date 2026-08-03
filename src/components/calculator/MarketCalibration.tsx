@@ -257,7 +257,7 @@ const MarketCalibration = ({ rows, onApply, onClose }: MarketCalibrationProps) =
                     <div className="font-mono font-semibold">{formatCurrency(item.adjusted.saleValuePerUnit)}</div>
                     <div className="text-xs font-semibold">£{item.adjusted.salePpm2.toFixed(0)}/m²</div>
                     {item.adjusted.warning && (
-                      <div className="flex items-center gap-1 text-yellow-600">
+                      <div className="flex items-center gap-1 text-warning">
                         <AlertCircle className="h-3 w-3" />
                         <span className="text-xs">Outside band</span>
                       </div>

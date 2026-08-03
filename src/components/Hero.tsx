@@ -10,7 +10,7 @@ const Hero = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
       
       {/* Decorative elements */}
-      <div className="absolute top-20 right-10 w-72 h-72 bg-accent/10 rounded-full blur-3xl" />
+      <div className="absolute top-20 right-10 w-72 h-72 bg-success/10 rounded-full blur-3xl" />
       <div className="absolute bottom-20 left-10 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
 
       <div className="container relative mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20">
@@ -96,7 +96,7 @@ const Hero = () => {
 
 const BenefitItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
   <div className="flex items-start gap-3 text-left">
-    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent mt-0.5">
+    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary mt-0.5">
       {icon}
     </div>
     <p className="text-foreground font-medium flex-1">{text}</p>

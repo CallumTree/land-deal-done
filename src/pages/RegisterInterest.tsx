@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -15,7 +14,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
-  MapPin,
   TrendingUp,
   FileText,
   BarChart3,
@@ -137,43 +135,35 @@ const RegisterInterest = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#1B1B1D] text-[#F5F5F7]">
+    <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1B1B1D] via-[#252528] to-[#1B1B1D] opacity-95" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMDMpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
-        
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-success/5" />
+        <div className="absolute top-20 right-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-10 w-96 h-96 bg-success/10 rounded-full blur-3xl" />
+
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Left: Content */}
             <div className="space-y-8 text-center lg:text-left">
-              <div className="inline-block px-4 py-1.5 bg-[#5BC199]/10 border border-[#5BC199]/20 rounded-full">
-                <span className="text-[#5BC199] text-sm font-medium">Early Access Available</span>
+              <div className="inline-block px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full">
+                <span className="text-primary text-sm font-medium">Early Access Available</span>
               </div>
-              
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold font-['Poppins'] leading-tight">
+
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-foreground">
                 Smarter Feasibility for UK Developers.
               </h1>
-              
-              <p className="text-xl sm:text-2xl text-[#888] font-['Inter']">
+
+              <p className="text-xl sm:text-2xl text-muted-foreground">
                 Map. Model. Value. All in one platform.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <Button
-                  onClick={scrollToForm}
-                  size="lg"
-                  className="bg-[#5BC199] hover:bg-[#4BA080] text-[#1B1B1D] font-semibold px-8 py-6 text-lg rounded-lg shadow-lg shadow-[#5BC199]/20 transition-all hover:shadow-xl hover:shadow-[#5BC199]/30"
-                >
+                <Button onClick={scrollToForm} variant="cta" size="lg" className="text-lg px-8 py-6 h-auto">
                   Join Early Access
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
-                <Button
-                  onClick={scrollToForm}
-                  variant="outline"
-                  size="lg"
-                  className="border-[#5BC199]/30 text-[#5BC199] hover:bg-[#5BC199]/10 px-8 py-6 text-lg rounded-lg"
-                >
+                <Button onClick={scrollToForm} variant="outline" size="lg" className="text-lg px-8 py-6 h-auto">
                   Learn More
                   <ChevronDown className="ml-2 h-5 w-5" />
                 </Button>
@@ -181,12 +171,12 @@ const RegisterInterest = () => {
             </div>
 
             {/* Right: Screenshot */}
-            <div className="relative">
-              <div className="absolute -inset-4 bg-gradient-to-r from-[#5BC199]/20 to-[#5BC199]/5 rounded-3xl blur-2xl" />
+            <div className="relative hidden lg:block">
+              <div className="absolute -inset-4 bg-gradient-to-r from-primary/10 to-success/5 rounded-3xl blur-2xl" />
               <img
                 src={heroImage}
                 alt="BuildFlow Platform Screenshot"
-                className="relative rounded-2xl shadow-2xl border border-[#5BC199]/10 w-full hover:scale-[1.02] transition-transform duration-500"
+                className="relative rounded-2xl shadow-large border w-full hover:scale-[1.02] transition-transform duration-500"
               />
             </div>
           </div>
@@ -194,7 +184,7 @@ const RegisterInterest = () => {
 
         {/* Scroll indicator */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-          <ChevronDown className="h-6 w-6 text-[#888]" />
+          <ChevronDown className="h-6 w-6 text-muted-foreground" />
         </div>
       </section>
 
@@ -202,74 +192,64 @@ const RegisterInterest = () => {
       <section className="py-20 lg:py-32 relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
               Stop Struggling with Spreadsheets
             </h2>
-            <p className="text-lg text-[#888] max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               BuildFlow transforms how developers assess site viability
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
             {/* Before */}
-            <Card className="bg-[#252528]/50 border-[#333]/50 backdrop-blur-sm">
+            <Card>
               <CardContent className="p-8 space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                    <Target className="h-6 w-6 text-red-400" />
+                  <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <Target className="h-6 w-6 text-destructive" />
                   </div>
-                  <h3 className="text-2xl font-bold font-['Poppins']">Before BuildFlow</h3>
+                  <h3 className="text-2xl font-bold text-foreground">Before BuildFlow</h3>
                 </div>
-                
+
                 <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <div className="mt-1.5 w-2 h-2 rounded-full bg-red-400/50 flex-shrink-0" />
-                    <p className="text-[#888]">Disjointed spreadsheets across multiple files</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="mt-1.5 w-2 h-2 rounded-full bg-red-400/50 flex-shrink-0" />
-                    <p className="text-[#888]">No consistent build cost data</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="mt-1.5 w-2 h-2 rounded-full bg-red-400/50 flex-shrink-0" />
-                    <p className="text-[#888]">Lender rejections over missing feasibility detail</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="mt-1.5 w-2 h-2 rounded-full bg-red-400/50 flex-shrink-0" />
-                    <p className="text-[#888]">Hours spent formatting reports manually</p>
-                  </div>
+                  {[
+                    "Disjointed spreadsheets across multiple files",
+                    "No consistent build cost data",
+                    "Lender rejections over missing feasibility detail",
+                    "Hours spent formatting reports manually",
+                  ].map((point) => (
+                    <div className="flex gap-3" key={point}>
+                      <div className="mt-1.5 w-2 h-2 rounded-full bg-destructive/50 flex-shrink-0" />
+                      <p className="text-muted-foreground">{point}</p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
 
             {/* After */}
-            <Card className="bg-gradient-to-br from-[#5BC199]/10 to-[#5BC199]/5 border-[#5BC199]/30 backdrop-blur-sm relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#5BC199]/20 rounded-full blur-3xl" />
+            <Card className="bg-gradient-to-br from-primary/[0.06] to-success/[0.06] border-primary/20 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
               <CardContent className="p-8 space-y-6 relative">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-[#5BC199]/20 flex items-center justify-center">
-                    <CheckCircle2 className="h-6 w-6 text-[#5BC199]" />
+                  <div className="w-12 h-12 rounded-full bg-success/15 flex items-center justify-center">
+                    <CheckCircle2 className="h-6 w-6 text-success" />
                   </div>
-                  <h3 className="text-2xl font-bold font-['Poppins']">After BuildFlow</h3>
+                  <h3 className="text-2xl font-bold text-foreground">After BuildFlow</h3>
                 </div>
-                
+
                 <div className="space-y-4">
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#5BC199] flex-shrink-0" />
-                    <p className="text-[#F5F5F7]">Draw sites and calculate GDVs instantly</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#5BC199] flex-shrink-0" />
-                    <p className="text-[#F5F5F7]">Live regional cost & sales data</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#5BC199] flex-shrink-0" />
-                    <p className="text-[#F5F5F7]">Export lender-ready summaries in seconds</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-[#5BC199] flex-shrink-0" />
-                    <p className="text-[#F5F5F7]">Professional reports with one click</p>
-                  </div>
+                  {[
+                    "Draw sites and calculate GDVs instantly",
+                    "Live regional cost & sales data",
+                    "Export lender-ready summaries in seconds",
+                    "Professional reports with one click",
+                  ].map((point) => (
+                    <div className="flex gap-3" key={point}>
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 text-success flex-shrink-0" />
+                      <p className="text-foreground">{point}</p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -278,13 +258,13 @@ const RegisterInterest = () => {
       </section>
 
       {/* Feature Highlights */}
-      <section className="py-20 lg:py-32 bg-[#252528]/30">
+      <section className="py-20 lg:py-32 bg-muted/40">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
               Everything You Need in One Platform
             </h2>
-            <p className="text-lg text-[#888] max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Purpose-built for UK property professionals
             </p>
           </div>
@@ -292,36 +272,36 @@ const RegisterInterest = () => {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               {
-                icon: <Zap className="h-7 w-7" />,
+                icon: <Zap className="h-6 w-6" />,
                 title: "AI-backed Feasibility",
                 description: "Automatically generate site viability from drawn polygons.",
               },
               {
-                icon: <FileText className="h-7 w-7" />,
+                icon: <FileText className="h-6 w-6" />,
                 title: "Lender Pack Export",
                 description: "Create investor-ready reports with one click.",
               },
               {
-                icon: <TrendingUp className="h-7 w-7" />,
+                icon: <TrendingUp className="h-6 w-6" />,
                 title: "Planning Uplift Insight",
                 description: "Instantly see the value created by planning consent.",
               },
               {
-                icon: <BarChart3 className="h-7 w-7" />,
+                icon: <BarChart3 className="h-6 w-6" />,
                 title: "Regional Data Indexing",
                 description: "Build and sales values tied to live market data.",
               },
-            ].map((feature, index) => (
+            ].map((feature) => (
               <Card
-                key={index}
-                className="bg-[#252528]/50 border-[#5BC199]/20 hover:border-[#5BC199]/50 transition-all duration-300 hover:shadow-lg hover:shadow-[#5BC199]/10 group"
+                key={feature.title}
+                className="hover:border-primary/30 hover:shadow-medium transition-all duration-300 group"
               >
                 <CardContent className="p-6 space-y-4">
-                  <div className="w-14 h-14 rounded-xl bg-[#5BC199]/10 flex items-center justify-center text-[#5BC199] group-hover:bg-[#5BC199]/20 transition-colors">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary/15 transition-colors">
                     {feature.icon}
                   </div>
-                  <h3 className="text-xl font-semibold font-['Poppins']">{feature.title}</h3>
-                  <p className="text-[#888] text-sm leading-relaxed">{feature.description}</p>
+                  <h3 className="text-lg font-semibold text-foreground">{feature.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
             ))}
@@ -333,10 +313,10 @@ const RegisterInterest = () => {
       <section className="py-20 lg:py-32">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
               Built to Scale with You
             </h2>
-            <p className="text-lg text-[#888] max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Start simple. Grow with BuildFlow as your projects and team scale.
             </p>
           </div>
@@ -347,31 +327,28 @@ const RegisterInterest = () => {
                 phase: "MVP (Now)",
                 status: "Live",
                 features: ["Feasibility Calculator", "GDV Calculator", "Lender Pack Export"],
-                color: "bg-[#5BC199]",
+                color: "bg-primary",
               },
               {
                 phase: "v1.1 (Soon)",
                 status: "In Progress",
                 features: ["Regional cost indexing", "Planning data integration", "Enhanced analytics"],
-                color: "bg-blue-500",
+                color: "bg-info",
               },
               {
                 phase: "v1.2 (Q2 2025)",
                 status: "Planned",
                 features: ["AI Assistant for feasibility Q&A", "Document intelligence", "Automated comparables"],
-                color: "bg-purple-500",
+                color: "bg-[hsl(262_83%_58%)]",
               },
               {
                 phase: "v1.3 (Q3 2025)",
                 status: "Planned",
                 features: ["Team dashboards", "Project sharing", "Multi-user collaboration"],
-                color: "bg-orange-500",
+                color: "bg-warning",
               },
-            ].map((item, index) => (
-              <Card
-                key={index}
-                className="bg-[#252528]/50 border-[#333]/50 hover:border-[#5BC199]/30 transition-all duration-300"
-              >
+            ].map((item) => (
+              <Card key={item.phase} className="hover:border-primary/30 transition-all duration-300">
                 <CardContent className="p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                     <div className="flex items-center gap-4">
@@ -379,16 +356,16 @@ const RegisterInterest = () => {
                         <Calendar className="h-5 w-5 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-semibold font-['Poppins']">{item.phase}</h3>
-                        <span className="text-sm text-[#888]">{item.status}</span>
+                        <h3 className="text-lg font-semibold text-foreground">{item.phase}</h3>
+                        <span className="text-sm text-muted-foreground">{item.status}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 ml-14">
-                    {item.features.map((feature, i) => (
+                  <div className="flex flex-wrap gap-2 sm:ml-14">
+                    {item.features.map((feature) => (
                       <span
-                        key={i}
-                        className="px-3 py-1 bg-[#1B1B1D] border border-[#333] rounded-full text-sm text-[#888]"
+                        key={feature}
+                        className="px-3 py-1 bg-muted border rounded-full text-sm text-muted-foreground"
                       >
                         {feature}
                       </span>
@@ -402,13 +379,13 @@ const RegisterInterest = () => {
       </section>
 
       {/* Visual Gallery */}
-      <section className="py-20 lg:py-32 bg-[#252528]/30">
+      <section className="py-20 lg:py-32 bg-muted/40">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
               See BuildFlow in Action
             </h2>
-            <p className="text-lg text-[#888]">
+            <p className="text-lg text-muted-foreground">
               Real screenshots from the platform
             </p>
           </div>
@@ -427,10 +404,10 @@ const RegisterInterest = () => {
                 title: "Lender Summary Pack",
                 description: "Professional reports ready for investor presentations",
               },
-            ].map((item, index) => (
-              <div key={index} className="group space-y-4">
-                <div className="relative overflow-hidden rounded-xl border border-[#5BC199]/20 hover:border-[#5BC199]/50 transition-all duration-300">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#5BC199]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            ].map((item) => (
+              <div key={item.title} className="group space-y-4">
+                <div className="relative overflow-hidden rounded-xl border hover:border-primary/40 transition-all duration-300">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <img
                     src={heroImage}
                     alt={item.title}
@@ -438,8 +415,8 @@ const RegisterInterest = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-lg font-semibold font-['Poppins']">{item.title}</h3>
-                  <p className="text-sm text-[#888]">{item.description}</p>
+                  <h3 className="text-lg font-semibold text-foreground">{item.title}</h3>
+                  <p className="text-sm text-muted-foreground">{item.description}</p>
                 </div>
               </div>
             ))}
@@ -451,92 +428,77 @@ const RegisterInterest = () => {
       <section id="register-form" className="py-20 lg:py-32">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-2xl">
           <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins'] mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
               Get Instant Access
             </h2>
-            <p className="text-lg text-[#888]">
+            <p className="text-lg text-muted-foreground">
               Create your free account and start running feasibility checks immediately.
             </p>
           </div>
 
           {isSubmitted ? (
-            <Card className="bg-gradient-to-br from-[#5BC199]/10 to-[#5BC199]/5 border-[#5BC199]/30">
+            <Card className="bg-gradient-to-br from-primary/[0.06] to-success/[0.06] border-primary/20">
               <CardContent className="p-12 text-center space-y-6">
-                <div className="w-16 h-16 mx-auto rounded-full bg-[#5BC199]/20 flex items-center justify-center">
-                  <CheckCircle2 className="h-8 w-8 text-[#5BC199]" />
+                <div className="w-16 h-16 mx-auto rounded-full bg-success/15 flex items-center justify-center">
+                  <CheckCircle2 className="h-8 w-8 text-success" />
                 </div>
-                <h3 className="text-2xl font-bold font-['Poppins']">Account Created!</h3>
-                <p className="text-[#888]">
+                <h3 className="text-2xl font-bold text-foreground">Account Created!</h3>
+                <p className="text-muted-foreground">
                   Redirecting you to your dashboard...
                 </p>
-                <Button
-                  onClick={() => navigate("/")}
-                  variant="outline"
-                  className="border-[#5BC199]/30 text-[#5BC199] hover:bg-[#5BC199]/10"
-                >
+                <Button onClick={() => navigate("/")} variant="outline">
                   Return Home
                 </Button>
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-[#252528]/50 border-[#333]/50 backdrop-blur-sm">
+            <Card>
               <CardContent className="p-8">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="text-[#F5F5F7]">
-                      Name *
-                    </Label>
+                    <Label htmlFor="name">Name *</Label>
                     <Input
                       id="name"
                       type="text"
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="bg-[#1B1B1D] border-[#333] focus:border-[#5BC199] text-[#F5F5F7]"
                       placeholder="Your full name"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-[#F5F5F7]">
-                      Email *
-                    </Label>
+                    <Label htmlFor="email">Email *</Label>
                     <Input
                       id="email"
                       type="email"
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-[#1B1B1D] border-[#333] focus:border-[#5BC199] text-[#F5F5F7]"
                       placeholder="your.email@example.com"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="password" className="text-[#F5F5F7]">
-                      Password *
-                    </Label>
+                    <Label htmlFor="password">Password *</Label>
                     <Input
                       id="password"
                       type="password"
                       required
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="bg-[#1B1B1D] border-[#333] focus:border-[#5BC199] text-[#F5F5F7]"
                       placeholder="Minimum 6 characters"
                       minLength={6}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="companyType" className="text-[#F5F5F7]">
-                      Company / Role
-                    </Label>
+                    <Label htmlFor="companyType">Company / Role</Label>
                     <Select
                       value={formData.companyType}
                       onValueChange={(value) => setFormData({ ...formData, companyType: value })}
                     >
-                      <SelectTrigger className="bg-[#1B1B1D] border-[#333] text-[#F5F5F7]">
+                      <SelectTrigger id="companyType">
                         <SelectValue placeholder="Select your role" />
                       </SelectTrigger>
                       <SelectContent>
@@ -551,14 +513,12 @@ const RegisterInterest = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="region" className="text-[#F5F5F7]">
-                      Region of Interest
-                    </Label>
+                    <Label htmlFor="region">Region of Interest</Label>
                     <Select
                       value={formData.region}
                       onValueChange={(value) => setFormData({ ...formData, region: value })}
                     >
-                      <SelectTrigger className="bg-[#1B1B1D] border-[#333] text-[#F5F5F7]">
+                      <SelectTrigger id="region">
                         <SelectValue placeholder="Select your region" />
                       </SelectTrigger>
                       <SelectContent>
@@ -574,11 +534,7 @@ const RegisterInterest = () => {
                     </Select>
                   </div>
 
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-[#5BC199] hover:bg-[#4BA080] text-[#1B1B1D] font-semibold py-6 text-lg rounded-lg shadow-lg shadow-[#5BC199]/20 hover:shadow-xl hover:shadow-[#5BC199]/30 transition-all"
-                  >
+                  <Button type="submit" variant="cta" disabled={isSubmitting} className="w-full py-6 h-auto text-lg">
                     {isSubmitting ? "Creating Account..." : "Create Free Account"}
                   </Button>
                 </form>
@@ -589,16 +545,12 @@ const RegisterInterest = () => {
       </section>
 
       {/* Closing Section */}
-      <section className="py-20 bg-gradient-to-b from-[#1B1B1D] to-[#252528]">
+      <section className="py-20 bg-slate-900">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl text-center space-y-8">
-          <h2 className="text-3xl sm:text-4xl font-bold font-['Poppins']">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white">
             Join hundreds of developers, contractors, and land sourcers preparing for smarter feasibility.
           </h2>
-          <Button
-            onClick={scrollToForm}
-            size="lg"
-            className="bg-[#5BC199] hover:bg-[#4BA080] text-[#1B1B1D] font-semibold px-8 py-6 text-lg rounded-lg shadow-lg shadow-[#5BC199]/20 hover:shadow-xl hover:shadow-[#5BC199]/30"
-          >
+          <Button onClick={scrollToForm} variant="cta" size="lg" className="text-lg px-8 py-6 h-auto">
             Get Started Free
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
@@ -606,15 +558,15 @@ const RegisterInterest = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 border-t border-[#333]">
+      <footer className="py-12 border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[#888] text-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-muted-foreground text-sm">
             <p>BuildFlow © 2025 — Data-driven feasibility tools for UK property professionals.</p>
             <div className="flex gap-6">
-              <button onClick={() => navigate("/")} className="hover:text-[#5BC199] transition-colors">
+              <button onClick={() => navigate("/")} className="hover:text-primary transition-colors">
                 Home
               </button>
-              <button onClick={scrollToForm} className="hover:text-[#5BC199] transition-colors">
+              <button onClick={scrollToForm} className="hover:text-primary transition-colors">
                 Register
               </button>
             </div>

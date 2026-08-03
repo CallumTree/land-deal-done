@@ -270,7 +270,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
           {/* Right: Summary Sidebar (Sticky) */}
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-4 space-y-4">
-              <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
+              <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">3</span>
                 Live Summary
               </h3>
@@ -299,7 +299,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
 
         {/* Market Sensitivity (Collapsed by default) */}
         <div className="mb-4">
-          <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2" style={{ fontFamily: 'Poppins, sans-serif' }}>
+          <h3 className="text-[15px] font-semibold mb-3 flex items-center gap-2">
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-sm font-bold">4</span>
             Scenario Testing (Optional)
           </h3>

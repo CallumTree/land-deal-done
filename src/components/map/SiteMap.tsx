@@ -267,8 +267,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
   const getPolygonOptions = () => {
     const isSatellite = basemap === 'satellite';
     return {
-      color: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
-      fillColor: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
+      color: isSatellite ? '#FFFF00' : 'hsl(221, 83%, 53%)',
+      fillColor: isSatellite ? '#FFFF00' : 'hsl(221, 83%, 53%)',
       fillOpacity: fillOpacity,
       weight: isSatellite ? 4 : 3,
     };

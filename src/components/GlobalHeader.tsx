@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Home, ChevronDown, LayoutDashboard, MessageSquare, User, Command } from "lucide-react";
 import { SaveStatusIndicator } from "@/components/SaveStatusIndicator";
 import { ProjectControls } from "@/components/ProjectControls";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -146,13 +147,16 @@ const GlobalHeader = ({
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Left: Logo */}
-            <Link 
-              to="/dashboard" 
-              className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              <div className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                BuildFlow
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-display text-sm font-bold">
+                B
               </div>
+              <span className="font-display text-lg font-bold text-foreground">
+                BuildFlow
+              </span>
             </Link>
 
             {/* Center: Breadcrumb */}
@@ -261,6 +265,8 @@ const GlobalHeader = ({
                 <MessageSquare className="h-4 w-4" />
                 Ask AI
               </Button>
+
+              <ThemeToggle />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

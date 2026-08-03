@@ -46,7 +46,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
       </CardHeader>
       <CardContent className="space-y-6">
         {warning && (
-          <div className="text-sm text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
+          <div className="text-sm text-warning bg-warning/10 border border-warning/30 rounded-md px-3 py-2">
             {warning}
           </div>
         )}
@@ -75,7 +75,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
             {winner.summary.compliance.map((check) => (
               <div key={check.id} className="flex items-start gap-2 text-sm">
                 {check.pass ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
                 ) : (
                   <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                 )}
@@ -119,7 +119,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
                       <TableCell className="text-right">{formatCurrency(c.summary.profitProxy)}</TableCell>
                       <TableCell className="text-right">
                         {allCompliant ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-600 inline" />
+                          <CheckCircle2 className="h-4 w-4 text-success inline" />
                         ) : (
                           <XCircle className="h-4 w-4 text-destructive inline" />
                         )}
