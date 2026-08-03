@@ -161,11 +161,11 @@ const LenderSummaryPack = ({
               </Card>
               <Card className="p-4">
                 <p className="text-sm text-muted-foreground">Net Profit</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(values.netProfit)}</p>
+                <p className="text-2xl font-bold text-success">{formatCurrency(values.netProfit)}</p>
               </Card>
               <Card className="p-4">
                 <p className="text-sm text-muted-foreground">Profit Margin</p>
-                <p className="text-2xl font-bold text-green-600">{formatPercent(values.profitMarginPercent)}</p>
+                <p className="text-2xl font-bold text-success">{formatPercent(values.profitMarginPercent)}</p>
               </Card>
               <Card className="p-4">
                 <p className="text-sm text-muted-foreground">Site Area</p>
@@ -244,7 +244,7 @@ const LenderSummaryPack = ({
               <div className="relative h-12 bg-muted rounded-lg overflow-hidden">
                 {(() => {
                   let offset = 0;
-                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-yellow-500', 'bg-orange-500', 'bg-red-500', 'bg-gray-500', 'bg-slate-500'];
+                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-warning', 'bg-orange-500', 'bg-destructive', 'bg-gray-500', 'bg-slate-500'];
                   return costBreakdown.map((item, idx) => {
                     const width = (item.value / values.totalGDV) * 100;
                     const element = (
@@ -260,9 +260,9 @@ const LenderSummaryPack = ({
                   });
                 })()}
               </div>
-              <div className="mt-2 relative h-8 bg-green-100 rounded-lg overflow-hidden border-2 border-green-600">
+              <div className="mt-2 relative h-8 bg-success/15 rounded-lg overflow-hidden border-2 border-success">
                 <div
-                  className="absolute h-full bg-green-600"
+                  className="absolute h-full bg-success"
                   style={{ width: `${(values.netProfit / values.totalGDV) * 100}%` }}
                 >
                   <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
@@ -310,7 +310,7 @@ const LenderSummaryPack = ({
               </Card>
               <Card className="p-4">
                 <p className="text-sm text-muted-foreground mb-1">Land Variance</p>
-                <p className={`text-2xl font-bold ${values.variance >= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                <p className={`text-2xl font-bold ${values.variance >= 0 ? 'text-success' : 'text-warning'}`}>
                   {formatCurrency(values.variance)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">RLV vs Purchase Price</p>
@@ -335,27 +335,27 @@ const LenderSummaryPack = ({
                 </tr>
                 <tr className="border-b">
                   <td className="p-2">Optimistic</td>
-                  <td className="text-right p-2 text-green-600">+10%</td>
-                  <td className="text-right p-2 text-green-600">-5%</td>
-                  <td className="text-right p-2 font-semibold text-green-600">{formatPercent(calculateSensitivity(10, -5))}</td>
+                  <td className="text-right p-2 text-success">+10%</td>
+                  <td className="text-right p-2 text-success">-5%</td>
+                  <td className="text-right p-2 font-semibold text-success">{formatPercent(calculateSensitivity(10, -5))}</td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-2">Moderate Upside</td>
-                  <td className="text-right p-2 text-green-600">+5%</td>
+                  <td className="text-right p-2 text-success">+5%</td>
                   <td className="text-right p-2">0%</td>
-                  <td className="text-right p-2 font-semibold text-green-600">{formatPercent(calculateSensitivity(5, 0))}</td>
+                  <td className="text-right p-2 font-semibold text-success">{formatPercent(calculateSensitivity(5, 0))}</td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-2">Moderate Downside</td>
-                  <td className="text-right p-2 text-amber-600">-5%</td>
-                  <td className="text-right p-2 text-amber-600">+5%</td>
-                  <td className="text-right p-2 font-semibold text-amber-600">{formatPercent(calculateSensitivity(-5, 5))}</td>
+                  <td className="text-right p-2 text-warning">-5%</td>
+                  <td className="text-right p-2 text-warning">+5%</td>
+                  <td className="text-right p-2 font-semibold text-warning">{formatPercent(calculateSensitivity(-5, 5))}</td>
                 </tr>
                 <tr className="border-b">
                   <td className="p-2">Pessimistic</td>
-                  <td className="text-right p-2 text-red-600">-10%</td>
-                  <td className="text-right p-2 text-red-600">+10%</td>
-                  <td className="text-right p-2 font-semibold text-red-600">{formatPercent(calculateSensitivity(-10, 10))}</td>
+                  <td className="text-right p-2 text-destructive">-10%</td>
+                  <td className="text-right p-2 text-destructive">+10%</td>
+                  <td className="text-right p-2 font-semibold text-destructive">{formatPercent(calculateSensitivity(-10, 10))}</td>
                 </tr>
               </tbody>
             </table>

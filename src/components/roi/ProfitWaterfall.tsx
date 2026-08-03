@@ -14,9 +14,12 @@ interface ProfitWaterfallProps {
 export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProps) {
   const [showPercentOfCost, setShowPercentOfCost] = useState(false);
 
+  // Colors are kept in lockstep with the cost-breakdown donut in the GDV
+  // Calculator (SummaryPanel) so the same category reads as the same color
+  // across both tabs.
   const waterfallData = [
-    { name: "GDV", value: values.totalGDV, isPositive: true, color: "hsl(var(--chart-1))" },
-    { name: "Build (Base)", value: -values.baseBuildCost, isNegative: true, color: "hsl(var(--chart-2))" },
+    { name: "GDV", value: values.totalGDV, isPositive: true, color: "hsl(var(--foreground))" },
+    { name: "Build (Base)", value: -values.baseBuildCost, isNegative: true, color: "#3B82F6" },
   ];
 
   if (values.externals > 0) {
@@ -24,7 +27,7 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
       name: "Externals",
       value: -values.externals,
       isNegative: true,
-      color: "hsl(var(--chart-2)) / 0.8",
+      color: "#06B6D4",
     });
   }
 
@@ -33,15 +36,15 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
       name: "Prelims",
       value: -values.prelims,
       isNegative: true,
-      color: "hsl(var(--chart-2)) / 0.6",
+      color: "#14B8A6",
     });
   }
 
   waterfallData.push(
-    { name: "Professional Fees", value: -values.professionalFees, isNegative: true, color: "hsl(var(--chart-3))" },
-    { name: "Marketing & Sales", value: -values.marketingSales, isNegative: true, color: "hsl(var(--chart-4))" },
-    { name: "Contingency", value: -values.contingency, isNegative: true, color: "hsl(var(--chart-5))" },
-    { name: "Finance", value: -values.finance, isNegative: true, color: "hsl(var(--destructive))" }
+    { name: "Professional Fees", value: -values.professionalFees, isNegative: true, color: "#6366F1" },
+    { name: "Marketing & Sales", value: -values.marketingSales, isNegative: true, color: "#8B5CF6" },
+    { name: "Contingency", value: -values.contingency, isNegative: true, color: "#64748B" },
+    { name: "Finance", value: -values.finance, isNegative: true, color: "#F59E0B" }
   );
 
   if (values.sitePrepTechnical > 0) {
@@ -49,7 +52,7 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
       name: "Site Prep & Technical",
       value: -values.sitePrepTechnical,
       isNegative: true,
-      color: "hsl(var(--warning))",
+      color: "#F97316",
     });
   }
 
@@ -58,12 +61,12 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
       name: "Other",
       value: -values.other,
       isNegative: true,
-      color: "hsl(var(--muted))",
+      color: "#A855F7",
     });
   }
 
   waterfallData.push(
-    { name: "Land", value: -values.landCost, isNegative: true, color: "hsl(var(--primary))" },
+    { name: "Land", value: -values.landCost, isNegative: true, color: "#EC4899" },
     { name: "Net Profit", value: values.netProfit, isPositive: true, color: "hsl(var(--success))" }
   );
 

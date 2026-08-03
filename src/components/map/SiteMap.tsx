@@ -15,11 +15,21 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings } from 'lucide-react';
+import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { detectLocalAuthority, getLAHousingData, calculateAdjustedMix } from '@/utils/localAuthorityData';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  ContextPreset,
+  MixType,
+  CONTEXT_DENSITY,
+  MIX_LABELS,
+  generateSiteLayoutCandidates,
+} from '@/utils/siteLayoutEngine';
+import { BuildSpec, getUnitEconomics } from '@/utils/houseTypeLibrary';
+import { LayoutGenerationOutput, LayoutResult } from '@/types/siteLayout';
+import LayoutSummaryPanel from './LayoutSummaryPanel';
 
 interface SiteMapProps {
   onAreaUpdate: (areaM2: number) => void;
@@ -35,25 +45,18 @@ interface SiteMapProps {
   onLocationDetected?: (location: string, region: string) => void;
   savedPolygon?: any;
   onPolygonUpdate?: (polygon: any) => void;
+  onLayoutGenerated?: (layout: LayoutResult | null) => void;
 }
 
 type BasemapType = 'standard' | 'satellite';
-type ContextPreset = 'rural' | 'suburban' | 'urban';
-type MixType = 'semis' | 'mixed' | 'terrace' | 'bungalow';
 
-interface DensityBand { low: number; high: number; }
 interface UnitAssumptions {
   netDevelopable: number;
   infrastructure: number;
   context: ContextPreset;
   mixType: MixType;
+  buildSpec: BuildSpec;
 }
-
-const CONTEXT_DENSITY: Record<ContextPreset, DensityBand> = {
-  rural: { low: 22, high: 30 },
-  suburban: { low: 30, high: 35 },
-  urban: { low: 35, high: 60 },
-};
 
 const MIX_PLOT_AREA: Record<MixType, number> = {
   semis: 220,
@@ -62,20 +65,16 @@ const MIX_PLOT_AREA: Record<MixType, number> = {
   bungalow: 260,
 };
 
-const MIX_LABELS: Record<MixType, string> = {
-  semis: 'Semis',
-  mixed: 'Mixed',
-  terrace: 'Terrace-led',
-  bungalow: 'Bungalow-heavy',
-};
-
-const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected, savedPolygon, onPolygonUpdate }: SiteMapProps) => {
+const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLocationDetected, savedPolygon, onPolygonUpdate, onLayoutGenerated }: SiteMapProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const drawnItems = useRef<L.FeatureGroup | null>(null);
   const drawControl = useRef<L.Control.Draw | null>(null);
   const currentTileLayer = useRef<L.TileLayer | null>(null);
-  
+  const layoutLayerGroup = useRef<L.FeatureGroup | null>(null);
+  const [layoutOutput, setLayoutOutput] = useState<LayoutGenerationOutput | null>(null);
+  const [isGeneratingLayout, setIsGeneratingLayout] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(true);
   const [currentArea, setCurrentArea] = useState<number>(savedArea || 0);
@@ -89,13 +88,15 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     return saved ? parseFloat(saved) : 0.3;
   });
   const [assumptions, setAssumptions] = useState<UnitAssumptions>(() => {
-    const saved = localStorage.getItem('siteMapAssumptions');
-    return saved ? JSON.parse(saved) : {
+    const defaults: UnitAssumptions = {
       netDevelopable: 70,
       infrastructure: 25,
       context: 'suburban' as ContextPreset,
       mixType: 'semis' as MixType,
+      buildSpec: 'medium' as BuildSpec,
     };
+    const saved = localStorage.getItem('siteMapAssumptions');
+    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
   });
 
   // Initialize map
@@ -115,6 +116,10 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       // Initialize feature group for drawn items
       drawnItems.current = new L.FeatureGroup();
       map.current.addLayer(drawnItems.current);
+
+      // Feature group for the generated smart layout overlay (road, plots, gardens)
+      layoutLayerGroup.current = new L.FeatureGroup();
+      map.current.addLayer(layoutLayerGroup.current);
 
       // Initialize draw control with higher contrast styles for satellite
       const polygonOptions = getPolygonOptions();
@@ -144,11 +149,13 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         drawnItems.current?.addLayer(layer);
         updateArea();
         extractAndNotifyPolygon();
+        clearGeneratedLayout();
       });
 
       map.current.on(L.Draw.Event.EDITED, () => {
         updateArea();
         extractAndNotifyPolygon();
+        clearGeneratedLayout();
       });
 
       map.current.on(L.Draw.Event.DELETED, () => {
@@ -156,6 +163,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         if (onPolygonUpdate) {
           onPolygonUpdate(null);
         }
+        clearGeneratedLayout();
       });
 
     } catch (error) {
@@ -259,8 +267,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
   const getPolygonOptions = () => {
     const isSatellite = basemap === 'satellite';
     return {
-      color: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
-      fillColor: isSatellite ? '#FFFF00' : 'hsl(220, 70%, 35%)',
+      color: isSatellite ? '#FFFF00' : 'hsl(221, 83%, 53%)',
+      fillColor: isSatellite ? '#FFFF00' : 'hsl(221, 83%, 53%)',
       fillOpacity: fillOpacity,
       weight: isSatellite ? 4 : 3,
     };
@@ -398,9 +406,120 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     }
   };
 
-  const detectRegionFromCoords = (lat: number, lon: number): string => {
-    // Simple region detection based on coordinates
-    // This is a basic implementation - could be enhanced with actual boundary data
+  const getCurrentPolygonFeature = (): GeoJSON.Feature<GeoJSON.Polygon> | null => {
+    if (!drawnItems.current) return null;
+    const layers = drawnItems.current.getLayers();
+    if (layers.length === 0) return null;
+
+    const layer = layers[0] as L.Polygon;
+    const latlngs = layer.getLatLngs()[0] as L.LatLng[];
+    const coordinates = latlngs.map((latlng: L.LatLng) => [latlng.lng, latlng.lat] as [number, number]);
+    coordinates.push(coordinates[0]);
+
+    return {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [coordinates] },
+      properties: {},
+    };
+  };
+
+  const clearGeneratedLayout = () => {
+    setLayoutOutput(null);
+    layoutLayerGroup.current?.clearLayers();
+    if (onLayoutGenerated) onLayoutGenerated(null);
+  };
+
+  const renderLayoutOnMap = (layout: LayoutResult) => {
+    if (!layoutLayerGroup.current) return;
+    layoutLayerGroup.current.clearLayers();
+
+    if (layout.roadPolygon) {
+      L.geoJSON(layout.roadPolygon, {
+        style: { color: '#4b5563', fillColor: '#6b7280', fillOpacity: 0.6, weight: 1 },
+      }).addTo(layoutLayerGroup.current);
+    }
+
+    layout.plots.forEach((plot) => {
+      L.geoJSON(plot.plotPolygon, {
+        style: { color: '#1f2937', weight: 1, fillOpacity: 0, dashArray: '3,3' },
+      }).addTo(layoutLayerGroup.current!);
+
+      L.geoJSON(plot.housePolygon, {
+        style: { color: '#b45309', fillColor: '#f59e0b', fillOpacity: 0.8, weight: 1 },
+      })
+        .bindTooltip(plot.houseType, { sticky: true })
+        .addTo(layoutLayerGroup.current!);
+
+      if (plot.gardenPolygon) {
+        L.geoJSON(plot.gardenPolygon, {
+          style: { color: '#15803d', fillColor: '#22c55e', fillOpacity: 0.35, weight: 1 },
+        }).addTo(layoutLayerGroup.current!);
+      }
+    });
+  };
+
+  const handleGenerateLayout = async () => {
+    const polygonFeature = getCurrentPolygonFeature();
+    if (!polygonFeature) {
+      toast.error('Please draw a boundary first');
+      return;
+    }
+
+    setIsGeneratingLayout(true);
+    try {
+      const ring = polygonFeature.geometry.coordinates[0];
+      const centroidLng = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+      const centroidLat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+      const region = await detectRegionFromCoords(centroidLat, centroidLng);
+
+      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context, region, assumptions.buildSpec);
+      setLayoutOutput(output);
+
+      if (output.winner) {
+        renderLayoutOnMap(output.winner);
+        if (onLayoutGenerated) onLayoutGenerated(output.winner);
+        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label} (${region} pricing)`);
+      } else {
+        layoutLayerGroup.current?.clearLayers();
+        if (onLayoutGenerated) onLayoutGenerated(null);
+        toast.error(output.warning || 'Could not generate a layout for this boundary');
+      }
+    } finally {
+      setIsGeneratingLayout(false);
+    }
+  };
+
+  const handleUseLayout = (layout: LayoutResult) => {
+    if (!onGenerateRows) return;
+
+    const rows = Object.entries(layout.summary.mixCounts).map(([type, units], idx) => {
+      const economics = getUnitEconomics(type, layout.region, (layout.buildSpec as BuildSpec) || 'medium');
+      return {
+        id: `layout-${Date.now()}-${idx}`,
+        type,
+        units,
+        giaPerUnit: economics.gia,
+        salesValue: economics.salesValue,
+        unitPriceOverride: 0,
+        buildPerSqm: economics.gia > 0 ? economics.buildCost / economics.gia : 0,
+        notes: `From smart layout • ${layout.label}`,
+      };
+    });
+
+    onGenerateRows(rows, {
+      source: `Smart layout generator (rule-based) • ${layout.region || 'national'} pricing`,
+      region: layout.region || '',
+      baseBand: layout.label,
+      generatedAt: new Date().toISOString(),
+    });
+
+    toast.success('Layout applied to unit mix — head to the GDV Calculator to review');
+  };
+
+  // Coarse fallback only — used when the postcodes.io reverse-geocode lookup
+  // fails (offline, rate-limited). It cannot distinguish Wales/Scotland from
+  // neighbouring English regions, so the API lookup below is always tried first.
+  const detectRegionFromCoordsFallback = (lat: number, lon: number): string => {
     if (lat > 53.5 && lon < -3) return "North West";
     if (lat > 53.5 && lon >= -3 && lon < -1) return "Yorkshire & Humber";
     if (lat > 53.5 && lon >= -1) return "North East";
@@ -412,6 +531,45 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     if (lat <= 51 && lon < -2) return "South West";
     if (lat <= 51 && lon >= -2) return "South East";
     return "South East"; // default
+  };
+
+  // Maps postcodes.io's `region` (England only) and `country` (Wales/Scotland/NI,
+  // where `region` is null) onto our REGION_PRESETS keys, so build/sales £/m²
+  // rates are keyed to the site's actual UK region rather than a lat/lon guess.
+  const POSTCODES_IO_REGION_MAP: Record<string, string> = {
+    "London": "London",
+    "South East": "South East",
+    "South West": "South West",
+    "East of England": "East",
+    "East Midlands": "East Midlands",
+    "West Midlands": "West Midlands",
+    "North West": "North West",
+    "North East": "North East",
+    "Yorkshire and The Humber": "Yorkshire & Humber",
+  };
+
+  const POSTCODES_IO_COUNTRY_MAP: Record<string, string> = {
+    "Wales": "Wales",
+    "Scotland": "Scotland",
+  };
+
+  const detectRegionFromCoords = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const response = await fetch(`https://api.postcodes.io/postcodes?lon=${lon}&lat=${lat}&limit=1`);
+      const data = await response.json();
+      const result = data?.result?.[0];
+      if (result) {
+        if (result.region && POSTCODES_IO_REGION_MAP[result.region]) {
+          return POSTCODES_IO_REGION_MAP[result.region];
+        }
+        if (result.country && POSTCODES_IO_COUNTRY_MAP[result.country]) {
+          return POSTCODES_IO_COUNTRY_MAP[result.country];
+        }
+      }
+    } catch (error) {
+      console.warn('Region reverse-geocode failed, falling back to coordinate heuristic:', error);
+    }
+    return detectRegionFromCoordsFallback(lat, lon);
   };
 
   const handleSearch = async () => {
@@ -436,7 +594,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         toast.success('Location found');
         
         // Detect region and notify parent
-        const region = detectRegionFromCoords(latitude, longitude);
+        const region = await detectRegionFromCoords(latitude, longitude);
         if (onLocationDetected) {
           onLocationDetected(display_name, region);
         }
@@ -482,7 +640,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
           const layer = layers[0] as L.Polygon;
           const bounds = layer.getBounds();
           const center = bounds.getCenter();
-          detectedRegion = detectRegionFromCoords(center.lat, center.lng);
+          detectedRegion = await detectRegionFromCoords(center.lat, center.lng);
           
           // Try to detect LA from search query if available
           if (searchQuery) {
@@ -642,7 +800,8 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     drawnItems.current?.clearLayers();
     setCurrentArea(0);
     setCurrentPerimeter(0);
-    
+    clearGeneratedLayout();
+
     // Notify parent that polygon was cleared
     if (onPolygonUpdate) {
       onPolygonUpdate(null);
@@ -901,7 +1060,24 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                                   </SelectContent>
                                 </Select>
                               </div>
-                              
+
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Build Spec (Smart Layout)</Label>
+                                <Select
+                                  value={assumptions.buildSpec}
+                                  onValueChange={(value: BuildSpec) => setAssumptions({ ...assumptions, buildSpec: value })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Low (Volume)</SelectItem>
+                                    <SelectItem value="medium">Medium (Standard)</SelectItem>
+                                    <SelectItem value="high">High (Premium)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
                               <div className="pt-4 border-t border-border/50 space-y-1 text-xs text-muted-foreground">
                                 <div className="flex justify-between">
                                   <span>Parking (rough):</span>
@@ -945,8 +1121,31 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <Button 
-                onClick={handleClear} 
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={handleGenerateLayout}
+                      variant="secondary"
+                      className="flex-1"
+                      disabled={currentArea === 0 || isGeneratingLayout}
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      {isGeneratingLayout ? 'Generating…' : 'Generate Smart Layout'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p className="font-semibold mb-1">Smart Layout Generator</p>
+                    <p className="text-xs">
+                      Places an access road plus rows of house plots (each with a compliant rear garden) inside
+                      your boundary, compares mix/orientation options against planning rules, and picks the
+                      highest-profit compliant layout.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <Button
+                onClick={handleClear}
                 variant="outline"
                 disabled={currentArea === 0}
               >
@@ -954,6 +1153,10 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                 Clear
               </Button>
             </div>
+
+            {layoutOutput && (
+              <LayoutSummaryPanel output={layoutOutput} onUseLayout={handleUseLayout} />
+            )}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>

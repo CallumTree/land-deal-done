@@ -96,8 +96,8 @@ const QSChatPanel = ({ isOpen, onClose, project, onSaveToNotes }: QSChatPanelPro
           <div className="space-y-4">
             {messages.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-sm mb-2 text-[#F5F5F7]">👋 Hello! I'm your On-Hand QS.</p>
-                <p className="text-xs text-[#C7C7CC]">Ask me anything about feasibility, costing, ROI, or development advice.</p>
+                <p className="text-sm mb-2 text-foreground">👋 Hello! I'm your On-Hand QS.</p>
+                <p className="text-xs text-muted-foreground">Ask me anything about feasibility, costing, ROI, or development advice.</p>
               </div>
             )}
             
@@ -110,7 +110,7 @@ const QSChatPanel = ({ isOpen, onClose, project, onSaveToNotes }: QSChatPanelPro
                   className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-[#252528] text-[#F5F5F7]'
+                      : 'bg-muted text-foreground'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
@@ -120,7 +120,7 @@ const QSChatPanel = ({ isOpen, onClose, project, onSaveToNotes }: QSChatPanelPro
             
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-[#252528] text-[#F5F5F7] rounded-lg px-3 py-2 text-sm">
+                <div className="bg-muted text-foreground rounded-lg px-3 py-2 text-sm">
                   <div className="flex gap-1">
                     <span className="animate-bounce">●</span>
                     <span className="animate-bounce [animation-delay:0.2s]">●</span>

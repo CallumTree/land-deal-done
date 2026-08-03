@@ -47,10 +47,10 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
   return (
     <TooltipProvider>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <Card className="border border-border shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)] rounded-lg">
+        <Card className="shadow-soft rounded-lg">
           <CollapsibleTrigger className="w-full">
             <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors p-5">
-              <CardTitle className="text-[15px] font-semibold flex items-center justify-between" style={{ fontFamily: 'Poppins, sans-serif' }}>
+              <CardTitle className="text-[15px] font-semibold flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-primary" />
                   Planning Uplift Insight (Optional)
@@ -64,7 +64,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
             <CardContent className="space-y-3 pt-0 px-5 pb-5">
               {!hasValidRLV ? (
                 <div className="p-4 rounded-lg bg-muted/30 border border-border text-center">
-                  <p className="text-sm text-muted-foreground" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  <p className="text-sm text-muted-foreground">
                     Once your GDV is complete, BuildFlow can estimate your planning uplift potential here.
                   </p>
                 </div>
@@ -74,7 +74,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
                     <div className="flex justify-between items-center mb-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] text-muted-foreground" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        <span className="text-[13px] text-muted-foreground">
                           RLV (from GDV)
                         </span>
                         <Tooltip>
@@ -99,7 +99,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   {/* Existing Land Value (EUV) */}
                   <div className="space-y-2.5">
                     <div className="flex items-center gap-1.5">
-                      <Label htmlFor="current-value-type" className="text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      <Label htmlFor="current-value-type" className="text-[13px] font-medium">
                         Existing Land Value (EUV)
                       </Label>
                       <Tooltip>
@@ -132,7 +132,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
 
                   {data.currentValueType === "Custom" && (
                     <div className="space-y-2.5">
-                      <Label htmlFor="custom-value" className="text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      <Label htmlFor="custom-value" className="text-[13px] font-medium">
                         Custom EUV (£)
                       </Label>
                       <Input
@@ -149,7 +149,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   )}
 
                   <div className="p-2.5 rounded bg-muted/50">
-                    <div className="flex justify-between text-[13px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    <div className="flex justify-between text-[13px]">
                       <span className="text-muted-foreground">Site Area: {siteAreaHa.toFixed(2)} ha</span>
                       <span className="font-medium">EUV: {formatCurrency(currentValue)}</span>
                     </div>
@@ -158,7 +158,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   {/* Planning Costs */}
                   <div className="space-y-2.5">
                     <div className="flex items-center gap-1.5">
-                      <Label htmlFor="planning-costs" className="text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      <Label htmlFor="planning-costs" className="text-[13px] font-medium">
                         Planning Costs (£)
                       </Label>
                       <Tooltip>
@@ -185,7 +185,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   <div className="space-y-2.5">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5">
-                        <Label htmlFor="probability" className="text-[13px] font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        <Label htmlFor="probability" className="text-[13px] font-medium">
                           Chance of Planning Success (%)
                         </Label>
                         <Tooltip>
@@ -231,7 +231,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] text-muted-foreground" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        <span className="text-[13px] text-muted-foreground">
                           Gross Uplift
                         </span>
                         <Tooltip>
@@ -255,15 +255,15 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                   {/* Adjusted Uplift with animation */}
                   <div 
                     className={`p-3.5 rounded-lg transition-all duration-400 ${
-                      adjustedUplift > 0 
-                        ? 'bg-[rgba(0,168,107,0.08)] border border-[#00A86B]/30' 
-                        : 'bg-amber-50 border border-amber-200'
+                      adjustedUplift > 0
+                        ? 'bg-success/10 border border-success/30'
+                        : 'bg-warning/10 border border-warning/30'
                     }`}
                     key={adjustedUplift} // Key change triggers re-mount for animation
                   >
                     <div className="flex justify-between items-center mb-1.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] font-medium text-foreground" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        <span className="text-[13px] font-medium text-foreground">
                           Adjusted Uplift
                         </span>
                         <Tooltip>
@@ -277,7 +277,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                       </div>
                       <span 
                         className={`text-xl font-bold animate-in fade-in duration-400 ${
-                          adjustedUplift > 0 ? 'text-[#00A86B]' : 'text-amber-600'
+                          adjustedUplift > 0 ? 'text-success' : 'text-warning'
                         }`}
                         style={{ 
                           animation: 'fadeInGlow 0.4s ease-out',
@@ -303,7 +303,7 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
                     <Label
                       htmlFor="include-lender"
                       className="text-[13px] font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      style={{ fontFamily: 'Inter, sans-serif' }}
+                     
                     >
                       Include in Lender Pack
                     </Label>
@@ -319,11 +319,11 @@ export const PlanningUpliftInsight = ({ rlv, siteArea, data, onChange }: Plannin
         @keyframes fadeInGlow {
           0% {
             opacity: 0.6;
-            filter: drop-shadow(0 0 8px rgba(0, 168, 107, 0.4));
+            filter: drop-shadow(0 0 8px hsl(var(--success) / 0.4));
           }
           100% {
             opacity: 1;
-            filter: drop-shadow(0 0 0 rgba(0, 168, 107, 0));
+            filter: drop-shadow(0 0 0 hsl(var(--success) / 0));
           }
         }
       `}</style>

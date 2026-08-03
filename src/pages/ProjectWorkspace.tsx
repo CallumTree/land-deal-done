@@ -9,6 +9,7 @@ import LenderExport from "@/components/calculator/LenderExport";
 import { LocationPresets } from "@/components/calculator/LocationPresets";
 import { Calculator, FileText, TrendingUp, MapPin } from "lucide-react";
 import { PropertyRow, GlobalInputs } from "@/types/calculator";
+import { LayoutResult } from "@/types/siteLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GlobalHeader from "@/components/GlobalHeader";
 import { projectStorage } from "@/services/projectStorage";
@@ -131,6 +132,21 @@ const ProjectWorkspace = () => {
     setDetectedRegion(region);
     toast.success(`Detected region: ${region}`);
   };
+
+  const handleLayoutGenerated = useCallback((layout: LayoutResult | null) => {
+    if (!id) return;
+
+    const project = projectStorage.getProject(id);
+    if (project) {
+      const updatedProject = {
+        ...project,
+        siteLayout: layout ?? undefined,
+        lastUpdated: new Date().toISOString(),
+      };
+      projectStorage.saveProject(updatedProject);
+      setCurrentProject(updatedProject);
+    }
+  }, [id]);
 
   const handlePolygonUpdate = useCallback((polygon: any) => {
     if (!id) return;
@@ -426,6 +442,7 @@ const ProjectWorkspace = () => {
                 onLocationDetected={handleLocationDetected}
                 savedPolygon={savedPolygon}
                 onPolygonUpdate={handlePolygonUpdate}
+                onLayoutGenerated={handleLayoutGenerated}
               />
               
               {currentProject && (

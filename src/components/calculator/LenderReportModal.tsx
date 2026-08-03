@@ -85,7 +85,7 @@ const LenderReportModal = ({
         <div className="font-medium text-sm">{label}</div>
         <div className="text-sm text-muted-foreground">{format(baseValue)}</div>
         <div className="flex items-center gap-2">
-          <span className={`text-sm font-semibold ${isNegative ? 'text-red-600' : 'text-green-600'}`}>
+          <span className={`text-sm font-semibold ${isNegative ? 'text-destructive' : 'text-success'}`}>
             {format(adjustedValue)}
           </span>
           <span className="text-xs text-muted-foreground">
