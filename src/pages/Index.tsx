@@ -1,10 +1,8 @@
 import Navigation from "@/components/Navigation";
 import Hero from "@/components/Hero";
-import PainPoints from "@/components/PainPoints";
-import DesiredOutcome from "@/components/DesiredOutcome";
-import ProductIntro from "@/components/ProductIntro";
+import FeatureShowcase from "@/components/FeatureShowcase";
 import FounderMessage from "@/components/FounderMessage";
-import EmailCapture from "@/components/EmailCapture";
+import CtaSection from "@/components/CtaSection";
 import Footer from "@/components/Footer";
 
 const Index = () => {
@@ -12,11 +10,9 @@ const Index = () => {
     <div className="min-h-screen">
       <Navigation />
       <Hero />
-      <PainPoints />
-      <DesiredOutcome />
-      <ProductIntro />
+      <FeatureShowcase />
       <FounderMessage />
-      <EmailCapture />
+      <CtaSection />
       <Footer />
     </div>
   );

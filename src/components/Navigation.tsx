@@ -84,18 +84,26 @@ const Navigation = () => {
                   How It Works
                 </Button>
                 <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                  onClick={() => navigate('/pricing')}
+                >
+                  Pricing
+                </Button>
+                <Button
                   variant="outline"
                   size="sm"
                   className="hidden md:inline-flex"
-                  onClick={() => navigate('/register-interest')}
+                  onClick={() => navigate('/auth')}
                 >
-                  Early Access
+                  Sign In
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => scrollToSection("get-started")}
+                  onClick={() => navigate('/auth')}
                 >
-                  Try Free
+                  Get Started Free
                 </Button>
               </>
             )}

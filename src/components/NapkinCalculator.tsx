@@ -7,7 +7,6 @@ import GDVTable from "@/components/calculator/GDVTable";
 import SummaryPanel from "@/components/calculator/SummaryPanel";
 import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPanel";
 import LenderReportModal from "@/components/calculator/LenderReportModal";
-import LenderSummaryPack from "@/components/calculator/LenderSummaryPack";
 import { ROIVisualiser } from "@/components/roi/ROIVisualiser";
 import { PlanningUpliftInsight } from "@/components/calculator/PlanningUpliftInsight";
 import { MapPin } from "lucide-react";
@@ -75,7 +74,6 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
   });
   const [sensitivity, setSensitivity] = useState<SensitivityAdjustments>(DEFAULT_SENSITIVITY);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [showLenderPack, setShowLenderPack] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -275,11 +273,10 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
                 Live Summary
               </h3>
               <SummaryPanel
-                values={isSensitivityActive ? adjustedValues : baseValues} 
+                values={isSensitivityActive ? adjustedValues : baseValues}
                 targetMargin={inputs.targetMarginPercent}
                 isSensitivityActive={isSensitivityActive}
                 sensitivity={sensitivity}
-                onOpenLenderPack={() => setShowLenderPack(true)}
               />
               
               <PlanningUpliftInsight
@@ -311,32 +308,6 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
           />
         </div>
 
-        {/* Footer CTA Row */}
-        <div className="flex flex-wrap gap-3 p-4 bg-muted/20 rounded-lg border">
-          <Button variant="outline" onClick={() => {
-            const link = document.createElement("a");
-            link.href = "#calculator";
-            link.click();
-          }}>
-            Save Project
-          </Button>
-          <Button variant="outline" onClick={() => {
-            // Duplicate logic - could trigger a modal or copy to new project
-            console.log("Duplicate project");
-          }}>
-            Duplicate
-          </Button>
-          <Button variant="outline" onClick={() => {
-            // CSV export from GDVTable
-            console.log("Export CSV");
-          }}>
-            Export CSV
-          </Button>
-          <Button variant="cta" onClick={() => setShowLenderPack(true)}>
-            View Lender Export
-          </Button>
-        </div>
-
         <LenderReportModal
           isOpen={showReportModal}
           onClose={() => setShowReportModal(false)}
@@ -344,32 +315,6 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
           adjustedCase={adjustedValues}
           adjustments={sensitivity}
         />
-
-        <LenderSummaryPack
-          open={showLenderPack}
-          onClose={() => setShowLenderPack(false)}
-          values={isSensitivityActive ? adjustedValues : baseValues}
-          inputs={inputs}
-          rows={rows}
-          siteArea={siteArea}
-          mapImageUrl={mapImageUrl}
-        />
-
-        {/* Mobile sticky CTA */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-background border-t shadow-large z-50">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                const link = document.createElement("a");
-                link.href = "#email-capture";
-                link.click();
-              }}
-              className="flex-1 bg-primary text-primary-foreground py-3 rounded-md font-semibold hover:bg-primary/90 transition-colors"
-            >
-              Book a Demo
-            </button>
-          </div>
-        </div>
       </div>
     </section>
   );
