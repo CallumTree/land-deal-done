@@ -45,11 +45,14 @@ export interface LayoutResult {
   mixType: string;
   orientationDeg: number;
   plots: PlacedPlot[];
-  roadPolygon: RingGeoJSON | null;
+  roadPolygons: RingGeoJSON[];
   summary: LayoutSummary;
   isWinner: boolean;
   region?: string;
   buildSpec?: string;
+  /** Where the access road meets a real, detected highway — null if none was found. */
+  entrancePoint?: LngLat | null;
+  accessRoadName?: string;
 }
 
 export interface LayoutGenerationOutput {

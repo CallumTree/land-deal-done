@@ -26,8 +26,11 @@ import {
   CONTEXT_DENSITY,
   MIX_LABELS,
   generateSiteLayoutCandidates,
+  computeOrigin,
 } from '@/utils/siteLayoutEngine';
 import { BuildSpec, getUnitEconomics } from '@/utils/houseTypeLibrary';
+import { fetchNearbyRoads, detectFrontage, FrontageInfo } from '@/utils/roadNetwork';
+import { toLocalXY } from '@/utils/geo';
 import { LayoutGenerationOutput, LayoutResult } from '@/types/siteLayout';
 import LayoutSummaryPanel from './LayoutSummaryPanel';
 
@@ -433,10 +436,23 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     if (!layoutLayerGroup.current) return;
     layoutLayerGroup.current.clearLayers();
 
-    if (layout.roadPolygon) {
-      L.geoJSON(layout.roadPolygon, {
+    layout.roadPolygons.forEach((roadPolygon) => {
+      L.geoJSON(roadPolygon, {
         style: { color: '#4b5563', fillColor: '#6b7280', fillOpacity: 0.6, weight: 1 },
-      }).addTo(layoutLayerGroup.current);
+      }).addTo(layoutLayerGroup.current!);
+    });
+
+    if (layout.entrancePoint) {
+      const [lng, lat] = layout.entrancePoint;
+      L.circleMarker([lat, lng], {
+        radius: 7,
+        color: '#dc2626',
+        fillColor: '#ef4444',
+        fillOpacity: 0.9,
+        weight: 2,
+      })
+        .bindTooltip(`Site access${layout.accessRoadName ? ` from ${layout.accessRoadName}` : ''}`, { permanent: false })
+        .addTo(layoutLayerGroup.current);
     }
 
     layout.plots.forEach((plot) => {
@@ -472,13 +488,28 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       const centroidLat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
       const region = await detectRegionFromCoords(centroidLat, centroidLng);
 
-      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context, region, assumptions.buildSpec);
+      let frontage: FrontageInfo | null = null;
+      const origin = computeOrigin(polygonFeature);
+      if (origin) {
+        try {
+          const roads = await fetchNearbyRoads(polygonFeature);
+          const ringLocal = ring.slice(0, -1).map((p) => toLocalXY(p as [number, number], origin));
+          frontage = detectFrontage(ringLocal, roads, origin);
+        } catch (err) {
+          console.warn('Nearby road lookup failed, generating a geometry-only layout:', err);
+        }
+      }
+
+      const output = generateSiteLayoutCandidates(polygonFeature, assumptions.context, region, assumptions.buildSpec, frontage);
       setLayoutOutput(output);
 
       if (output.winner) {
         renderLayoutOnMap(output.winner);
         if (onLayoutGenerated) onLayoutGenerated(output.winner);
-        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label} (${region} pricing)`);
+        const accessNote = frontage
+          ? ` — access from ${frontage.roadName ?? 'adjacent highway'}`
+          : ' — no adjacent highway detected';
+        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label} (${region} pricing)${accessNote}`);
       } else {
         layoutLayerGroup.current?.clearLayers();
         if (onLayoutGenerated) onLayoutGenerated(null);
