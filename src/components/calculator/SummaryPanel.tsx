@@ -13,24 +13,19 @@ interface SummaryPanelProps {
   targetMargin: number;
   isSensitivityActive?: boolean;
   sensitivity?: SensitivityAdjustments;
-  onOpenLenderPack?: () => void;
 }
 
-const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity, onOpenLenderPack }: SummaryPanelProps) => {
+const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensitivity }: SummaryPanelProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isSuccessful = values.profitMarginPercent >= targetMargin;
   const isVariancePositive = values.variance >= 0;
 
   const handleExportLenderPack = () => {
-    // Check if we're on a project page
     const projectMatch = location.pathname.match(/\/project\/([^/]+)/);
     if (projectMatch) {
       const projectId = projectMatch[1];
       navigate(`/project/${projectId}?tab=lender-export`);
-    } else if (onOpenLenderPack) {
-      // Fallback to modal if not on project page
-      onOpenLenderPack();
     }
   };
 
@@ -230,15 +225,12 @@ Variance to Land: ${formatCurrency(values.variance)}
           </div>
 
           <div className="space-y-2 mt-4">
-            <Button 
-              variant="outline" 
-              className="w-full" 
+            <Button
+              variant="cta"
+              className="w-full"
               onClick={handleExportLenderPack}
             >
               Export Lender Pack
-            </Button>
-            <Button variant="cta" className="w-full" asChild>
-              <a href="#email-capture">Book a Demo</a>
             </Button>
           </div>
         </CardContent>

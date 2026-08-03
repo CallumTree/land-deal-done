@@ -5,7 +5,7 @@ import { formatCurrency, formatPercent } from "@/utils/calculatorHelpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowRight, Download, X } from "lucide-react";
+import { Printer, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/useSubscription";
 import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
@@ -55,14 +55,8 @@ const LenderReportModal = ({
       toast.error("PDF export requires Pro tier or higher");
       return;
     }
-    
-    // In production, this would generate and download the PDF
-    toast.success("Generating PDF export...", {
-      description: "Your lender report will download shortly",
-    });
-    
-    // TODO: Implement actual PDF generation
-    onClose();
+
+    window.print();
   };
 
   const ComparisonRow = ({ 
@@ -172,14 +166,14 @@ const LenderReportModal = ({
                 <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button 
-                variant="cta" 
-                onClick={handleExport} 
+              <Button
+                variant="cta"
+                onClick={handleExport}
                 className="flex-1"
                 disabled={loading}
               >
-                <Download className="h-4 w-4 mr-2" />
-                Generate PDF Report
+                <Printer className="h-4 w-4 mr-2" />
+                Print / Save PDF
               </Button>
             </div>
           )}
