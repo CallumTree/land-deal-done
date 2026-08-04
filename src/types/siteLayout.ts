@@ -36,6 +36,8 @@ export interface LayoutSummary {
   estimatedGDV: number;
   estimatedBuildCost: number;
   profitProxy: number;
+  /** Plot + road footprint area as a fraction of the gross site area — how much of the boundary this layout actually uses. */
+  coverageRatio: number;
   compliance: ComplianceCheck[];
 }
 

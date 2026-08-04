@@ -25,7 +25,16 @@ import {
   garageWidthFor,
   getUnitEconomics,
 } from "@/utils/houseTypeLibrary";
-import { XY, toLocalXY, toLngLat, rotatePoint, pointInPolygon } from "@/utils/geo";
+import {
+  XY,
+  toLocalXY,
+  toLngLat,
+  rotatePoint,
+  pointInPolygon,
+  polygonXIntervalsAtY,
+  intersectIntervals,
+  subtractKeepout,
+} from "@/utils/geo";
 import { FrontageInfo } from "@/utils/roadNetwork";
 
 export type ContextPreset = "rural" | "suburban" | "urban";
@@ -244,7 +253,8 @@ function layoutRow(
   rules: PlanningRules,
   angleRad: number,
   origin: XY,
-  side: "north" | "south"
+  side: "north" | "south",
+  idPrefix: string
 ): PlacedPlot[] {
   const plots: PlacedPlot[] = [];
   let x = xMin;
@@ -286,7 +296,7 @@ function layoutRow(
       const gardenAreaM2 = plotWidth * gardenDepthM;
 
       plots.push({
-        id: `plot-${side}-${plots.length}-${Math.round(x * 10)}`,
+        id: `plot-${idPrefix}-${side}-${plots.length}-${Math.round(x * 10)}`,
         houseType: item.type,
         plotPolygon: rotatedRectToFeature(x, x + plotWidth, y0, y1, angleRad, origin),
         housePolygon: rotatedRectToFeature(x, x + houseFootprintWidthM, hy0, hy1, angleRad, origin),
@@ -332,9 +342,14 @@ function buildComplianceChecks(
           id: "highway-access",
           label: "Connects to an existing public highway",
           pass: true,
-          detail: `Access road joins ${entrance.roadName ? `"${entrance.roadName}"` : "the adjacent highway"} (${
-            HIGHWAY_TYPE_LABELS[entrance.highwayType] ?? entrance.highwayType
-          }, ${entrance.distanceToRoadM.toFixed(0)}m from the boundary) at a single point, set back for a visibility splay.`,
+          detail:
+            entrance.confidence === "approximate"
+              ? `Nearest public highway (${
+                  entrance.roadName ? `"${entrance.roadName}"` : HIGHWAY_TYPE_LABELS[entrance.highwayType] ?? entrance.highwayType
+                }) is ${entrance.distanceToRoadM.toFixed(0)}m from the boundary — beyond the verified-frontage distance, so this access point is an approximate best guess, not a confirmed frontage.`
+              : `Access road joins ${entrance.roadName ? `"${entrance.roadName}"` : "the adjacent highway"} (${
+                  HIGHWAY_TYPE_LABELS[entrance.highwayType] ?? entrance.highwayType
+                }, ${entrance.distanceToRoadM.toFixed(0)}m from the boundary) at a single point, set back for a visibility splay.`,
         }
       : {
           id: "highway-access",
@@ -394,8 +409,103 @@ function buildComplianceChecks(
 // no plot should sit right at the point where the estate road meets the
 // existing highway.
 const JUNCTION_CLEARANCE_M = 12;
+// Clearance between one row-band's rear gardens and the next band's road verge.
+const BAND_GAP_M = 3;
 
 export type RoadTopology = "straight-in" | "parallel" | "geometric";
+// "flush" stacks row-bands from the polygon's low-Y edge (today's-equivalent
+// starting point); "centered" splits any leftover Y-extent evenly top and
+// bottom instead of dumping it all at the far end.
+type BandStackVariant = "flush" | "centered";
+
+/** Worst-case front-to-rear depth across a mix's house types, so bands never overlap regardless of which type lands in a row. */
+function maxRowDepthM(mixType: MixType, rules: PlanningRules): number {
+  let maxDepth = 0;
+  for (const item of MIX_SEQUENCES[mixType]) {
+    const def = HOUSE_TYPE_MAP[item.type];
+    const footprint = deriveFootprint(def);
+    const frontSetbackM = rules.frontSetbackM + (def.driveBonusM ?? 0);
+    const gardenDepthM = rules.minGardenDepthM + (def.gardenBonusM ?? 0);
+    maxDepth = Math.max(maxDepth, frontSetbackM + footprint.depthM + gardenDepthM);
+  }
+  return maxDepth;
+}
+
+/**
+ * Plan the centre-Y of each road-served row-band across the polygon's
+ * Y-extent, stacking as many as genuinely fit instead of always placing
+ * exactly one. When `anchorY` is given (a real detected entrance), one band
+ * is placed exactly there and the rest stack outward from it.
+ */
+function planBandRoadYs(
+  minY: number,
+  maxY: number,
+  bandHeight: number,
+  anchorY: number | undefined,
+  variant: BandStackVariant
+): { roadYs: number[]; anchorIndex: number } {
+  const extent = maxY - minY;
+  if (!(extent > 0) || !(bandHeight > 0) || extent < bandHeight) {
+    const fallbackY = anchorY !== undefined ? anchorY : (minY + maxY) / 2;
+    return { roadYs: [fallbackY], anchorIndex: 0 };
+  }
+
+  let start: number;
+  if (anchorY !== undefined) {
+    start = anchorY;
+  } else if (variant === "centered") {
+    const bandCount = Math.max(1, Math.floor(extent / bandHeight));
+    const leftover = extent - bandCount * bandHeight;
+    start = minY + leftover / 2 + bandHeight / 2;
+  } else {
+    start = minY + bandHeight / 2;
+  }
+
+  const roadYs: number[] = [start];
+  for (let y = start + bandHeight; y <= maxY - bandHeight / 2 + 1e-6; y += bandHeight) roadYs.push(y);
+  for (let y = start - bandHeight; y >= minY + bandHeight / 2 - 1e-6; y -= bandHeight) roadYs.push(y);
+  roadYs.sort((a, b) => a - b);
+
+  // Stacking outward from a real entrance's Y can strand up to a full
+  // band's worth of space at whichever end doesn't land on the anchor's
+  // grid (the grid is anchored to the entrance, not to either edge). Top up
+  // each end with one flush band snapped to that edge if there's room for
+  // it without overlapping the outermost grid band.
+  if (roadYs[0] - (minY + bandHeight / 2) >= bandHeight) {
+    roadYs.unshift(minY + bandHeight / 2);
+  }
+  if (maxY - bandHeight / 2 - roadYs[roadYs.length - 1] >= bandHeight) {
+    roadYs.push(maxY - bandHeight / 2);
+  }
+
+  const anchorIndex = roadYs.indexOf(start);
+  return { roadYs, anchorIndex: anchorIndex >= 0 ? anchorIndex : 0 };
+}
+
+/** A halfWidth-thick road rectangle running from fromRot to toRot — unlike rotatedRectToFeature, its long axis doesn't have to be local X or Y. */
+function buildConnectorSegment(fromRot: XY, toRot: XY, halfWidth: number, angleRad: number, origin: XY): RingGeoJSON | null {
+  const dx = toRot[0] - fromRot[0];
+  const dy = toRot[1] - fromRot[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 0.5) return null; // already touching — no connector segment needed
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const localCorners: XY[] = [
+    [fromRot[0] + px * halfWidth, fromRot[1] + py * halfWidth],
+    [toRot[0] + px * halfWidth, toRot[1] + py * halfWidth],
+    [toRot[0] - px * halfWidth, toRot[1] - py * halfWidth],
+    [fromRot[0] - px * halfWidth, fromRot[1] - py * halfWidth],
+    [fromRot[0] + px * halfWidth, fromRot[1] + py * halfWidth],
+  ];
+  const lngLat = localCorners.map((p) => toLngLat(rotatePoint(p, angleRad), origin));
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [lngLat] },
+  };
+}
 
 function buildLayout(
   polyLocal: XY[],
@@ -407,7 +517,8 @@ function buildLayout(
   region: string | undefined,
   buildSpec: BuildSpec,
   entrance: FrontageInfo | null,
-  topology: RoadTopology
+  topology: RoadTopology,
+  bandVariant: BandStackVariant = "flush"
 ): LayoutResult {
   const rules = PLANNING_RULES[context];
   const densityBand = CONTEXT_DENSITY[context];
@@ -421,67 +532,99 @@ function buildLayout(
   const maxY = Math.max(...ys);
 
   const halfCorridor = rules.roadCarriagewayWidthM / 2 + rules.roadVergeWidthM;
+  const rowDepthM = maxRowDepthM(mixType, rules);
+  const bandHeight = 2 * halfCorridor + 2 * rowDepthM + BAND_GAP_M;
 
-  let roadY = (minY + maxY) / 2;
-  let rowXMin = minX;
-  let rowXMax = maxX;
-  const roadPolygons: RingGeoJSON[] = [];
-
-  if (entrance && topology === "straight-in") {
-    // Road runs perpendicular to the frontage, straight into the site from
-    // the real entry point — its cross-position follows where the entrance
-    // actually sits (clamped to stay inside the boundary) rather than
-    // always sitting dead-centre. Plots are kept clear of the junction
-    // mouth on whichever end the entrance falls on.
-    const entryRot = rotatePoint(entrance.entryPointLocal, -angleRad);
+  // Where a real entrance exists, one band is anchored exactly at its Y so
+  // the connector segment built below is always short — the rest of the
+  // bands stack outward from that anchor to use the remaining Y-extent.
+  let entryRot: XY | null = null;
+  let anchorY: number | undefined;
+  if (entrance && (topology === "straight-in" || topology === "parallel")) {
+    entryRot = rotatePoint(entrance.entryPointLocal, -angleRad);
     const margin = halfCorridor + 3;
     if (maxY - minY > 2 * margin) {
-      roadY = Math.min(Math.max(entryRot[1], minY + margin), maxY - margin);
+      anchorY = Math.min(Math.max(entryRot[1], minY + margin), maxY - margin);
     }
-    const distToMin = entryRot[0] - minX;
-    const distToMax = maxX - entryRot[0];
-    if (distToMin <= distToMax) {
-      rowXMin = minX + JUNCTION_CLEARANCE_M;
-    } else {
-      rowXMax = maxX - JUNCTION_CLEARANCE_M;
-    }
-    if (maxX > minX) {
-      roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
-    }
-  } else if (entrance && topology === "parallel") {
-    // Road runs parallel to the frontage (better for a wide/shallow site,
-    // where a single straight-in spine would leave most of the width
-    // unserved), fed by a short perpendicular stub from the real entry
-    // point — so the estate road still genuinely joins the highway at one
-    // point rather than floating alongside it with no connection.
-    roadY = (minY + maxY) / 2;
-    const entryRot = rotatePoint(entrance.entryPointLocal, -angleRad);
-    const yFrontage = Math.abs(entryRot[1] - minY) <= Math.abs(entryRot[1] - maxY) ? minY : maxY;
-    const spineNearEdge = yFrontage < roadY ? roadY - halfCorridor : roadY + halfCorridor;
-    const stubY0 = Math.min(yFrontage, spineNearEdge);
-    const stubY1 = Math.max(yFrontage, spineNearEdge);
-    const stubX0 = entryRot[0] - halfCorridor;
-    const stubX1 = entryRot[0] + halfCorridor;
-    if (maxX > minX) {
-      roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
-    }
-    if (stubY1 > stubY0) {
-      roadPolygons.push(rotatedRectToFeature(stubX0, stubX1, stubY0, stubY1, angleRad, origin));
-    }
-  } else if (maxX > minX) {
-    roadPolygons.push(rotatedRectToFeature(minX, maxX, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
   }
+
+  const { roadYs, anchorIndex } = planBandRoadYs(minY, maxY, bandHeight, anchorY, bandVariant);
+
+  const roadPolygons: RingGeoJSON[] = [];
+  let totalRoadAreaM2 = 0;
+  let totalRoadLengthM = 0;
 
   const sequence = buildWeightedSequence(MIX_SEQUENCES[mixType], 400);
   const cursor = { i: 0 };
+  const plots: PlacedPlot[] = [];
 
-  let plots: PlacedPlot[] = [];
+  roadYs.forEach((roadY, bandIndex) => {
+    const isAnchorBand = entrance && entryRot && bandIndex === anchorIndex;
 
-  if (maxY - minY > 2 * halfCorridor + rules.frontSetbackM + rules.minGardenDepthM + 6 && rowXMax > rowXMin) {
-    const northPlots = layoutRow(polyRot, roadY + halfCorridor, 1, rowXMin, rowXMax, sequence, cursor, rules, angleRad, origin, "north");
-    const southPlots = layoutRow(polyRot, roadY - halfCorridor, -1, rowXMin, rowXMax, sequence, cursor, rules, angleRad, origin, "south");
-    plots = [...northPlots, ...southPlots];
-  }
+    // Read each band's usable width straight from the polygon's real shape
+    // at the relevant Y levels, instead of the polygon's global bounding
+    // box — so a row naturally narrows through a taper or widens into a
+    // bulge rather than being clipped to one rectangle.
+    const atRoadLo = polygonXIntervalsAtY(polyRot, roadY - halfCorridor);
+    const atRoadHi = polygonXIntervalsAtY(polyRot, roadY + halfCorridor);
+    const atNorthFar = polygonXIntervalsAtY(polyRot, roadY + halfCorridor + rowDepthM);
+    const atSouthFar = polygonXIntervalsAtY(polyRot, roadY - halfCorridor - rowDepthM);
+
+    const spineIntervals = intersectIntervals(atRoadLo, atRoadHi);
+    let northRowIntervals = intersectIntervals(atRoadHi, atNorthFar);
+    let southRowIntervals = intersectIntervals(atRoadLo, atSouthFar);
+
+    let connectorToRot: XY | null = null;
+    if (isAnchorBand && spineIntervals.length > 0) {
+      let bestClampedX = spineIntervals[0][0];
+      let bestDist = Infinity;
+      for (const iv of spineIntervals) {
+        const clampedX = Math.min(Math.max(entryRot![0], iv[0]), iv[1]);
+        const dist = Math.abs(clampedX - entryRot![0]);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestClampedX = clampedX;
+        }
+      }
+      connectorToRot = [bestClampedX, roadY];
+
+      // Keep plots clear of the junction mouth on whichever band the
+      // entrance actually connects to.
+      const keepoutLo = bestClampedX - JUNCTION_CLEARANCE_M;
+      const keepoutHi = bestClampedX + JUNCTION_CLEARANCE_M;
+      northRowIntervals = subtractKeepout(northRowIntervals, keepoutLo, keepoutHi);
+      southRowIntervals = subtractKeepout(southRowIntervals, keepoutLo, keepoutHi);
+    }
+
+    for (const [lo, hi] of spineIntervals) {
+      if (hi - lo < 1) continue;
+      roadPolygons.push(rotatedRectToFeature(lo, hi, roadY - halfCorridor, roadY + halfCorridor, angleRad, origin));
+      totalRoadAreaM2 += (hi - lo) * 2 * halfCorridor;
+      totalRoadLengthM += hi - lo;
+    }
+
+    // Always draw an explicit connector from the real entrance to this
+    // band's road — guarantees the drawn road geometrically touches the
+    // entrance marker regardless of how the frontage bearing relates to
+    // the polygon's shape, instead of assuming the spine happens to reach it.
+    if (isAnchorBand && entryRot && connectorToRot) {
+      const connector = buildConnectorSegment(entryRot, connectorToRot, halfCorridor, angleRad, origin);
+      if (connector) {
+        roadPolygons.push(connector);
+        totalRoadAreaM2 += Math.hypot(connectorToRot[0] - entryRot[0], connectorToRot[1] - entryRot[1]) * 2 * halfCorridor;
+        totalRoadLengthM += Math.hypot(connectorToRot[0] - entryRot[0], connectorToRot[1] - entryRot[1]);
+      }
+    }
+
+    for (const [lo, hi] of northRowIntervals) {
+      if (hi - lo < rules.minFrontageM) continue;
+      plots.push(...layoutRow(polyRot, roadY + halfCorridor, 1, lo, hi, sequence, cursor, rules, angleRad, origin, "north", `b${bandIndex}`));
+    }
+    for (const [lo, hi] of southRowIntervals) {
+      if (hi - lo < rules.minFrontageM) continue;
+      plots.push(...layoutRow(polyRot, roadY - halfCorridor, -1, lo, hi, sequence, cursor, rules, angleRad, origin, "south", `b${bandIndex}`));
+    }
+  });
 
   const grossAreaHa = grossAreaM2 / 10000;
   const achievedDensityUprHa = grossAreaHa > 0 ? plots.length / grossAreaHa : 0;
@@ -490,6 +633,7 @@ function buildLayout(
   let estimatedGDV = 0;
   let estimatedBuildCost = 0;
   let totalGardenAreaM2 = 0;
+  let totalPlotAreaM2 = 0;
 
   for (const plot of plots) {
     mixCounts[plot.houseType] = (mixCounts[plot.houseType] ?? 0) + 1;
@@ -497,20 +641,23 @@ function buildLayout(
     estimatedGDV += economics.salesValue;
     estimatedBuildCost += economics.buildCost;
     totalGardenAreaM2 += plot.gardenAreaM2;
+    totalPlotAreaM2 += plot.frontageM * plot.plotDepthM;
   }
 
   const averageGardenDepthM = plots.length ? plots.reduce((s, p) => s + p.gardenDepthM, 0) / plots.length : rules.minGardenDepthM;
+  const coverageRatio = grossAreaM2 > 0 ? Math.min(1, (totalPlotAreaM2 + totalRoadAreaM2) / grossAreaM2) : 0;
 
   const summary: LayoutSummary = {
     totalUnits: plots.length,
     achievedDensityUprHa,
-    roadLengthM: Math.max(0, maxX - minX),
+    roadLengthM: Math.round(totalRoadLengthM * 10) / 10,
     totalGardenAreaM2,
     averageGardenDepthM,
     mixCounts,
     estimatedGDV,
     estimatedBuildCost,
     profitProxy: estimatedGDV - estimatedBuildCost,
+    coverageRatio,
     compliance: buildComplianceChecks(plots, rules, densityBand, context, achievedDensityUprHa, entrance),
   };
 
@@ -521,7 +668,7 @@ function buildLayout(
     : `${MIX_LABELS[mixType]} • ${Math.round(orientationDeg)}° orientation`;
 
   return {
-    id: entrance ? `${mixType}-${topology}` : `${mixType}-${Math.round(orientationDeg)}`,
+    id: entrance ? `${mixType}-${topology}-${bandVariant}` : `${mixType}-${Math.round(orientationDeg)}-${bandVariant}`,
     label,
     mixType,
     orientationDeg,
@@ -582,6 +729,7 @@ export function generateSiteLayoutCandidates(
   }
 
   const mixTypes: MixType[] = ["semis", "mixed", "terrace", "bungalow"];
+  const bandVariants: BandStackVariant[] = ["flush", "centered"];
   const candidates: LayoutResult[] = [];
 
   if (frontage) {
@@ -595,8 +743,10 @@ export function generateSiteLayoutCandidates(
     const straightInAngle = frontage.edgeBearingRad + Math.PI / 2;
     const parallelAngle = frontage.edgeBearingRad;
     for (const mixType of mixTypes) {
-      candidates.push(buildLayout(polyLocal, origin, straightInAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "straight-in"));
-      candidates.push(buildLayout(polyLocal, origin, parallelAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "parallel"));
+      for (const bandVariant of bandVariants) {
+        candidates.push(buildLayout(polyLocal, origin, straightInAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "straight-in", bandVariant));
+        candidates.push(buildLayout(polyLocal, origin, parallelAngle, mixType, context, grossAreaM2, region, buildSpec, frontage, "parallel", bandVariant));
+      }
     }
   } else {
     // No verified adjacent highway — fall back to picking an orientation
@@ -607,7 +757,9 @@ export function generateSiteLayoutCandidates(
     const candidateAngles = [baseAngle, baseAngle + Math.PI / 2];
     for (const angle of candidateAngles) {
       for (const mixType of mixTypes) {
-        candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2, region, buildSpec, null, "geometric"));
+        for (const bandVariant of bandVariants) {
+          candidates.push(buildLayout(polyLocal, origin, angle, mixType, context, grossAreaM2, region, buildSpec, null, "geometric", bandVariant));
+        }
       }
     }
   }
@@ -631,12 +783,21 @@ export function generateSiteLayoutCandidates(
     };
   }
 
-  const winner = pool.reduce((best, c) => (c.summary.profitProxy > best.summary.profitProxy ? c : best));
+  // Among the compliant/density-safe pool, prefer a candidate that actually
+  // makes reasonable use of the site — otherwise the highest-profit pick
+  // can be a sparse layout that leaves most of the boundary empty.
+  const COVERAGE_PREFERENCE_THRESHOLD = 0.35;
+  const wellCovered = pool.filter((c) => c.summary.coverageRatio >= COVERAGE_PREFERENCE_THRESHOLD);
+  const finalPool = wellCovered.length ? wellCovered : pool;
+
+  const winner = finalPool.reduce((best, c) => (c.summary.profitProxy > best.summary.profitProxy ? c : best));
   winner.isWinner = true;
 
   let warning: string | undefined;
   if (!frontage) {
     warning = "No adjacent public highway was found near this boundary — road position is geometry-only and not a confirmed access point.";
+  } else if (frontage.confidence === "approximate") {
+    warning = `Nearest public highway is ${Math.round(frontage.distanceToRoadM)}m from the boundary — beyond the verified-frontage distance, so this access point is an approximate best guess, not a confirmed frontage.`;
   } else if (fullyCompliant.length === 0) {
     warning = "No candidate met every planning check — showing the closest compliant option.";
   }
