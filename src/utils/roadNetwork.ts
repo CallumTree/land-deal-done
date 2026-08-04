@@ -20,6 +20,13 @@ export interface FrontageInfo {
   distanceToRoadM: number;
   roadName?: string;
   highwayType: string;
+  /**
+   * "verified" = a real highway was found within the strict frontage
+   * distance; "approximate" = nothing was found that close, but a nearby
+   * highway was found within a wider fallback radius — treat as a best
+   * guess, not a confirmed frontage.
+   */
+  confidence: "verified" | "approximate";
 }
 
 // Shape of the subset of the Overpass "out geom" JSON response we rely on.
@@ -129,16 +136,28 @@ export async function fetchNearbyRoads(
   }
 }
 
+// How far in from each corner sampling starts, in metres — small enough that
+// short edges still get sampled, unlike a flat fraction of edge length.
+const CORNER_EXCLUSION_M = 6;
+// Roughly one sample point every 5m along a usable edge.
+const SAMPLE_SPACING_M = 5;
+
 /**
  * Find where the drawn boundary genuinely meets a real highway: the
  * boundary edge closest to a detected road, and the point on that edge
  * nearest the road's centreline — the natural site access point.
+ *
+ * Tries a strict pass within `maxDistanceM` first (marked "verified"); if
+ * nothing is found that close, retries within the wider `fallbackDistanceM`
+ * (marked "approximate") rather than giving up and falling back to an
+ * orientation with no relationship to any real road.
  */
 export function detectFrontage(
   polygonRingLocal: XY[],
   roads: RoadWay[],
   origin: XY,
-  maxDistanceM = 30
+  maxDistanceM = 30,
+  fallbackDistanceM = 75
 ): FrontageInfo | null {
   if (roads.length === 0) return null;
 
@@ -158,41 +177,53 @@ export function detectFrontage(
   });
   if (roadSegmentsLocal.length === 0) return null;
 
-  let best: FrontageInfo | null = null;
-  let bestScore = Infinity;
+  const searchWithin = (limitM: number, confidence: FrontageInfo["confidence"]): FrontageInfo | null => {
+    let best: FrontageInfo | null = null;
+    let bestScore = Infinity;
 
-  for (let i = 0; i < polygonRingLocal.length; i++) {
-    const edgeStart = polygonRingLocal[i];
-    const edgeEnd = polygonRingLocal[(i + 1) % polygonRingLocal.length];
-    const edgeBearingRad = Math.atan2(edgeEnd[1] - edgeStart[1], edgeEnd[0] - edgeStart[0]);
+    for (let i = 0; i < polygonRingLocal.length; i++) {
+      const edgeStart = polygonRingLocal[i];
+      const edgeEnd = polygonRingLocal[(i + 1) % polygonRingLocal.length];
+      const edgeBearingRad = Math.atan2(edgeEnd[1] - edgeStart[1], edgeEnd[0] - edgeStart[0]);
+      const edgeLength = Math.hypot(edgeEnd[0] - edgeStart[0], edgeEnd[1] - edgeStart[1]);
 
-    // Sample along the edge, keeping clear of the corners (avoids picking an
-    // entry point that's unusable once junction clearance is applied).
-    const samples = 8;
-    for (let s = 1; s < samples; s++) {
-      const t = s / samples;
-      const samplePoint: XY = [
-        edgeStart[0] + (edgeEnd[0] - edgeStart[0]) * t,
-        edgeStart[1] + (edgeEnd[1] - edgeStart[1]) * t,
-      ];
+      // Skip edges too short to hold clearance on both sides; otherwise
+      // sample density scales with edge length instead of a flat 8 points,
+      // so short frontages aren't under-sampled and long ones aren't
+      // wastefully coarse.
+      if (edgeLength <= 2 * CORNER_EXCLUSION_M) continue;
+      const usableStart = CORNER_EXCLUSION_M / edgeLength;
+      const usableEnd = 1 - usableStart;
+      const sampleCount = Math.max(4, Math.ceil(edgeLength / SAMPLE_SPACING_M));
 
-      for (const seg of roadSegmentsLocal) {
-        const dist = distancePointToSegment(samplePoint, seg.a, seg.b);
-        if (dist > maxDistanceM) continue;
-        const score = dist + seg.priority * 0.5;
-        if (score < bestScore) {
-          bestScore = score;
-          best = {
-            entryPointLocal: samplePoint,
-            edgeBearingRad,
-            distanceToRoadM: dist,
-            roadName: seg.name,
-            highwayType: seg.highwayType,
-          };
+      for (let s = 0; s <= sampleCount; s++) {
+        const t = usableStart + (usableEnd - usableStart) * (s / sampleCount);
+        const samplePoint: XY = [
+          edgeStart[0] + (edgeEnd[0] - edgeStart[0]) * t,
+          edgeStart[1] + (edgeEnd[1] - edgeStart[1]) * t,
+        ];
+
+        for (const seg of roadSegmentsLocal) {
+          const dist = distancePointToSegment(samplePoint, seg.a, seg.b);
+          if (dist > limitM) continue;
+          const score = dist + seg.priority * 0.5;
+          if (score < bestScore) {
+            bestScore = score;
+            best = {
+              entryPointLocal: samplePoint,
+              edgeBearingRad,
+              distanceToRoadM: dist,
+              roadName: seg.name,
+              highwayType: seg.highwayType,
+              confidence,
+            };
+          }
         }
       }
     }
-  }
 
-  return best;
+    return best;
+  };
+
+  return searchWithin(maxDistanceM, "verified") ?? searchWithin(fallbackDistanceM, "approximate");
 }

@@ -50,7 +50,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
             {warning}
           </div>
         )}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
             <p className="text-xs text-muted-foreground">Units placed</p>
             <p className="text-lg font-bold">{winner.summary.totalUnits}</p>
@@ -66,6 +66,10 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
           <div>
             <p className="text-xs text-muted-foreground">Profit proxy</p>
             <p className="text-lg font-bold">{formatCurrency(winner.summary.profitProxy)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Site used</p>
+            <p className="text-lg font-bold">{Math.round((winner.summary.coverageRatio ?? 0) * 100)}%</p>
           </div>
         </div>
 
@@ -97,6 +101,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
                   <TableHead>Layout</TableHead>
                   <TableHead className="text-right">Units</TableHead>
                   <TableHead className="text-right">Density</TableHead>
+                  <TableHead className="text-right">Site used</TableHead>
                   <TableHead className="text-right">Profit proxy</TableHead>
                   <TableHead className="text-right">Compliant</TableHead>
                 </TableRow>
@@ -116,6 +121,7 @@ const LayoutSummaryPanel = ({ output, onUseLayout }: LayoutSummaryPanelProps) =>
                       </TableCell>
                       <TableCell className="text-right">{c.summary.totalUnits}</TableCell>
                       <TableCell className="text-right">{c.summary.achievedDensityUprHa.toFixed(1)} u/ha</TableCell>
+                      <TableCell className="text-right">{Math.round((c.summary.coverageRatio ?? 0) * 100)}%</TableCell>
                       <TableCell className="text-right">{formatCurrency(c.summary.profitProxy)}</TableCell>
                       <TableCell className="text-right">
                         {allCompliant ? (

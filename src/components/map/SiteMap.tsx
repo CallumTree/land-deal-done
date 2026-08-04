@@ -506,10 +506,14 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       if (output.winner) {
         renderLayoutOnMap(output.winner);
         if (onLayoutGenerated) onLayoutGenerated(output.winner);
-        const accessNote = frontage
-          ? ` — access from ${frontage.roadName ?? 'adjacent highway'}`
-          : ' — no adjacent highway detected';
-        toast.success(`Smart layout generated: ${output.winner.summary.totalUnits} units, ${output.winner.label} (${region} pricing)${accessNote}`);
+        const units = output.winner.summary.totalUnits;
+        if (!frontage) {
+          toast.warning(`Smart layout generated — no verified road frontage found nearby, so orientation is geometry-only: ${units} units (${region} pricing).`);
+        } else if (frontage.confidence === 'approximate') {
+          toast.warning(`Smart layout generated — nearest highway is ${Math.round(frontage.distanceToRoadM)}m away (unverified frontage): ${units} units (${region} pricing).`);
+        } else {
+          toast.success(`Smart layout generated: ${units} units, ${output.winner.label} (${region} pricing) — access from ${frontage.roadName ?? 'adjacent highway'}.`);
+        }
       } else {
         layoutLayerGroup.current?.clearLayers();
         if (onLayoutGenerated) onLayoutGenerated(null);

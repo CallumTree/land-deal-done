@@ -53,3 +53,62 @@ export function distancePointToSegment(p: XY, a: XY, b: XY): number {
   const closestY = ay + t * dy;
   return Math.hypot(px - closestX, py - closestY);
 }
+
+/**
+ * X-interval(s) a polygon ring covers at a given Y, using the same even-odd
+ * crossing rule as pointInPolygon (kept consistent with it deliberately) so
+ * a row's usable width can be read directly from the boundary's real shape
+ * instead of its bounding box.
+ */
+export function polygonXIntervalsAtY(ring: XY[], y: number): Array<[number, number]> {
+  const xs: number[] = [];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y) {
+      xs.push(xi + ((y - yi) / (yj - yi)) * (xj - xi));
+    }
+  }
+  xs.sort((a, b) => a - b);
+  const intervals: Array<[number, number]> = [];
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    intervals.push([xs[i], xs[i + 1]]);
+  }
+  return intervals;
+}
+
+/** Intersect two sets of sorted, non-overlapping [lo, hi] intervals. */
+export function intersectIntervals(
+  a: Array<[number, number]>,
+  b: Array<[number, number]>
+): Array<[number, number]> {
+  const result: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const lo = Math.max(a[i][0], b[j][0]);
+    const hi = Math.min(a[i][1], b[j][1]);
+    if (lo < hi) result.push([lo, hi]);
+    if (a[i][1] < b[j][1]) i++;
+    else j++;
+  }
+  return result;
+}
+
+/** Remove a [keepoutLo, keepoutHi] gap from a set of intervals (splitting or trimming as needed). */
+export function subtractKeepout(
+  intervals: Array<[number, number]>,
+  keepoutLo: number,
+  keepoutHi: number
+): Array<[number, number]> {
+  const result: Array<[number, number]> = [];
+  for (const [lo, hi] of intervals) {
+    if (keepoutHi <= lo || keepoutLo >= hi) {
+      result.push([lo, hi]);
+      continue;
+    }
+    if (keepoutLo > lo) result.push([lo, keepoutLo]);
+    if (keepoutHi < hi) result.push([keepoutHi, hi]);
+  }
+  return result;
+}
