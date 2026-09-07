@@ -11,9 +11,10 @@ interface GlobalInputsProps {
   inputs: GlobalInputsType;
   onChange: (inputs: GlobalInputsType) => void;
   totalUnits?: number;
+  hasPolygon?: boolean;
 }
 
-const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) => {
+const GlobalInputs = ({ inputs, onChange, totalUnits = 0, hasPolygon = false }: GlobalInputsProps) => {
   const [isSitePrepOpen, setIsSitePrepOpen] = useState(false);
   
   const updateInput = (key: keyof GlobalInputsType, value: number | boolean | string) => {
@@ -152,19 +153,36 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0 }: GlobalInputsProps) =
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="siteArea" className="text-sm font-medium">
-          Site Area (m²)
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="siteArea" className="text-sm font-medium">
+            Site Area (m²)
+          </Label>
+          {hasPolygon && (
+            <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 border border-emerald-300/70 dark:border-emerald-800 rounded px-1.5 py-0.5">
+              from map
+            </span>
+          )}
+        </div>
         <Input
           id="siteArea"
           type="number"
           min="0"
-          value={inputs.siteArea}
-          onChange={(e) => updateInput("siteArea", parseFloat(e.target.value) || 0)}
-          className="text-sm"
-          placeholder="From map or manual entry"
+          value={inputs.siteArea > 0 ? inputs.siteArea : (hasPolygon ? 0 : "")}
+          onChange={(e) => {
+            if (!hasPolygon) {
+              updateInput("siteArea", parseFloat(e.target.value) || 0);
+            }
+          }}
+          readOnly={hasPolygon}
+          className={`text-sm ${
+            hasPolygon
+              ? "bg-muted/50 text-muted-foreground cursor-not-allowed border-dashed focus-visible:ring-0 select-all"
+              : ""
+          }`}
+          placeholder={hasPolygon ? "Defined by map boundary" : "From map or manual entry"}
+          title={hasPolygon ? "Site area is read-only because it is calculated from the drawn map boundary" : undefined}
         />
-            {inputs.siteArea > 0 && (
+        {inputs.siteArea > 0 && (
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-foreground/70">
               {(inputs.siteArea / 10000).toFixed(2)} hectares

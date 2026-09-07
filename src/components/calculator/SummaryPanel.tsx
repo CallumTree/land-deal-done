@@ -31,6 +31,7 @@ const SummaryPanel = ({ values, targetMargin, isSensitivityActive = false, sensi
 
   const copySummary = () => {
     const sitePrepPercent = values.totalCosts > 0 ? (values.sitePrepTechnical / values.totalCosts) * 100 : 0;
+    const financeCost = values.financeInterest + (values.financeFixedFees || 0);
     const summary = `
 Napkin GDV Summary
 ==================
@@ -41,9 +42,9 @@ ${values.prelims > 0 ? `Prelims: ${formatCurrency(values.prelims)}` : ''}
 Professional Fees: ${formatCurrency(values.professionalFees)}
 Marketing & Sales: ${formatCurrency(values.marketingSales)}
 Contingency: ${formatCurrency(values.contingency)}
-Finance: ${formatCurrency(values.finance)}
+Finance: ${formatCurrency(financeCost)}
 ${values.sitePrepTechnical > 0 ? `Site Prep & Technical: ${formatCurrency(values.sitePrepTechnical)} (${sitePrepPercent.toFixed(1)}%)` : ''}
-Other (S106/CIL): ${formatCurrency(values.other)}
+${values.otherPlanning > 0 ? `Other (S106/CIL): ${formatCurrency(values.otherPlanning)}` : ''}
 Land Cost: ${formatCurrency(values.landCost)}
 ---
 Total Costs: ${formatCurrency(values.totalCosts)}
@@ -58,6 +59,8 @@ Variance to Land: ${formatCurrency(values.variance)}
     toast.success("Summary copied to clipboard");
   };
 
+  const financeCost = values.financeInterest + (values.financeFixedFees || 0);
+
   const costBreakdown = [
     { label: "Build (Base)", value: values.baseBuildCost, color: "#3B82F6" },
     ...(values.externals > 0 ? [{ label: "Externals", value: values.externals, color: "#06B6D4" }] : []),
@@ -65,9 +68,9 @@ Variance to Land: ${formatCurrency(values.variance)}
     { label: "Pro Fees", value: values.professionalFees, color: "#6366F1" },
     { label: "Marketing", value: values.marketingSales, color: "#8B5CF6" },
     { label: "Contingency", value: values.contingency, color: "#64748B" },
-    { label: "Finance", value: values.finance, color: "#F59E0B" },
+    { label: "Finance", value: financeCost, color: "#F59E0B" },
     ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep", value: values.sitePrepTechnical, color: "#F97316" }] : []),
-    { label: "S106/CIL", value: values.other, color: "#A855F7" },
+    { label: "S106/CIL", value: values.otherPlanning, color: "#A855F7" },
     { label: "Land", value: values.landCost, color: "#EC4899" },
   ].filter(item => item.value > 0);
 

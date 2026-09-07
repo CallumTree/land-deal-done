@@ -9,6 +9,7 @@ import MarketSensitivityPanel from "@/components/calculator/MarketSensitivityPan
 import LenderReportModal from "@/components/calculator/LenderReportModal";
 import { ROIVisualiser } from "@/components/roi/ROIVisualiser";
 import { PlanningUpliftInsight } from "@/components/calculator/PlanningUpliftInsight";
+import { projectStorage } from "@/services/projectStorage";
 import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ interface NapkinCalculatorProps {
   mapImageUrl?: string;
   showROIVisualiser?: boolean;
   projectId?: string; // Add projectId for proper per-project storage
+  hasPolygon?: boolean;
   presetInfo?: {
     region: string;
     spec: "low" | "medium" | "high";
@@ -37,7 +39,7 @@ interface NapkinCalculatorProps {
   };
 }
 
-const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, projectId, presetInfo, suggestionMetadata }: NapkinCalculatorProps) => {
+const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisualiser = false, projectId, hasPolygon, presetInfo, suggestionMetadata }: NapkinCalculatorProps) => {
   // Create per-project storage key
   const storageKey = useMemo(() => 
     projectId ? `napkin-calculator-data-${projectId}` : "napkin-calculator-data"
@@ -135,6 +137,9 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
   const isSensitivityActive = Object.values(sensitivity).some(v => v !== 0);
   
   const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
+  const isPolygonPresent = hasPolygon !== undefined
+    ? hasPolygon
+    : Boolean(projectId ? projectStorage.getProject(projectId)?.polygon : (siteArea > 0));
 
   // Show ROI Visualiser if requested
   if (showROIVisualiser) {
@@ -261,7 +266,7 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm font-bold">2</span>
                 Cost & Fee Assumptions
               </h3>
-              <GlobalInputs inputs={inputs} onChange={setInputs} totalUnits={totalUnits} />
+              <GlobalInputs inputs={inputs} onChange={setInputs} totalUnits={totalUnits} hasPolygon={isPolygonPresent} />
             </div>
           </div>
 

@@ -40,11 +40,13 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
     });
   }
 
+  const financeCost = values.financeInterest + (values.financeFixedFees || 0);
+
   waterfallData.push(
     { name: "Professional Fees", value: -values.professionalFees, isNegative: true, color: "#6366F1" },
     { name: "Marketing & Sales", value: -values.marketingSales, isNegative: true, color: "#8B5CF6" },
     { name: "Contingency", value: -values.contingency, isNegative: true, color: "#64748B" },
-    { name: "Finance", value: -values.finance, isNegative: true, color: "#F59E0B" }
+    { name: "Finance", value: -financeCost, isNegative: true, color: "#F59E0B" }
   );
 
   if (values.sitePrepTechnical > 0) {
@@ -56,10 +58,10 @@ export function ProfitWaterfall({ values, onIncludeInPack }: ProfitWaterfallProp
     });
   }
 
-  if (values.other > 0) {
+  if (values.otherPlanning > 0) {
     waterfallData.push({
       name: "Other",
-      value: -values.other,
+      value: -values.otherPlanning,
       isNegative: true,
       color: "#A855F7",
     });

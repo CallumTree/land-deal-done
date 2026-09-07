@@ -167,11 +167,6 @@ export const calculateTotals = (
 
   return {
     totalGDV,
-    // Legacy fields (for backward compat)
-    buildCost: baseBuildCost + externals + prelims,
-    finance: totalFinance,
-    other: otherPlanning,
-    // New detailed fields
     baseBuildCost,
     externals,
     prelims,

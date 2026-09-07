@@ -466,6 +466,7 @@ const ProjectWorkspace = () => {
               mapImageUrl={mapImageUrl}
               presetInfo={currentProject?.presetInfo}
               suggestionMetadata={currentProject?.suggestionMetadata}
+              hasPolygon={Boolean(savedPolygon || currentProject?.polygon)}
             />
           </TabsContent>
 
@@ -475,6 +476,7 @@ const ProjectWorkspace = () => {
               projectId={id}
               mapImageUrl={mapImageUrl}
               showROIVisualiser
+              hasPolygon={Boolean(savedPolygon || currentProject?.polygon)}
             />
           </TabsContent>
 

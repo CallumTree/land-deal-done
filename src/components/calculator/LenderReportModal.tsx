@@ -7,9 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Printer, X } from "lucide-react";
 import { toast } from "sonner";
-import { useSubscription } from "@/hooks/useSubscription";
-import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
-import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 interface LenderReportModalProps {
   isOpen: boolean;
@@ -27,8 +24,6 @@ const LenderReportModal = ({
   adjustments,
 }: LenderReportModalProps) => {
   const [notes, setNotes] = useState("");
-  const { tier, loading } = useSubscription();
-  const canExportPDF = checkFeatureAccess(tier, 'pdf_export');
 
   const getAdjustmentsSummary = () => {
     const parts = [];
@@ -155,28 +150,21 @@ const LenderReportModal = ({
             />
           </div>
 
-          {/* Action Buttons or Upgrade Prompt */}
-          {!canExportPDF && !loading ? (
-            <div className="pt-4 border-t">
-              <UpgradePrompt feature="pdf_export" />
-            </div>
-          ) : (
-            <div className="flex gap-3 pt-4 border-t">
-              <Button variant="outline" onClick={onClose} className="flex-1">
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-              <Button
-                variant="cta"
-                onClick={handleExport}
-                className="flex-1"
-                disabled={loading}
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Print / Save PDF
-              </Button>
-            </div>
-          )}
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={onClose} className="flex-1">
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button
+              variant="cta"
+              onClick={handleExport}
+              className="flex-1"
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print / Save PDF
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

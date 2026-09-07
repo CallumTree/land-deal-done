@@ -67,21 +67,16 @@ export interface GlobalInputs {
 
 export interface CalculatedValues {
   totalGDV: number;
-  // Legacy fields
-  buildCost: number;
-  finance: number;
-  other: number;
-  // New fields (with full breakdown)
-  baseBuildCost?: number;
-  externals?: number;
-  prelims?: number;
+  baseBuildCost: number;
+  externals: number;
+  prelims: number;
   professionalFees: number;
   marketingSales: number;
   contingency: number;
-  financeInterest?: number;
-  financeFixedFees?: number;
+  financeInterest: number;
+  financeFixedFees: number;
   sitePrepTechnical: number;
-  otherPlanning?: number;
+  otherPlanning: number;
   landCost: number;
   landAcquisitionCosts?: number;
   totalCosts: number;

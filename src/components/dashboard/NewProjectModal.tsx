@@ -20,7 +20,6 @@ const NewProjectModal = ({ open, onOpenChange }: NewProjectModalProps) => {
     name: "",
     location: "",
     postcode: "",
-    landSize: "",
     landCost: "",
     notes: "",
   });
@@ -51,7 +50,7 @@ const NewProjectModal = ({ open, onOpenChange }: NewProjectModalProps) => {
         landCost: parseFloat(formData.landCost) || 0,
         targetMarginPercent: 20,
         vatEnabled: false,
-        siteArea: parseFloat(formData.landSize) || 0,
+        siteArea: 0,
         demolitionClearance: 0,
         ecologyEnvironmental: 0,
         groundInvestigation: 0,
@@ -124,29 +123,22 @@ const NewProjectModal = ({ open, onOpenChange }: NewProjectModalProps) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="landSize">Land Size (hectares)</Label>
-              <Input
-                id="landSize"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={formData.landSize}
-                onChange={(e) => setFormData({ ...formData, landSize: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
               <Label htmlFor="landCost">Land Cost (£)</Label>
-              <Input
-                id="landCost"
-                type="number"
-                step="1000"
-                placeholder="0"
-                value={formData.landCost}
-                onChange={(e) => setFormData({ ...formData, landCost: e.target.value })}
-              />
+              <span className="text-xs text-muted-foreground">Rough starting entry</span>
             </div>
+            <Input
+              id="landCost"
+              type="number"
+              step="1000"
+              placeholder="e.g., 250000"
+              value={formData.landCost}
+              onChange={(e) => setFormData({ ...formData, landCost: e.target.value })}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Site area will be determined automatically by drawing the boundary on the map.
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -6,9 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Printer, FileText, TrendingUp } from "lucide-react";
 import { useState } from "react";
-import { useSubscription } from "@/hooks/useSubscription";
-import { checkFeatureAccess } from "@/utils/subscriptionHelpers";
-import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 interface LenderExportProps {
   values: CalculatedValues;
@@ -35,12 +32,11 @@ const LenderExport = ({
   const [marketCommentary, setMarketCommentary] = useState("");
   const [exitStrategy, setExitStrategy] = useState("");
   
-  const { tier, loading } = useSubscription();
-  const canExportPDF = checkFeatureAccess(tier, 'pdf_export');
-
   const totalUnits = rows.reduce((sum, row) => sum + row.units, 0);
   const siteAreaHa = siteArea / 10000;
   const density = siteAreaHa > 0 ? totalUnits / siteAreaHa : 0;
+
+  const financeCost = values.financeInterest + (values.financeFixedFees || 0);
 
   const costBreakdown = [
     { label: "Build (Base)", value: values.baseBuildCost },
@@ -49,9 +45,9 @@ const LenderExport = ({
     { label: "Professional Fees", value: values.professionalFees },
     { label: "Marketing & Sales", value: values.marketingSales },
     { label: "Contingency", value: values.contingency },
-    { label: "Finance", value: values.finance },
+    { label: "Finance", value: financeCost },
     ...(values.sitePrepTechnical > 0 ? [{ label: "Site Prep & Technical", value: values.sitePrepTechnical }] : []),
-    { label: "Other (S106/CIL)", value: values.other },
+    { label: "Other (S106/CIL)", value: values.otherPlanning },
     { label: "Land Cost", value: values.landCost },
   ].filter(item => item.value > 0);
 
@@ -74,9 +70,9 @@ const LenderExport = ({
       adjustedProfessionalFees + 
       values.marketingSales + 
       adjustedContingency + 
-      values.finance + 
+      financeCost + 
       values.sitePrepTechnical + 
-      values.other + 
+      values.otherPlanning + 
       values.landCost;
     
     const adjustedProfit = adjustedGDV - adjustedTotalCosts;
@@ -90,20 +86,16 @@ const LenderExport = ({
   return (
     <div className="space-y-6">
       {/* Header Controls */}
-      {!canExportPDF && !loading ? (
-        <UpgradePrompt feature="pdf_export" />
-      ) : (
-        <div className="flex justify-between items-center print:hidden bg-card p-4 rounded-lg border">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-semibold">Lender Summary Pack</h2>
-          </div>
-          <Button onClick={handlePrint} size="default" disabled={loading}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print / Save PDF
-          </Button>
+      <div className="flex justify-between items-center print:hidden bg-card p-4 rounded-lg border">
+        <div className="flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold">Lender Summary Pack</h2>
         </div>
-      )}
+        <Button onClick={handlePrint} size="default">
+          <Printer className="h-4 w-4 mr-2" />
+          Print / Save PDF
+        </Button>
+      </div>
 
       {/* Print Content */}
       <div className="print:p-8 space-y-6 bg-background" id="lender-pack">

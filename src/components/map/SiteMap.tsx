@@ -15,10 +15,9 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Search, MapPin, ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings, Wand2 } from 'lucide-react';
+import { Search, MapPin, ChevronDown, ChevronUp, Trash2, RefreshCw, Map as MapIcon, Satellite, Settings, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { detectLocalAuthority, getLAHousingData, calculateAdjustedMix } from '@/utils/localAuthorityData';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ContextPreset,
@@ -365,9 +364,22 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
       
       setCurrentArea(areaInM2);
       setCurrentPerimeter(perimeterInM);
+      onAreaUpdate(Math.round(areaInM2));
+
+      if (onLocationDetected) {
+        const bounds = layer.getBounds();
+        const center = bounds.getCenter();
+        detectRegionFromCoords(center.lat, center.lng).then((region) => {
+          const locationName = searchQuery || 'Site location';
+          onLocationDetected(locationName, region);
+        }).catch((err) => {
+          console.warn('Location detection failed:', err);
+        });
+      }
     } else {
       setCurrentArea(0);
       setCurrentPerimeter(0);
+      onAreaUpdate(0);
     }
   };
 
@@ -641,201 +653,12 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
     }
   };
 
-  const handleUseForGDV = async () => {
-    if (currentArea > 0) {
-      // Extract and save polygon
-      extractAndNotifyPolygon();
-      // Calculate density and compactness
-      const grossAreaM2 = currentArea;
-      const grossAreaHa = grossAreaM2 / 10000;
-      const netDevelopableHa = grossAreaHa * (assumptions.netDevelopable / 100);
-      
-      // Calculate approx units
-      const netDevelopableM2 = grossAreaM2 * (assumptions.netDevelopable / 100);
-      const netBuildableM2 = netDevelopableM2 * (1 - assumptions.infrastructure / 100);
-      const avgPlotArea = MIX_PLOT_AREA[assumptions.mixType];
-      const approxUnits = Math.round(netBuildableM2 / avgPlotArea);
-      
-      // Calculate implied density (units per net developable hectare)
-      const impliedDensity = netDevelopableHa > 0 ? approxUnits / netDevelopableHa : 0;
-      
-      // Calculate compactness: 4πA/P²
-      const compactness = currentPerimeter > 0 ? (4 * Math.PI * grossAreaM2) / (currentPerimeter * currentPerimeter) : 0;
-      const isCompact = compactness >= 0.65;
-      const isIrregular = !isCompact;
-      
-      // Try to detect local authority and get region
-      let localAuthority: string | null = null;
-      let detectedRegion = "South East"; // default
-      
-      // Get centroid for location detection
-      if (drawnItems.current) {
-        const layers = drawnItems.current.getLayers();
-        if (layers.length > 0) {
-          const layer = layers[0] as L.Polygon;
-          const bounds = layer.getBounds();
-          const center = bounds.getCenter();
-          detectedRegion = await detectRegionFromCoords(center.lat, center.lng);
-          
-          // Try to detect LA from search query if available
-          if (searchQuery) {
-            try {
-              localAuthority = await detectLocalAuthority(searchQuery);
-            } catch (error) {
-              console.warn("Failed to detect LA:", error);
-            }
-          }
-        }
-      }
-      
-      // Get LA housing data (with fallback to regional/national)
-      const laData = getLAHousingData(localAuthority || undefined, detectedRegion);
-      
-      // Determine base mix band based on density
-      let mixName = "";
-      let baseMixConfig: Array<{ type: string; percent: number; gia: number }> = [];
-      
-      if (impliedDensity < 28) {
-        // 20-28 u/ha: Family Suburban
-        mixName = "Family Suburban";
-        baseMixConfig = [
-          { type: "3-Bed Semi", percent: isIrregular ? 60 : 50, gia: 90 },
-          { type: "4-Bed Detached", percent: isIrregular ? 20 : 30, gia: 120 },
-          { type: "2-Bed Semi", percent: 20, gia: 75 },
-        ];
-      } else if (impliedDensity < 36) {
-        // 28-36 u/ha: Balanced Mixed (default suburban)
-        mixName = "Balanced Mixed";
-        baseMixConfig = [
-          { type: "3-Bed Semi", percent: 50, gia: 90 },
-          { type: "2-Bed Semi", percent: 30, gia: 75 },
-          { type: "4-Bed Detached", percent: 20, gia: 120 },
-        ];
-      } else if (impliedDensity < 45) {
-        // 36-45 u/ha: Compact Mixed
-        mixName = "Compact Mixed";
-        baseMixConfig = [
-          { type: "2-Bed Semi", percent: isCompact ? 30 : 40, gia: 75 },
-          { type: "3-Bed Semi", percent: isCompact ? 50 : 40, gia: 90 },
-          { type: "3-Bed Detached", percent: 20, gia: 105 },
-        ];
-      } else {
-        // >45 u/ha: Urban Edge
-        mixName = "Urban Edge";
-        baseMixConfig = [
-          { type: "2-Bed Semi", percent: 60, gia: 75 },
-          { type: "3-Bed Semi", percent: 20, gia: 85 },
-          { type: "3-Bed Detached", percent: 20, gia: 105 },
-        ];
-      }
-      
-      // Adjust mix based on LA data
-      const adjustedMix = calculateAdjustedMix(baseMixConfig, laData, approxUnits);
-      
-      // Create scenario name with LA context
-      const scenarioName = localAuthority 
-        ? `Suggested mix • ${mixName} • ${localAuthority}`
-        : `Suggested mix • ${mixName} • ${detectedRegion}`;
-      
-      // Calculate units per type and create rows
-      const generatedRows = adjustedMix.map((config, idx) => {
-        const defaults: Record<string, { salesValue: number; buildPerSqm: number }> = {
-          "2-Bed Semi": { salesValue: 247500, buildPerSqm: 1650 },
-          "3-Bed Semi": { salesValue: 292500, buildPerSqm: 1650 },
-          "3-Bed Detached": { salesValue: 369000, buildPerSqm: 1750 },
-          "4-Bed Detached": { salesValue: 432000, buildPerSqm: 1800 },
-          "2-Bed Bungalow": { salesValue: 228000, buildPerSqm: 1650 },
-          "3-Bed Bungalow": { salesValue: 291000, buildPerSqm: 1700 },
-        };
-        const typeDefaults = defaults[config.type] || { salesValue: 0, buildPerSqm: 1650 };
-        
-        return {
-          id: `mix-${Date.now()}-${idx}`,
-          type: config.type,
-          units: config.units,
-          giaPerUnit: config.gia,
-          salesValue: typeDefaults.salesValue,
-          unitPriceOverride: 0,
-          buildPerSqm: typeDefaults.buildPerSqm,
-          notes: config.adjustedFrom === "LA data" ? `${laData.dataSource}` : "",
-        };
-      });
-      
-      onAreaUpdate(Math.round(currentArea));
-      if (onGenerateRows) {
-        const metadata = {
-          source: laData.dataSource,
-          localAuthority: localAuthority || undefined,
-          region: detectedRegion,
-          baseBand: mixName,
-          generatedAt: new Date().toISOString(),
-        };
-        onGenerateRows(generatedRows, metadata);
-      }
-      
-      // Detect region from polygon centroid if location detection callback provided
-      if (onLocationDetected) {
-        const locationName = localAuthority || searchQuery || 'Site location';
-        onLocationDetected(locationName, detectedRegion);
-      }
-      
-      // Show success message with LA context
-      const sourceInfo = localAuthority 
-        ? `Mix adjusted from ${mixName} based on ${laData.dataSource}`
-        : `Using ${mixName} with regional defaults`;
-      
-      toast.success("Unit mix generated from map", {
-        description: sourceInfo,
-        duration: 6000,
-      });
-      
-      // Capture map snapshot if callback provided
-      if (onMapSnapshot && map.current) {
-        try {
-          // Use leaflet-image or simple canvas approach
-          const mapElement = map.current.getContainer();
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          if (ctx && mapElement) {
-            canvas.width = mapElement.offsetWidth;
-            canvas.height = mapElement.offsetHeight;
-            
-            // Simple approach: convert to data URL (limitations: won't capture tiles perfectly)
-            // For production, consider using leaflet-image or html2canvas library
-            const mapRect = mapElement.getBoundingClientRect();
-            
-            // Store the current map view as a static image URL
-            // This is a placeholder - in production you'd use a proper screenshot library
-            onMapSnapshot(mapElement.style.backgroundImage || '');
-          }
-        } catch (err) {
-          console.warn('Failed to capture map snapshot:', err);
-        }
-      }
-      
-      const densityRounded = Math.round(impliedDensity);
-      toast.success(
-        `Recommended mix applied: ${mixName}, ${approxUnits} units @ ${densityRounded} u/ha (ND ${assumptions.netDevelopable}%, Infra ${assumptions.infrastructure}%). Edit any row to refine.`
-      );
-      
-      // Keep map visible - don't collapse
-      // setIsOpen(false);
-      
-      // Scroll to calculator
-      setTimeout(() => {
-        document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-    } else {
-      toast.error('Please draw a boundary first');
-    }
-  };
-
   const handleClear = () => {
     drawnItems.current?.clearLayers();
     setCurrentArea(0);
     setCurrentPerimeter(0);
     clearGeneratedLayout();
+    onAreaUpdate(0);
 
     // Notify parent that polygon was cleared
     if (onPolygonUpdate) {
@@ -1138,35 +961,13 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button 
-                      onClick={handleUseForGDV} 
-                      className="flex-1"
-                      disabled={currentArea === 0}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Send to GDV
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-sm">
-                    <p className="font-semibold mb-1">Smart Mix Generation</p>
-                    <p className="text-xs">
-                      Generates unit mix adjusted using local authority new-build completion data 
-                      when available, reducing duplicates and improving realism.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
                     <Button
                       onClick={handleGenerateLayout}
-                      variant="secondary"
                       className="flex-1"
                       disabled={currentArea === 0 || isGeneratingLayout}
                     >
                       <Wand2 className="h-4 w-4 mr-2" />
-                      {isGeneratingLayout ? 'Generating…' : 'Generate Smart Layout'}
+                      {isGeneratingLayout ? 'Generating Layout…' : 'Generate Smart Layout'}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
@@ -1174,7 +975,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
                     <p className="text-xs">
                       Places an access road plus rows of house plots (each with a compliant rear garden) inside
                       your boundary, compares mix/orientation options against planning rules, and picks the
-                      highest-profit compliant layout.
+                      highest-profit compliant layout to populate into GDV.
                     </p>
                   </TooltipContent>
                 </Tooltip>
