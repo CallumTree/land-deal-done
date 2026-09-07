@@ -49,6 +49,8 @@ const NewProjectModal = ({ open, onOpenChange }: NewProjectModalProps) => {
         s106CIL: 0,
         landCost: parseFloat(formData.landCost) || 0,
         targetMarginPercent: 20,
+        prelimsPercent: 12,
+        programmeDurationMonths: 18,
         vatEnabled: false,
         siteArea: 0,
         demolitionClearance: 0,

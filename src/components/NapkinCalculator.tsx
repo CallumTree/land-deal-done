@@ -54,6 +54,8 @@ const NapkinCalculator = ({ siteArea = 0, initialRows, mapImageUrl, showROIVisua
     s106CIL: 0,
     landCost: 0,
     targetMarginPercent: 20,
+    prelimsPercent: 12,
+    programmeDurationMonths: 18,
     vatEnabled: false,
     siteArea: 0,
     demolitionClearance: 0,

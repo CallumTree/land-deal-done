@@ -153,6 +153,38 @@ const GlobalInputs = ({ inputs, onChange, totalUnits = 0, hasPolygon = false }: 
       </div>
 
       <div className="space-y-2">
+        <Label htmlFor="prelimsPercent" className="text-sm font-medium">
+          Prelims % (of build)
+        </Label>
+        <Input
+          id="prelimsPercent"
+          type="number"
+          min="0"
+          max="20"
+          step="0.5"
+          value={inputs.prelimsPercent !== undefined ? inputs.prelimsPercent : 12}
+          onChange={(e) => updateInput("prelimsPercent", parseFloat(e.target.value) || 0)}
+          className="text-sm"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="programmeDurationMonths" className="text-sm font-medium">
+          Programme Duration (months)
+        </Label>
+        <Input
+          id="programmeDurationMonths"
+          type="number"
+          min="1"
+          max="60"
+          step="1"
+          value={inputs.programmeDurationMonths !== undefined ? inputs.programmeDurationMonths : 18}
+          onChange={(e) => updateInput("programmeDurationMonths", parseFloat(e.target.value) || 0)}
+          className="text-sm"
+        />
+      </div>
+
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="siteArea" className="text-sm font-medium">
             Site Area (m²)
