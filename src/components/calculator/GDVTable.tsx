@@ -177,8 +177,8 @@ const GDVTable = ({ rows, onChange }: GDVTableProps) => {
               <TableHead className="w-[250px] font-semibold">Type</TableHead>
               <TableHead className="w-[140px] font-semibold">Units</TableHead>
               <TableHead className="w-[120px]">GIA/Unit (m²)</TableHead>
-              <TableHead className="w-[200px] font-semibold">Sales Value (£)</TableHead>
-              <TableHead className="w-[160px]">Override (£)</TableHead>
+              <TableHead className="w-[200px] font-semibold">Sales Value (£/unit)</TableHead>
+              <TableHead className="w-[160px]">Override (£/unit)</TableHead>
               <TableHead className="w-[180px] font-semibold">Build £/m²</TableHead>
               <TableHead className="w-[140px]">Build/Unit</TableHead>
               <TableHead className="w-[160px]">Build Total</TableHead>

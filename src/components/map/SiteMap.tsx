@@ -738,7 +738,7 @@ const SiteMap = ({ onAreaUpdate, savedArea, onGenerateRows, onMapSnapshot, onLoc
         : `Suggested mix • ${mixName} • ${detectedRegion}`;
       
       // Calculate units per type and create rows
-      let generatedRows = adjustedMix.map((config, idx) => {
+      const generatedRows = adjustedMix.map((config, idx) => {
         const defaults: Record<string, { salesValue: number; buildPerSqm: number }> = {
           "2-Bed Semi": { salesValue: 247500, buildPerSqm: 1650 },
           "3-Bed Semi": { salesValue: 292500, buildPerSqm: 1650 },

@@ -2,15 +2,11 @@ export interface PropertyRow {
   id: string;
   type: string;
   units: number;
-  // Legacy fields (for backward compatibility)
   giaPerUnit: number;
-  salesValue: number;
-  unitPriceOverride: number;
+  salesValue: number; // £/unit, editable
+  unitPriceOverride: number; // optional £/unit override
   buildPerSqm: number;
-  // New fields (preferred)
   gia_m2_per_unit?: number;
-  sale_value_per_unit?: number;
-  sale_ppm2?: number;
   build_ppm2?: number;
   notes: string;
   priceSource?: {

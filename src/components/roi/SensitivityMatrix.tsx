@@ -57,8 +57,8 @@ export function SensitivityMatrix({ rows, inputs, onIncludeInPack }: Sensitivity
     let salesThreshold = 0;
     let buildThreshold = 0;
 
-    for (let sales of salesBands) {
-      for (let build of buildBands) {
+    for (const sales of salesBands) {
+      for (const build of buildBands) {
         const margin = calculateProfitMargin(sales, build);
         if (margin < 20) {
           salesThreshold = sales;

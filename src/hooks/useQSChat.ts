@@ -38,6 +38,21 @@ export const useQSChat = (project: Project | null) => {
         density: project.density,
       } : null;
 
+      if (!import.meta.env.VITE_SUPABASE_URL) {
+        await new Promise(r => setTimeout(r, 600));
+        const gdvStr = project?.gdv ? `£${(project.gdv / 1000000).toFixed(2)}M` : '£0';
+        const buildCostStr = project?.buildCost ? `£${(project.buildCost / 1000000).toFixed(2)}M` : '£0';
+        const profitMarginStr = project?.profitMargin ? `${project.profitMargin.toFixed(1)}%` : '0%';
+        const reply: ChatMessage = {
+          role: 'assistant',
+          content: `**AI Quantity Surveyor Analysis:**\n\nFor **${project?.name || 'this scheme'}** (${project?.units ?? 0} units, ${project?.location || 'UK'}):\n- **GDV**: ${gdvStr}\n- **Build Cost**: ${buildCostStr}\n- **Net Margin**: ${profitMarginStr}\n\n*Note: To enable live streaming LLM evaluations via your Supabase edge function, provide your \`VITE_SUPABASE_URL\` and \`VITE_SUPABASE_PUBLISHABLE_KEY\`.*`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, reply]);
+        setIsLoading(false);
+        return;
+      }
+
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qs-chat`;
       
       const response = await fetch(CHAT_URL, {

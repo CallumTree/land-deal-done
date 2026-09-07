@@ -1,0 +1,8 @@
+{
+  "name": "EazyBuild",
+  "description": "Property development feasibility made simple. Replace Excel chaos with instant viability checks, AI-driven insights, and professional reports that lenders trust.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

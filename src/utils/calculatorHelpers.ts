@@ -12,34 +12,18 @@ export const formatPercent = (value: number): string => {
 };
 
 /**
- * Calculate row-level values with backward compatibility
+ * Calculate row-level values: override if >0, else salesValue
  */
 export const calculateRowValues = (row: PropertyRow) => {
-  // Use new fields if available, fall back to legacy fields
   const gia = row.gia_m2_per_unit || row.giaPerUnit || 0;
   const buildPpm2 = row.build_ppm2 || row.buildPerSqm || 0;
   const units = row.units || 0;
   
-  // Determine sale value  per unit (with new dual-mode logic)
-  let saleValuePerUnit = 0;
-  let salePpm2 = 0;
-  
-  if (row.sale_value_per_unit && row.sale_value_per_unit > 0) {
-    // New field takes priority
-    saleValuePerUnit = row.sale_value_per_unit;
-    salePpm2 = gia > 0 ? saleValuePerUnit / gia : 0;
-  } else if (row.sale_ppm2 && row.sale_ppm2 > 0 && gia > 0) {
-    // Calculate from £/m²
-    salePpm2 = row.sale_ppm2;
-    saleValuePerUnit = salePpm2 * gia;
-  } else {
-    // Fall back to legacy fields
-    const gdvPerUnit = row.unitPriceOverride > 0 
-      ? row.unitPriceOverride 
-      : (row.salesValue || 0);
-    saleValuePerUnit = gdvPerUnit;
-    salePpm2 = gia > 0 ? gdvPerUnit / gia : 0;
-  }
+  // Override if >0, else salesValue (£/unit)
+  const saleValuePerUnit = (row.unitPriceOverride && row.unitPriceOverride > 0)
+    ? row.unitPriceOverride
+    : (row.salesValue || 0);
+  const salePpm2 = gia > 0 ? saleValuePerUnit / gia : 0;
   
   const buildPerUnit = buildPpm2 * gia;
   const buildTotal = buildPerUnit * units;
@@ -49,9 +33,8 @@ export const calculateRowValues = (row: PropertyRow) => {
   return {
     buildPerUnit: isNaN(buildPerUnit) ? 0 : buildPerUnit,
     buildTotal: isNaN(buildTotal) ? 0 : buildTotal,
-    gdvPerUnit: isNaN(saleValuePerUnit) ? 0 : saleValuePerUnit, // Legacy compat
+    gdvPerUnit: isNaN(saleValuePerUnit) ? 0 : saleValuePerUnit,
     gdvTotal: isNaN(gdvTotal) ? 0 : gdvTotal,
-    // New fields
     saleValuePerUnit,
     salePpm2,
     marginPct,
@@ -226,8 +209,10 @@ export const exportToCSV = (rows: PropertyRow[], filename: string = "napkin-gdv.
     headers.join(","),
     ...rows.map(row => {
       const gia = row.gia_m2_per_unit || row.giaPerUnit || 0;
-      const salePerUnit = row.sale_value_per_unit || row.unitPriceOverride || row.salesValue || 0;
-      const salePpm2 = row.sale_ppm2 || (gia > 0 ? salePerUnit / gia : 0);
+      const salePerUnit = (row.unitPriceOverride && row.unitPriceOverride > 0)
+        ? row.unitPriceOverride
+        : (row.salesValue || 0);
+      const salePpm2 = gia > 0 ? salePerUnit / gia : 0;
       const buildPpm2 = row.build_ppm2 || row.buildPerSqm || 0;
       
       return [
@@ -271,15 +256,11 @@ export const importFromCSV = (file: File): Promise<PropertyRow[]> => {
             id: `imported-${Date.now()}-${index}`,
             type: cleanValues[0] || "Custom",
             units: parseInt(cleanValues[1]) || 0,
-            // Legacy fields
             giaPerUnit: gia,
             salesValue: salePerUnit,
             unitPriceOverride: 0,
             buildPerSqm: buildPpm2,
-            // New fields
             gia_m2_per_unit: gia,
-            sale_value_per_unit: salePerUnit,
-            sale_ppm2: salePpm2,
             build_ppm2: buildPpm2,
             notes: cleanValues[6] || "",
           };
