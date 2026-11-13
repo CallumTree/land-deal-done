@@ -8,9 +8,16 @@
 -- same (Supabase's identity-linking preserves it), so existing rows keep
 -- working with no migration and no data loss.
 --
--- Deliberately not touching early_interest, subscription_tiers,
--- promo_codes, user_subscriptions, or the old unused `projects` table —
--- those are left alone per the reset brief.
+-- This runs against a fresh, empty Supabase project, so it defines its own
+-- updated_at trigger function rather than assuming one already exists.
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 CREATE TABLE public.sites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,3 +95,11 @@ CREATE TRIGGER update_scenarios_updated_at
   BEFORE UPDATE ON public.scenarios
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
+
+-- RLS alone doesn't grant table access — the anon/authenticated Postgres
+-- roles still need explicit GRANTs, or every query 403s even with correct
+-- policies. (Caught the hard way against the old project before switching.)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sites TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.scenarios TO authenticated;
+GRANT ALL ON public.sites TO service_role;
+GRANT ALL ON public.scenarios TO service_role;
