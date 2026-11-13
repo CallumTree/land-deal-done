@@ -1,0 +1,18 @@
+{
+  "id": "l-shaped",
+  "description": "Rectangle with a notch cut from one corner — tests an irregular, non-convex boundary (common around existing development).",
+  "boundaryBng": [
+    [302000, 200000],
+    [302080, 200000],
+    [302080, 200060],
+    [302030, 200060],
+    [302030, 200035],
+    [302000, 200035],
+    [302000, 200000]
+  ],
+  "entranceBng": [302040, 200000],
+  "areaHectares": 0.405,
+  "expectedUnits": 12,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

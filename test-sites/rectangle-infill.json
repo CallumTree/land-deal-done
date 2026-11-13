@@ -1,0 +1,16 @@
+{
+  "id": "rectangle-infill",
+  "description": "Clean rectangular infill plot, simple single-frontage case, no awkward boundary.",
+  "boundaryBng": [
+    [300000, 200000],
+    [300060, 200000],
+    [300060, 200050],
+    [300000, 200050],
+    [300000, 200000]
+  ],
+  "entranceBng": [300030, 200000],
+  "areaHectares": 0.3,
+  "expectedUnits": 9,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "narrow-frontage",
+  "description": "Long, narrow, deep ribbon plot (25m frontage x 140m deep) — tests backland/garden-infill geometry where road overhead eats into a tight site.",
+  "boundaryBng": [
+    [303000, 200000],
+    [303025, 200000],
+    [303025, 200140],
+    [303000, 200140],
+    [303000, 200000]
+  ],
+  "entranceBng": [303012.5, 200000],
+  "areaHectares": 0.35,
+  "expectedUnits": 11,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}
