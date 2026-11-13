@@ -161,6 +161,80 @@ export type Database = {
         }
         Relationships: []
       }
+      scenarios: {
+        Row: {
+          created_at: string
+          id: string
+          inputs: Json
+          label: string
+          layout_result: Json | null
+          metrics: Json | null
+          site_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inputs?: Json
+          label?: string
+          layout_result?: Json | null
+          metrics?: Json | null
+          site_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inputs?: Json
+          label?: string
+          layout_result?: Json | null
+          metrics?: Json | null
+          site_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenarios_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sites: {
+        Row: {
+          boundary_bng: Json
+          created_at: string
+          entrance_point_bng: Json | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          boundary_bng: Json
+          created_at?: string
+          entrance_point_bng?: Json | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          boundary_bng?: Json
+          created_at?: string
+          entrance_point_bng?: Json | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       subscription_tiers: {
         Row: {
           created_at: string | null
