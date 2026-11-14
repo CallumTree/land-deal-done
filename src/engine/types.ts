@@ -32,6 +32,8 @@ export interface EngineInputs {
 export interface PlacedPlot {
   id: string;
   houseType: HouseTypeId;
+  /** Whole plot boundary (driveway/parking + house footprint + garden), BNG polygon. */
+  plotBng: BNGPolygon;
   /** House footprint, BNG polygon. */
   footprintBng: BNGPolygon;
   /** Private garden area, BNG polygon, or null if none could be fitted. */

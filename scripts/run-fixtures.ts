@@ -1,22 +1,27 @@
-// Test harness for the layout engine — Priority 1, stage 1.
+// Test harness for the layout engine — Priority 1, stages 1 & 2.
 //
-// Loads every fixture in /test-sites, calls the engine, measures wall-clock
-// time per fixture, compares totalUnits against each fixture's
-// expectedUnits within a tolerance band, and prints a pass/fail table.
+// Loads every fixture in /test-sites, calls the engine, and reports two
+// SEPARATE things per the brief:
+//   1. Invariants — geometric/compliance facts that must hold regardless
+//      of unit count (fully inside boundary, no overlaps, every plot has
+//      frontage, road reaches the entrance, NDSS/garden/back-to-back met,
+//      and no compliance "green" on a rule violation). ANY invariant
+//      failure is a hard FAIL for that fixture, independent of #2.
+//   2. Unit count vs expectedUnits — a sense-check comparison, only
+//      meaningful for confidence="architect_verified" fixtures. Currently
+//      ALL fixtures are "sense_check" (synthetic, not real sites), so
+//      this number is not validation — see test-sites/README.md.
 //
 // Run with: npm run test:fixtures
-//
-// Expected right now: every fixture FAILS, because generateLayout() is a
-// stub that throws (engine v0 is stage 2, not built yet). That's the
-// correct, honest result for this stage — the harness itself is what's
-// being proven here, not the engine.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { generateLayout, type BNGPoint, type BNGPolygon } from "../src/engine";
+import { generateLayout } from "../src/engine";
+import type { BNGPoint, BNGPolygon } from "../src/engine/types";
+import { checkInvariants, type InvariantResult } from "./invariants";
 
 const FIXTURES_DIR = join(process.cwd(), "test-sites");
-const TOLERANCE = 0.15; // arbitrary for this stage — see test-sites/README.md
+const UNIT_COUNT_TOLERANCE = 0.15; // arbitrary for this stage — see test-sites/README.md
 const PERF_BUDGET_MS = 1000;
 
 interface Fixture {
@@ -30,15 +35,16 @@ interface Fixture {
   confidence: "sense_check" | "architect_verified";
 }
 
-interface Row {
-  id: string;
-  confidence: string;
-  expected: number;
-  actual: number | null;
-  diffPct: number | null;
+interface FixtureResult {
+  fixture: Fixture;
   ms: number;
-  pass: boolean;
+  totalUnits: number | null;
   error: string | null;
+  invariants: InvariantResult[];
+  invariantsPass: boolean;
+  unitDiffPct: number | null;
+  unitCountPass: boolean;
+  overallPass: boolean;
 }
 
 function loadFixtures(): Fixture[] {
@@ -48,76 +54,96 @@ function loadFixtures(): Fixture[] {
     .map((f) => JSON.parse(readFileSync(join(FIXTURES_DIR, f), "utf8")) as Fixture);
 }
 
-function runFixture(fx: Fixture): Row {
+function runFixture(fx: Fixture): FixtureResult {
   const start = performance.now();
-  let actual: number | null = null;
+  let totalUnits: number | null = null;
   let error: string | null = null;
+  let invariants: InvariantResult[] = [];
 
   try {
     const result = generateLayout(fx.boundaryBng, fx.entranceBng, {});
-    actual = result.metrics.totalUnits;
+    totalUnits = result.metrics.totalUnits;
+    invariants = checkInvariants(result, fx.boundaryBng, fx.entranceBng, {});
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
   const ms = performance.now() - start;
-  const diffPct = actual != null ? Math.abs(actual - fx.expectedUnits) / fx.expectedUnits : null;
-  const withinTolerance = diffPct != null && diffPct <= TOLERANCE;
   const withinBudget = ms < PERF_BUDGET_MS;
-  const pass = actual != null && withinTolerance && withinBudget;
+  const invariantsPass = error === null && withinBudget && invariants.every((inv) => inv.pass);
+
+  const unitDiffPct =
+    totalUnits != null ? Math.abs(totalUnits - fx.expectedUnits) / fx.expectedUnits : null;
+  const unitCountPass = unitDiffPct != null && unitDiffPct <= UNIT_COUNT_TOLERANCE;
 
   return {
-    id: fx.id,
-    confidence: fx.confidence,
-    expected: fx.expectedUnits,
-    actual,
-    diffPct,
+    fixture: fx,
     ms: Math.round(ms * 100) / 100,
-    pass,
+    totalUnits,
     error,
+    invariants,
+    invariantsPass,
+    unitDiffPct,
+    unitCountPass,
+    overallPass: invariantsPass && unitCountPass,
   };
 }
 
-function printTable(rows: Row[]) {
-  const header = ["FIXTURE", "CONFIDENCE", "EXPECTED", "ACTUAL", "DIFF%", "MS", "RESULT"];
-  const lines: string[][] = [header];
+function printInvariantsTable(results: FixtureResult[]) {
+  console.log("=== INVARIANTS (hard pass/fail, independent of unit count) ===\n");
+  for (const r of results) {
+    const status = r.error ? "ERROR" : r.invariantsPass ? "PASS" : "FAIL";
+    console.log(`${r.fixture.id} [${r.fixture.confidence}] — ${status} (${r.ms}ms)`);
+    if (r.error) {
+      console.log(`  engine error: ${r.error}`);
+      continue;
+    }
+    for (const inv of r.invariants) {
+      console.log(`  ${inv.pass ? "pass" : "FAIL"}  ${inv.label} — ${inv.detail}`);
+    }
+    console.log("");
+  }
+}
 
-  for (const r of rows) {
-    lines.push([
-      r.id,
-      r.confidence,
-      String(r.expected),
-      r.actual === null ? "—" : String(r.actual),
-      r.diffPct === null ? "—" : `${Math.round(r.diffPct * 1000) / 10}%`,
-      String(r.ms),
-      r.pass ? "PASS" : "FAIL",
+function printUnitCountTable(results: FixtureResult[]) {
+  console.log("=== UNIT COUNT vs expectedUnits (sense-check comparison, NOT validation unless architect_verified) ===\n");
+  const header = ["FIXTURE", "CONFIDENCE", "EXPECTED", "ACTUAL", "DIFF%", "RESULT"];
+  const rows = [header];
+  for (const r of results) {
+    rows.push([
+      r.fixture.id,
+      r.fixture.confidence,
+      String(r.fixture.expectedUnits),
+      r.totalUnits === null ? "—" : String(r.totalUnits),
+      r.unitDiffPct === null ? "—" : `${Math.round(r.unitDiffPct * 1000) / 10}%`,
+      r.unitCountPass ? "PASS" : "FAIL",
     ]);
   }
-
-  const widths = header.map((_, i) => Math.max(...lines.map((l) => l[i].length)));
-  for (const line of lines) {
-    console.log(line.map((cell, i) => cell.padEnd(widths[i])).join("  "));
+  const widths = header.map((_, i) => Math.max(...rows.map((row) => row[i].length)));
+  for (const row of rows) {
+    console.log(row.map((cell, i) => cell.padEnd(widths[i])).join("  "));
   }
-
-  console.log("");
-  for (const r of rows) {
-    if (r.error) {
-      console.log(`${r.id}: ${r.error}`);
-    }
-  }
+  const anyArchitectVerified = results.some((r) => r.fixture.confidence === "architect_verified");
+  console.log(
+    anyArchitectVerified
+      ? "\nAt least one fixture is architect_verified — its PASS/FAIL above is a real validation signal."
+      : "\nAll fixtures are confidence=\"sense_check\" — none of the PASS/FAIL above is a validation signal, only a ballpark check against a flat density guess."
+  );
 }
 
 function main() {
   const fixtures = loadFixtures();
-  const rows = fixtures.map(runFixture);
+  const results = fixtures.map(runFixture);
 
+  printInvariantsTable(results);
+  printUnitCountTable(results);
+
+  const anyInvariantFail = results.some((r) => !r.invariantsPass);
   console.log(
-    `Ran ${rows.length} fixture(s). All are confidence="sense_check" — see test-sites/README.md before reading a PASS as validation.\n`
+    `\n${anyInvariantFail ? "FAIL" : "PASS"}: invariants ${anyInvariantFail ? "failed on at least one fixture" : "held on every fixture"}.`
   );
-  printTable(rows);
 
-  const anyFail = rows.some((r) => !r.pass);
-  process.exit(anyFail ? 1 : 0);
+  process.exit(anyInvariantFail ? 1 : 0);
 }
 
 main();
