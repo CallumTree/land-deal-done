@@ -10,7 +10,7 @@ export type BNGPoint = [number, number];
 /** Closed or open ring of BNG points describing a polygon boundary. */
 export type BNGPolygon = BNGPoint[];
 
-export type HouseTypeId = "2-bed-terrace" | "3-bed-semi" | "4-bed-detached";
+export type HouseTypeId = "2-bed-terrace" | "3-bed-semi" | "4-bed-detached" | "2-bed-bungalow";
 
 export interface EngineInputs {
   /** Relative weight per house type, e.g. { "2-bed-terrace": 1, "3-bed-semi": 1, "4-bed-detached": 1 }. Missing types default to 0. */

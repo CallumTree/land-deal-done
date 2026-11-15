@@ -250,7 +250,7 @@ export function checkInvariants(
 
   // 7. No gap between blocks big enough that a smaller unit could have fit and didn't.
   const smallestFrontageWidthM = Math.min(
-    ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached"] as HouseTypeId[]).map((t) => {
+    ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached", "2-bed-bungalow"] as HouseTypeId[]).map((t) => {
       const giaM2 = (inputs.ndssMinGiaM2?.[t] ?? rules.NDSS_MIN_GIA_M2[t]) as number;
       const footprintDepthM = rules.ASSUMED_FOOTPRINT_DEPTH_M[t];
       const footprintWidthM = giaM2 / rules.STOREYS[t] / footprintDepthM;

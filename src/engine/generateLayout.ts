@@ -13,7 +13,7 @@ import type {
 import * as geo from "./geometry";
 import * as rules from "./rules";
 
-const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
+const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached", "2-bed-bungalow"];
 
 /**
  * Engine v0 — a deliberately simple topology: one straight dead-end access
@@ -717,13 +717,24 @@ export function generateLayout(
   return finalize(layout, compliance, boundaryAreaM2, { gdvPerSqFt, buildCostPerSqFt }, t0);
 }
 
+const DEFAULT_HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
+
 function buildMixCycle(mix: Partial<Record<HouseTypeId, number>> | undefined): HouseTypeId[] {
-  const weights = HOUSE_TYPES.map((t) => Math.max(0, Math.round(mix?.[t] ?? 1)));
+  // EngineInputs.mix's own doc comment says "missing types default to 0"
+  // — the code used to default them to 1 instead, which would have
+  // silently pulled bungalows into every unlabelled mix the moment a 4th
+  // type existed. Missing really does mean 0 now; an explicit mix with
+  // only "2-bed-bungalow" set builds bungalows only, nothing else.
+  const weights = HOUSE_TYPES.map((t) => Math.max(0, Math.round(mix?.[t] ?? 0)));
   const cycle: HouseTypeId[] = [];
   for (let i = 0; i < HOUSE_TYPES.length; i++) {
     for (let k = 0; k < weights[i]; k++) cycle.push(HOUSE_TYPES[i]);
   }
-  return cycle.length > 0 ? cycle : [...HOUSE_TYPES];
+  // Nothing requested at all (mix omitted, or every weight came out 0) —
+  // fall back to the original three-type equal mix. Bungalow stays
+  // opt-in rather than joining the unlabelled default: it's provisional
+  // (see rules.ts) and scheme-specific, not a general-purpose house type yet.
+  return cycle.length > 0 ? cycle : [...DEFAULT_HOUSE_TYPES];
 }
 
 function finalize(
@@ -737,6 +748,7 @@ function finalize(
     "2-bed-terrace": 0,
     "3-bed-semi": 0,
     "4-bed-detached": 0,
+    "2-bed-bungalow": 0,
   };
   let totalGiaM2 = 0;
   for (const p of layout.plots) {
