@@ -57,18 +57,26 @@ function s<T>(value: T, source: string): Sourced<T> {
  * below — this is a factual reuse of one citation across forms, not an
  * invented number for each new form.
  *
- * 5-bed/7-person figure (119 m², 2-storey): SECONDARY-SOURCED, NOT YET
- * independently verified against the primary gov.uk document this
- * session — a WebSearch surfaced a Cambridgeshire Insight page quoting
- * 112 m² (1-storey) / 119 m² (2-storey) / 125 m² (3-storey) / 3.5 m²
- * storage for NDSS's 5 bed/7 person row, consistent with the +1-person-
- * per-extra-bedroom pattern the other three figures already follow
- * (2b4p, 3b5p, 4b6p, so 5b7p). Two attempts to fetch the primary
- * gov.uk page directly to confirm this were blocked by this session's
- * own tool-permission classifier (not a network/host-allowlist issue —
- * gov.uk was added to the network allowlist first) — flagged here
- * rather than silently treated as equally confident to the other three,
- * independently-verified-this-session figures above.
+ * 5-bed figures: verified against the primary gov.uk document (this
+ * session's own two fetch attempts were blocked by its tool-permission
+ * classifier, not a network/allowlist problem — the owner's assistant
+ * confirmed the table directly instead). gov.uk, "Technical housing
+ * standards – nationally described space standard", DCLG, March 2015,
+ * Table 1, 5-bedroom rows (GIA m², 1-storey / 2-storey / 3-storey):
+ *   5b6p: 103 / 110 / 116
+ *   5b7p: 112 / 119 / 125
+ *   5b8p: 121 / 128 / 134
+ *
+ * IMPORTANT: NDSS's TRUE minimum GIA for a 5-bed home is the 5b6p row
+ * (110 m², 2-storey) — 6 person is the smallest bed-space count NDSS
+ * defines for 5 bedrooms, so that is the actual statutory floor. This
+ * engine's "5-bed-detached" type deliberately uses 5b7p (119 m²)
+ * instead, to keep the same "+1 bed-space per extra bedroom beyond 2"
+ * convention the other three sizes already follow (2b4p, 3b5p, 4b6p,
+ * so 5b7p) — a modelling-consistency choice, not a claim that 119 m² is
+ * the NDSS floor for 5-bed homes. Labelled explicitly in the constant
+ * below so this isn't mistaken for "the NDSS minimum" when it's one
+ * bed-space tier above it.
  */
 export const NDSS_MIN_GIA_M2: Record<HouseTypeId, Sourced<number>> = {
   "2-bed-terrace": s(79, "DCLG, NDSS, March 2015, Table 1 — 2 bed, 4 person, 2 storey"),
@@ -83,7 +91,7 @@ export const NDSS_MIN_GIA_M2: Record<HouseTypeId, Sourced<number>> = {
   "4-bed-detached": s(106, "DCLG, NDSS, March 2015, Table 1 — 4 bed, 6 person, 2 storey"),
   "5-bed-detached": s(
     119,
-    "SECONDARY-SOURCED, not yet primary-verified this session (gov.uk fetch blocked by this session's own permission classifier, twice, after gov.uk was added to the network allowlist — not a document-access problem). A WebSearch found a Cambridgeshire Insight page quoting DCLG NDSS March 2015 Table 1's 5 bed/7 person row as 112 m² (1-storey) / 119 m² (2-storey) / 125 m² (3-storey), 3.5 m² storage. 119 m² (2-storey) used here for consistency with the other three types' 2-storey convention."
+    "DCLG, NDSS, March 2015, Table 1 — 5 bed, 7 person, 2 storey. Verified against the primary gov.uk table (this session's own fetches were blocked by its permission classifier; the owner's assistant confirmed the row directly). NOTE: NDSS's true minimum for a 5-bed home is the 5b6p row (110 m², 2 storey) — 119 m² (5b7p) is used here deliberately, to match the +1-bed-space-per-extra-bedroom convention the other three sizes follow (2b4p, 3b5p, 4b6p), not because it's the statutory floor for every 5-bed home."
   ),
 };
 

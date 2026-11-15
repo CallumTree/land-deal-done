@@ -83,7 +83,7 @@ export const PEMBROKESHIRE_PLANNING_RULES: LocalPlanningRules = {
    * national.ts).
    */
   ndssStatus: s(
-    "used as viability-testing evidence basis and as the basis for a forthcoming Residential Design SPG; not itself a directly adopted Welsh standard",
+    "treated as a BENCHMARK the Council uses to inform viability testing and as the basis for a forthcoming Residential Design SPG — NOT a statutory requirement in Wales (NDSS is an England-only document; see national.ts). A Welsh LPA choosing to reference it is a local policy choice, not a national rule.",
     "LDP2 §5.101 (p.123)"
   ),
 
