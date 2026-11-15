@@ -12,6 +12,12 @@ import type {
 } from "./types";
 import * as geo from "./geometry";
 import * as rules from "./rules";
+import { resolveJurisdiction } from "../rules/jurisdictions";
+import {
+  schemeSizeBandForUnits,
+  isUnsourced,
+  type MarketBand,
+} from "../rules/jurisdictions/types";
 
 const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"];
 
@@ -41,8 +47,6 @@ export function generateLayout(
     ...rules.NDSS_MIN_GIA_M2,
     ...inputs.ndssMinGiaM2,
   };
-  const gdvPerSqFt = inputs.gdvPerSqFt ?? rules.DEFAULT_GDV_PER_SQFT;
-  const buildCostPerSqFt = inputs.buildCostPerSqFt ?? rules.DEFAULT_BUILD_COST_PER_SQFT;
 
   // --- Local frame: entrance at origin, inward normal of its edge = +Y ---
   const { normal } = geo.entranceEdgeFrame(boundary, entrance);
@@ -78,7 +82,7 @@ export function generateLayout(
       plots: [],
       roads: [],
       parkingSpacesBng: [],
-    }, compliance, boundaryAreaM2, { gdvPerSqFt, buildCostPerSqFt }, t0);
+    }, compliance, boundaryAreaM2, inputs, t0);
   }
 
   const maxBoundaryY = Math.max(...localBoundary.map((p) => p[1]));
@@ -714,7 +718,7 @@ export function generateLayout(
     parkingSpacesBng: parkingSpacesLocal.map(toWorld),
   };
 
-  return finalize(layout, compliance, boundaryAreaM2, { gdvPerSqFt, buildCostPerSqFt }, t0);
+  return finalize(layout, compliance, boundaryAreaM2, inputs, t0);
 }
 
 const DEFAULT_HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
@@ -741,7 +745,7 @@ function finalize(
   layout: LayoutResult,
   compliance: ComplianceCheck[],
   boundaryAreaM2: number,
-  costInputs: { gdvPerSqFt: number; buildCostPerSqFt: number },
+  inputs: EngineInputs,
   t0: number
 ): EngineOutput {
   const mix: Record<HouseTypeId, number> = {
@@ -766,13 +770,120 @@ function finalize(
   const netDensityDph = netAreaM2 > 0 ? totalUnits / (netAreaM2 / 10000) : 0;
   const grossDensityDph = boundaryAreaM2 > 0 ? totalUnits / (boundaryAreaM2 / 10000) : 0;
 
-  const totalGiaSqFt = totalGiaM2 / rules.SQM_PER_SQFT;
-  const gdv = totalGiaSqFt * costInputs.gdvPerSqFt;
-  const buildCost = totalGiaSqFt * costInputs.buildCostPerSqFt;
-  // Crude residual: GDV minus build cost only. No profit margin, fees,
-  // abnormals, s106/CIL or finance costs — a real appraisal needs those.
-  // Flagged here, not hidden.
-  const residualLandValue = gdv - buildCost;
+  const jurisdiction = resolveJurisdiction(inputs.localAuthority);
+  const schemeSizeBand = schemeSizeBandForUnits(totalUnits);
+  const marketBand: MarketBand = inputs.marketBand ?? jurisdiction.localAppraisal?.defaultMarketBand ?? 2;
+
+  const localAppraisal = jurisdiction.localAppraisal;
+  const sizeRow = localAppraisal?.bySchemeSize[schemeSizeBand];
+  const bandRow = localAppraisal?.byMarketBand[marketBand];
+
+  // Fall back to the (deliberately UNSOURCED) national appraisal
+  // placeholders when no local pack is resolved at all — see
+  // src/rules/jurisdictions/national.ts for why these are never
+  // presented as "real" figures.
+  const resolvedGdvPerSqm =
+    inputs.gdvPerSqm ?? bandRow?.salesPricePerSqm.value ?? jurisdiction.nationalAppraisal.salesPricePerSqmPlaceholder.value;
+  const resolvedBuildCostPerSqm =
+    inputs.buildCostPerSqm ?? sizeRow?.buildCostPerSqm.value ?? jurisdiction.nationalAppraisal.buildCostPerSqmPlaceholder.value;
+
+  // --- Affordable housing % (on-site), by [marketBand][schemeSizeBand] ---
+  // `null`/missing in the source table means "off-site financial
+  // contribution expected instead of an on-site %" (see pembrokeshire.ts
+  // comments) — treated as 0% on-site here, which is honest about what
+  // v0 actually delivers (it doesn't model an off-site commuted sum at
+  // all yet), not a claim that 0% is the real policy position.
+  const affordableEntry = localAppraisal?.affordableHousingPercent[marketBand]?.[schemeSizeBand];
+  const affordablePercentOnSite = affordableEntry?.value ?? 0;
+  const affordableUnits = Math.round((totalUnits * affordablePercentOnSite) / 100);
+  const openMarketUnits = totalUnits - affordableUnits;
+
+  // v0's layout doesn't tag any specific physical plot as "affordable" —
+  // this is a financial overlay on the whole scheme's GIA, apportioned
+  // by unit count, not a per-plot distinction.
+  const avgGiaPerUnit = totalUnits > 0 ? totalGiaM2 / totalUnits : 0;
+  const openMarketGiaM2 = avgGiaPerUnit * openMarketUnits;
+  const affordableGiaM2 = avgGiaPerUnit * affordableUnits;
+
+  // Sales-price premiums (§5.7, §5.10 — see pembrokeshire.ts): bungalow
+  // premium applies when every unit in the mix is the bungalow type;
+  // small-site premium applies at ≤10 total units. Modelled as
+  // independent multiplicative premiums on the open-market £/m² rate —
+  // the source states each individually but doesn't say how they'd
+  // combine if both applied at once, so "multiply both" is this engine's
+  // own modelling choice, not a sourced figure.
+  let adjustedGdvPerSqm = resolvedGdvPerSqm;
+  const allBungalow = totalUnits > 0 && mix["3-bed-bungalow"] === totalUnits;
+  if (allBungalow && localAppraisal) {
+    adjustedGdvPerSqm *= 1 + localAppraisal.bungalowSalesPremiumPercent.value / 100;
+  }
+  if (totalUnits > 0 && totalUnits <= 10 && localAppraisal) {
+    adjustedGdvPerSqm *= 1 + localAppraisal.smallSitePremiumPercent.value / 100;
+  }
+
+  const openMarketGdv = openMarketGiaM2 * adjustedGdvPerSqm;
+
+  // Affordable transfer value: social-rent/intermediate tenure split
+  // (§5.13) applied to the affordable GIA share, each tenure's transfer
+  // value as a % of the resolved jurisdiction's OMV rate. The source's
+  // social-rent basis is % of ACG (Acceptable Cost Guidance, a Welsh
+  // Government mechanism), not % of OMV — this engine does not have a
+  // published ACG rate table, so ACG is approximated here as equal to
+  // OMV, a simplification flagged explicitly (see pembrokeshire.ts and
+  // the README) rather than silently assumed.
+  const socialRentShare = (localAppraisal?.tenureSplitSocialRentPercent.value ?? 100) / 100;
+  const intermediateShare = (localAppraisal?.tenureSplitIntermediatePercent.value ?? 0) / 100;
+  const socialRentGiaM2 = affordableGiaM2 * socialRentShare;
+  const intermediateGiaM2 = affordableGiaM2 * intermediateShare;
+  const socialRentValue =
+    socialRentGiaM2 * resolvedGdvPerSqm * ((localAppraisal?.socialRentTransferValuePercentOfAcg.value ?? 0) / 100);
+  const intermediateValue =
+    intermediateGiaM2 * resolvedGdvPerSqm * ((localAppraisal?.intermediateTransferValuePercentOfOmv.value ?? 0) / 100);
+  const affordableRevenue = socialRentValue + intermediateValue;
+
+  const gdv = openMarketGdv + affordableRevenue;
+
+  const buildCost = totalGiaM2 * resolvedBuildCostPerSqm;
+  const externalWorks = totalUnits * (sizeRow?.externalWorksPerDwelling.value ?? 0);
+  const suds = totalUnits * (localAppraisal?.sudsPerDwelling.value ?? 0);
+  const s106 = totalUnits * (sizeRow?.s106PerDwelling.value ?? 0);
+  // Design fees are a % of construction (plot) costs alone, per FVR
+  // §5.31 — not of external works, which is a separate line.
+  const designFees = buildCost * ((sizeRow?.designFeesPercent.value ?? 0) / 100);
+  // Contingency is applied to construction + external/physical
+  // infrastructure costs together, matching the worked Appendix E model.
+  const contingency = (buildCost + externalWorks) * ((localAppraisal?.contingencyPercent.value ?? jurisdiction.nationalAppraisal.contingencyPercent.value) / 100);
+  const marketingPercent =
+    totalUnits >= 20
+      ? localAppraisal?.marketingPercent20PlusUnits.value
+      : localAppraisal?.marketingPercentUnder20Units.value;
+  const marketing = openMarketGdv * ((marketingPercent ?? 0) / 100);
+  const legal = totalUnits * (localAppraisal?.legalCostPerDwelling.value ?? jurisdiction.nationalAppraisal.legalCostPerDwelling.value);
+  const landAcqFeesPercent =
+    (localAppraisal?.landAcquisitionFeesPercent.value ?? jurisdiction.nationalAppraisal.landAcquisitionFeesPercent.value) / 100;
+
+  // Finance: a simplified one-off charge at the resolved "all-in" annual
+  // rate against the costs incurred before land, rather than a real
+  // month-by-month cash-flow model (the source documents' own DVM/RVM
+  // models do run a full cash flow — v0 does not). Flagged as a
+  // simplification, consistent with the "crude residual" honesty this
+  // engine already applies elsewhere.
+  const financeRatePercent = sizeRow?.financeRatePercentPA.value ?? 0;
+  const costsBeforeFinance = buildCost + externalWorks + suds + s106 + designFees + contingency;
+  const finance = costsBeforeFinance * (financeRatePercent / 100);
+
+  const totalCostsExclProfitAndLand = costsBeforeFinance + marketing + legal + finance;
+
+  const developerProfitPercent = sizeRow?.developerProfitPercentGDV.value ?? 0;
+  const developerProfit = gdv * (developerProfitPercent / 100);
+
+  // Residual land value: GDV minus every cost above minus target profit,
+  // then adjusted so that landAcquisitionFeesPercent (a % of the land
+  // price actually paid) comes out of the land value itself rather than
+  // being double-counted — i.e. rawResidual = landValue × (1 + fee%), so
+  // landValue = rawResidual / (1 + fee%).
+  const rawResidual = gdv - totalCostsExclProfitAndLand - developerProfit;
+  const residualLandValue = rawResidual / (1 + landAcqFeesPercent);
 
   const metrics: Metrics = {
     totalUnits,
@@ -782,8 +893,25 @@ function finalize(
     totalGiaM2,
     gdv,
     buildCost,
+    developerProfit,
     residualLandValue,
+    affordableUnits,
+    affordablePercentOnSite,
+    localAuthority: jurisdiction.localAuthority,
+    marketBand,
   };
+
+  compliance.push({
+    id: "appraisal-sourcing",
+    label: "Appraisal inputs sourcing",
+    status: localAppraisal && !isUnsourced(jurisdiction.nationalAppraisal.salesPricePerSqmPlaceholder) ? "pass" : localAppraisal ? "pass" : "warn",
+    ruleRef: localAppraisal
+      ? `Resolved local pack: ${localAppraisal.councilName}`
+      : "No local appraisal pack resolved for this localAuthority — falling back to national UNSOURCED placeholders",
+    detail: localAppraisal
+      ? `GDV/build-cost/land-value figures sourced from the resolved jurisdiction's local pack (scheme-size band "${schemeSizeBand}", market band ${marketBand}).`
+      : `No local pack found for "${jurisdiction.localAuthority}" — GDV £${jurisdiction.nationalAppraisal.salesPricePerSqmPlaceholder.value}/m² and build cost £${jurisdiction.nationalAppraisal.buildCostPerSqmPlaceholder.value}/m² are UNSOURCED national placeholders, not real figures for this site.`,
+  });
 
   const computeMs = performance.now() - t0;
   void computeMs; // not part of EngineOutput's type; the harness measures its own wall-clock time around the call.

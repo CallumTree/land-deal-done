@@ -4,6 +4,8 @@
 // Must stay callable from a plain Node script (scripts/run-fixtures.ts)
 // and later from a Web Worker, unchanged.
 
+import type { MarketBand } from "../rules/jurisdictions/types";
+
 /** A point in British National Grid (EPSG:27700) metres: [easting, northing]. */
 export type BNGPoint = [number, number];
 
@@ -23,10 +25,14 @@ export interface EngineInputs {
   backToBackM?: number;
   /** Minimum NDSS GIA per house type, m². Overrides rules.ts defaults. */
   ndssMinGiaM2?: Partial<Record<HouseTypeId, number>>;
-  /** £ per sq ft used to estimate GDV. */
-  gdvPerSqFt?: number;
-  /** £ per sq ft used to estimate build cost. */
-  buildCostPerSqFt?: number;
+  /** Which council's local rules pack to resolve against (src/rules/jurisdictions). Defaults to "pembrokeshire" — the only pack implemented so far. Unknown/unset councils fall back to the national baseline alone. */
+  localAuthority?: string;
+  /** Local market value band (1=lowest..4=highest), a council-specific concept (see src/rules/jurisdictions/types.ts). Defaults to the resolved local pack's own defaultMarketBand. */
+  marketBand?: MarketBand;
+  /** £ per m² used to estimate open-market GDV, overriding the resolved jurisdiction's own sourced default for this market band. */
+  gdvPerSqm?: number;
+  /** £ per m² used to estimate build cost, overriding the resolved jurisdiction's own sourced default for this scheme-size band. */
+  buildCostPerSqm?: number;
 }
 
 export interface PlacedPlot {
@@ -70,7 +76,17 @@ export interface Metrics {
   totalGiaM2: number;
   gdv: number;
   buildCost: number;
+  /** Target developer profit deducted in arriving at residualLandValue (not a cash cost line, but shown for transparency). */
+  developerProfit: number;
   residualLandValue: number;
+  /** Number of the totalUnits notionally treated as affordable, per the resolved jurisdiction's affordable-housing-% table. Note: v0's layout doesn't tag any specific physical plot as "affordable" — this is a financial overlay on the whole scheme, not a per-plot flag. */
+  affordableUnits: number;
+  /** The % actually used (0 if the resolved table had no on-site figure for this band/size, e.g. because the source says "off-site contribution" instead — see jurisdiction pack comments). */
+  affordablePercentOnSite: number;
+  /** Which council's rules were actually resolved and used for this calculation. */
+  localAuthority: string;
+  /** Which market band was actually used (input, or the local pack's own default). */
+  marketBand: MarketBand;
 }
 
 export interface ComplianceCheck {

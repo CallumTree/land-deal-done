@@ -4,40 +4,26 @@
 //
 // If a figure below isn't genuinely sourced, that's a bug — flag it rather
 // than trust the comment.
+//
+// Hard planning-rule figures (NDSS, back-to-back, garden depth, parking,
+// road width, turning head, fire access) now live in the layered
+// jurisdiction rules system (src/rules/jurisdictions/national.ts) and are
+// re-exported below unwrapped (plain numbers, not Sourced<T>) so existing
+// call sites don't need to change. See national.ts for the actual source
+// citations. Only v0's own engineering-modelling assumptions (footprint
+// depth, storeys, side gap, block size caps, boundary offset) stay local
+// to this file, since those aren't planning-rule figures a local authority
+// could override — they're how this specific engine turns a GIA number
+// into a footprint rectangle.
 
 import type { HouseTypeId } from "./types";
+import * as national from "../rules/jurisdictions/national";
 
-/**
- * Nationally Described Space Standard minimum Gross Internal Area, m².
- * Source: DCLG, "Technical housing standards – nationally described
- * space standard", March 2015, Table 1.
- *
- * NDSS varies by bedroom count AND bed-space (occupancy) count, not just
- * bedrooms — e.g. a 2-bed home can be 3-person or 4-person. The brief
- * specifies three house types by bedroom count only, so v0 assumes the
- * bed-space variant that's the common volume-housebuilder convention for
- * each: 2-bed = 2b4p, 3-bed = 3b5p, 4-bed (detached) = 4b6p, all 2-storey.
- *
- * "3-bed-bungalow" added for the fern-rise-neyland fixture ("9 bungalows
- * with garages", 04/0235/PA) — single storey, so uses NDSS's single-
- * storey 3b5p figure. Bed count confirmed 3-bed (not the earlier
- * provisional 2-bed guess) by reading the actual floor plans in
- * /test-sites/source/fern-rise/PA-Plans_general-15092008.pdf — Plots 14,
- * 16, 18 and 24 all show Bedroom 1/2/3, Lounge, Kitchen/Dining,
- * Bathroom, Shower, Hall and an integral Garage under one roofline (not
- * a separate structure — confirmed from the elevations too). The garage
- * still isn't modelled as a separate polygon in v0 (same driveway/
- * parking allocation as every other type) — the habitable footprint
- * below is sized to the NDSS minimum alone, excluding the garage, which
- * real floor areas (~95m² habitable within a ~14.3m x 8.3-9.4m overall
- * envelope including garage, per the dimensioned plans) are comfortably
- * above.
- */
 export const NDSS_MIN_GIA_M2: Record<HouseTypeId, number> = {
-  "2-bed-terrace": 79, // 2 bed, 4 person, 2 storey
-  "3-bed-semi": 93, // 3 bed, 5 person, 2 storey
-  "4-bed-detached": 106, // 4 bed, 6 person, 2 storey
-  "3-bed-bungalow": 86, // 3 bed, 5 person, single storey
+  "2-bed-terrace": national.NDSS_MIN_GIA_M2["2-bed-terrace"].value,
+  "3-bed-semi": national.NDSS_MIN_GIA_M2["3-bed-semi"].value,
+  "4-bed-detached": national.NDSS_MIN_GIA_M2["4-bed-detached"].value,
+  "3-bed-bungalow": national.NDSS_MIN_GIA_M2["3-bed-bungalow"].value,
 };
 
 /** Storeys assumed per house type, for footprint = GIA / storeys. Bungalow is single-storey by definition (confirmed from Fern Rise's own elevations); the other three are fixed at 2 for v0. */
@@ -70,60 +56,27 @@ export const ASSUMED_FOOTPRINT_DEPTH_M: Record<HouseTypeId, number> = {
   "3-bed-bungalow": 8,
 };
 
-/**
- * Minimum distance between facing habitable-room windows on opposing
- * plots. Source: the brief itself ("21m back-to-back"), which matches the
- * long-standing UK design-guide convention traced to the Essex Design
- * Guide (1973) and widely adopted since. Editable via EngineInputs.
- */
-export const BACK_TO_BACK_M = 21;
+/** Minimum distance between facing habitable-room windows on opposing plots. See national.ts for source. Editable via EngineInputs. */
+export const BACK_TO_BACK_M = national.BACK_TO_BACK_M.value;
 
-/**
- * Minimum private garden (rear amenity space) depth. Source: the brief
- * itself ("10m garden depth"), matching typical UK local design-guide /
- * local plan minimums for private amenity space. Editable via EngineInputs.
- */
-export const MIN_GARDEN_DEPTH_M = 10;
+/** Minimum private garden (rear amenity space) depth. See national.ts for source. Editable via EngineInputs. */
+export const MIN_GARDEN_DEPTH_M = national.MIN_GARDEN_DEPTH_M.value;
 
-/**
- * Off-street parking spaces required per dwelling. UK local authority
- * parking standards vary considerably; 2 spaces/dwelling for houses
- * (as opposed to flats) is a common default seen across many local
- * parking SPDs. Editable via EngineInputs — this is explicitly not a
- * national standard.
- */
-export const PARKING_SPACES_PER_UNIT = 2;
+/** Off-street parking spaces required per dwelling. See national.ts for source — explicitly not a national standard, always check the local pack. Editable via EngineInputs. */
+export const PARKING_SPACES_PER_UNIT = national.PARKING_SPACES_PER_UNIT.value;
 
-/** Plan dimensions of a single on-plot parking space, m. Typical UK parking bay: 2.4-2.5m x 4.8-5m. */
-export const PARKING_SPACE_WIDTH_M = 2.5;
-export const PARKING_SPACE_DEPTH_M = 5;
+/** Plan dimensions of a single on-plot parking space, m. See national.ts for source. */
+export const PARKING_SPACE_WIDTH_M = national.PARKING_SPACE_WIDTH_M.value;
+export const PARKING_SPACE_DEPTH_M = national.PARKING_SPACE_DEPTH_M.value;
 
-/**
- * Minimum carriageway width for a short access road serving housing.
- * Source: Manual for Streets (DfT, 2007), which gives flexible widths
- * depending on context; 5.5m is a commonly used minimum for a single
- * carriageway able to pass two cars, used here as a straightforward v0
- * default. Editable via EngineInputs would be a sensible future addition
- * (not yet wired up — v0 only exposes the inputs listed in EngineInputs).
- */
-export const ROAD_WIDTH_M = 5.5;
+/** Minimum carriageway width for a short access road serving housing. See national.ts for source. */
+export const ROAD_WIDTH_M = national.ROAD_WIDTH_M.value;
 
-/**
- * Turning head diameter for a dead-end road, sized to let a refuse/fire
- * appliance turn without reversing. Source: Manual for Streets (DfT,
- * 2007) guidance on turning facilities — commonly cited as a minimum
- * ~16m diameter turning circle (or an equivalent hammerhead, not yet
- * modelled separately in v0 — only the circular/square case is checked).
- */
-export const TURNING_HEAD_DIAMETER_M = 16;
+/** Turning head diameter for a dead-end road. See national.ts for source. */
+export const TURNING_HEAD_DIAMETER_M = national.TURNING_HEAD_DIAMETER_M.value;
 
-/**
- * Maximum distance from a fire appliance's pumping position (taken here
- * as any point on the road) to a dwelling's entrance. Source: Approved
- * Document B (fire safety) and the common UK fire/rescue access
- * convention of a 45m maximum hose-run distance.
- */
-export const MAX_FIRE_ACCESS_DISTANCE_M = 45;
+/** Maximum distance from a fire appliance's pumping position to a dwelling's entrance. See national.ts for source. */
+export const MAX_FIRE_ACCESS_DISTANCE_M = national.MAX_FIRE_ACCESS_DISTANCE_M.value;
 
 /**
  * Inward setback from the site boundary within which nothing may be
@@ -136,14 +89,6 @@ export const MAX_FIRE_ACCESS_DISTANCE_M = 45;
  * a sensible future addition (not yet wired up).
  */
 export const BOUNDARY_OFFSET_M = 1;
-
-/** £ per sq ft used to estimate GDV when EngineInputs.gdvPerSqFt isn't supplied. Placeholder — always an input in practice, never a "real" default. */
-export const DEFAULT_GDV_PER_SQFT = 300;
-
-/** £ per sq ft used to estimate build cost when EngineInputs.buildCostPerSqFt isn't supplied. Placeholder, same caveat as above. */
-export const DEFAULT_BUILD_COST_PER_SQFT = 180;
-
-export const SQM_PER_SQFT = 0.09290304;
 
 /**
  * Minimum gap between separate buildings/blocks (i.e. between the last
