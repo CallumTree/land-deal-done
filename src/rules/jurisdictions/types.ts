@@ -21,6 +21,15 @@ export function isUnsourced<T>(s: Sourced<T>): boolean {
   return s.source === UNSOURCED;
 }
 
+/** Three-way provenance classification the UI shows for every appraisal figure: "sourced" (a real document citation), "approximated" (a stated modelling stand-in for a figure that couldn't be sourced, e.g. ACG≈OMV), or "unsourced" (UNSOURCED — nothing to cite at all). */
+export type SourceClassification = "sourced" | "approximated" | "unsourced";
+
+export function classifySource(source: string): SourceClassification {
+  if (source === UNSOURCED) return "unsourced";
+  if (/approximat/i.test(source)) return "approximated";
+  return "sourced";
+}
+
 /** Scheme-size bands used throughout the appraisal evidence (matches the Pembrokeshire viability report's own typology rows). Single-plot schemes use "1". */
 export const SCHEME_SIZE_BANDS = ["1", "2-5", "6-9", "10-19", "20-32", "33-49", "50-99", "100+"] as const;
 export type SchemeSizeBand = (typeof SCHEME_SIZE_BANDS)[number];
@@ -92,12 +101,25 @@ export interface LocalAppraisalDefaults {
   bungalowSalesPremiumPercent: Sourced<number>;
   /** +% on sales price for sites of ≤10 dwellings, reflecting "individual" plot character */
   smallSitePremiumPercent: Sourced<number>;
-  /** social-rented transfer value, as a % of... (see source: Welsh ACG-including-land convention, approximated here by % of OMV — see pembrokeshire.ts comment) */
+  /** social-rented transfer value, as a % of ACG (Acceptable Cost Guidance, a Welsh Government mechanism including land) */
   socialRentTransferValuePercentOfAcg: Sourced<number>;
   intermediateTransferValuePercentOfOmv: Sourced<number>;
   tenureSplitSocialRentPercent: Sourced<number>;
   tenureSplitIntermediatePercent: Sourced<number>;
   defaultMarketBand: MarketBand;
+  /**
+   * true when no published ACG-including-land rate table could be
+   * sourced, so ACG is approximated as equal to the market band's OMV
+   * sales price in the social-rent transfer-value calculation. This
+   * substantially OVERSTATES the social-rent transfer value (real ACG
+   * rates are a fraction of OMV) and therefore overstates every metric
+   * derived from it (affordable-housing revenue, GDV, residual land
+   * value). The engine surfaces this as Metrics.affordableValueOverstated
+   * and a compliance warning whenever affordableUnits > 0 and this is
+   * true — never silently.
+   */
+  acgApproximatedAsOmv: boolean;
+  acgApproximationNote: Sourced<string>;
 }
 
 export interface NationalPlanningBaseline {

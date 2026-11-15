@@ -272,6 +272,11 @@ export const PEMBROKESHIRE_APPRAISAL_DEFAULTS: LocalAppraisalDefaults = {
   tenureSplitSocialRentPercent: s(75, "FVR §5.13 (p.15): assumes 75% of s.106 affordable homes are social rented tenure, based on the most recent LHMA"),
   tenureSplitIntermediatePercent: s(25, "FVR §5.13 (p.15): remaining 25% intermediate tenure"),
   defaultMarketBand: 2,
+  acgApproximatedAsOmv: true,
+  acgApproximationNote: s(
+    "No published Welsh Government 2021 ACG-including-land rate table was found that this codebase could verify and cite (gov.wales's own public ACG guidance excludes land; a distinct 'including land' table is referenced by FVR §5.11 but not itself published there or found elsewhere during this research). ACG is therefore approximated as equal to the market band's OMV sales price for the social-rent transfer-value calculation. Real ACG-including-land rates are materially below OMV, so this OVERSTATES social-rent transfer value and every metric derived from it (affordable-housing revenue, GDV, residual land value) whenever affordableUnits > 0. Flagged via Metrics.affordableValueOverstated — not silently assumed.",
+    "Engineering decision, not read from any document — see README for what was checked"
+  ),
 };
 
 /** Not a sourced figure — a judgment call, flagged as such. Band 2 (§5.9: £2,600 psm) covers a broad, central spread of settlements (per Appendix B: Central, Cleddau Estuary North & West, Pembroke Dock area, Teifi Estuary) and sits at the lower-middle of the County's 4 bands — a reasonable "typical site" default when a user hasn't specified one, not a claim that it's the most common or most representative band. */

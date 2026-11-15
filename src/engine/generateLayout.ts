@@ -885,6 +885,8 @@ function finalize(
   const rawResidual = gdv - totalCostsExclProfitAndLand - developerProfit;
   const residualLandValue = rawResidual / (1 + landAcqFeesPercent);
 
+  const affordableValueOverstated = affordableUnits > 0 && (localAppraisal?.acgApproximatedAsOmv ?? true);
+
   const metrics: Metrics = {
     totalUnits,
     mix,
@@ -899,6 +901,8 @@ function finalize(
     affordablePercentOnSite,
     localAuthority: jurisdiction.localAuthority,
     marketBand,
+    affordableValueOverstated,
+    residualLandValueIndicative: true,
   };
 
   compliance.push({
@@ -912,6 +916,19 @@ function finalize(
       ? `GDV/build-cost/land-value figures sourced from the resolved jurisdiction's local pack (scheme-size band "${schemeSizeBand}", market band ${marketBand}).`
       : `No local pack found for "${jurisdiction.localAuthority}" — GDV £${jurisdiction.nationalAppraisal.salesPricePerSqmPlaceholder.value}/m² and build cost £${jurisdiction.nationalAppraisal.buildCostPerSqmPlaceholder.value}/m² are UNSOURCED national placeholders, not real figures for this site.`,
   });
+
+  if (affordableUnits > 0) {
+    compliance.push({
+      id: "acg-approximation",
+      label: "Affordable-housing transfer value basis",
+      status: affordableValueOverstated ? "warn" : "pass",
+      ruleRef: localAppraisal?.acgApproximationNote.source ?? "n/a",
+      detail: affordableValueOverstated
+        ? (localAppraisal?.acgApproximationNote.value ??
+          "ACG approximated as OMV — affordable-housing-derived GDV, developer profit and residual land value are OVERSTATED.")
+        : "Social-rent transfer value uses a published ACG rate, not an OMV approximation.",
+    });
+  }
 
   const computeMs = performance.now() - t0;
   void computeMs; // not part of EngineOutput's type; the harness measures its own wall-clock time around the call.

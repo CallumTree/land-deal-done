@@ -87,6 +87,10 @@ export interface Metrics {
   localAuthority: string;
   /** Which market band was actually used (input, or the local pack's own default). */
   marketBand: MarketBand;
+  /** true when affordableUnits > 0 and the resolved jurisdiction approximates ACG (Acceptable Cost Guidance) as equal to OMV for the social-rent transfer value — this OVERSTATES gdv, developerProfit and residualLandValue, since real ACG rates are materially below OMV. Surface prominently in the UI whenever true; never hide it. */
+  affordableValueOverstated: boolean;
+  /** residualLandValue is always a simplified, single-point calculation (no real cash-flow model) — present so the UI doesn't need to hardcode that fact; always true in v0. */
+  residualLandValueIndicative: true;
 }
 
 export interface ComplianceCheck {
