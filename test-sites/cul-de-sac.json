@@ -1,0 +1,20 @@
+{
+  "id": "cul-de-sac",
+  "description": "Wider block served by a single narrow access neck — tests cul-de-sac topology (one entrance, dead-end road, turning head needed).",
+  "boundaryBng": [
+    [301025, 200000],
+    [301040, 200000],
+    [301040, 200010],
+    [301070, 200010],
+    [301070, 200070],
+    [301000, 200070],
+    [301000, 200010],
+    [301025, 200010],
+    [301025, 200000]
+  ],
+  "entranceBng": [301032.5, 200000],
+  "areaHectares": 0.435,
+  "expectedUnits": 13,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

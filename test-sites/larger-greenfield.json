@@ -1,0 +1,18 @@
+{
+  "id": "larger-greenfield",
+  "description": "Larger near-square greenfield site with a corner notch — tests scale (1.12ha, enough plots to need internal road layout, not just a single row).",
+  "boundaryBng": [
+    [304000, 200000],
+    [304110, 200000],
+    [304110, 200080],
+    [304080, 200080],
+    [304080, 200110],
+    [304000, 200110],
+    [304000, 200000]
+  ],
+  "entranceBng": [304055, 200000],
+  "areaHectares": 1.12,
+  "expectedUnits": 34,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}
