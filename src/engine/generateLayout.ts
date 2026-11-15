@@ -13,7 +13,7 @@ import type {
 import * as geo from "./geometry";
 import * as rules from "./rules";
 
-const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached", "2-bed-bungalow"];
+const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"];
 
 /**
  * Engine v0 — a deliberately simple topology: one straight dead-end access
@@ -724,7 +724,7 @@ function buildMixCycle(mix: Partial<Record<HouseTypeId, number>> | undefined): H
   // — the code used to default them to 1 instead, which would have
   // silently pulled bungalows into every unlabelled mix the moment a 4th
   // type existed. Missing really does mean 0 now; an explicit mix with
-  // only "2-bed-bungalow" set builds bungalows only, nothing else.
+  // only "3-bed-bungalow" set builds bungalows only, nothing else.
   const weights = HOUSE_TYPES.map((t) => Math.max(0, Math.round(mix?.[t] ?? 0)));
   const cycle: HouseTypeId[] = [];
   for (let i = 0; i < HOUSE_TYPES.length; i++) {
@@ -748,7 +748,7 @@ function finalize(
     "2-bed-terrace": 0,
     "3-bed-semi": 0,
     "4-bed-detached": 0,
-    "2-bed-bungalow": 0,
+    "3-bed-bungalow": 0,
   };
   let totalGiaM2 = 0;
   for (const p of layout.plots) {

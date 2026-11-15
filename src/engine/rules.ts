@@ -18,27 +18,34 @@ import type { HouseTypeId } from "./types";
  * bed-space variant that's the common volume-housebuilder convention for
  * each: 2-bed = 2b4p, 3-bed = 3b5p, 4-bed (detached) = 4b6p, all 2-storey.
  *
- * "2-bed-bungalow" added for the fern-rise-neyland fixture ("9 bungalows
+ * "3-bed-bungalow" added for the fern-rise-neyland fixture ("9 bungalows
  * with garages", 04/0235/PA) — single storey, so uses NDSS's single-
- * storey 2b4p figure. Bed count (2-bed) is a provisional assumption, not
- * yet confirmed against that application's own unit schedule — fix this
- * once /test-sites/source/ has the actual PDF. The garage itself isn't
- * modelled as a separate structure (v0 simplification, same driveway/
- * parking allocation as every other type).
+ * storey 3b5p figure. Bed count confirmed 3-bed (not the earlier
+ * provisional 2-bed guess) by reading the actual floor plans in
+ * /test-sites/source/fern-rise/PA-Plans_general-15092008.pdf — Plots 14,
+ * 16, 18 and 24 all show Bedroom 1/2/3, Lounge, Kitchen/Dining,
+ * Bathroom, Shower, Hall and an integral Garage under one roofline (not
+ * a separate structure — confirmed from the elevations too). The garage
+ * still isn't modelled as a separate polygon in v0 (same driveway/
+ * parking allocation as every other type) — the habitable footprint
+ * below is sized to the NDSS minimum alone, excluding the garage, which
+ * real floor areas (~95m² habitable within a ~14.3m x 8.3-9.4m overall
+ * envelope including garage, per the dimensioned plans) are comfortably
+ * above.
  */
 export const NDSS_MIN_GIA_M2: Record<HouseTypeId, number> = {
   "2-bed-terrace": 79, // 2 bed, 4 person, 2 storey
   "3-bed-semi": 93, // 3 bed, 5 person, 2 storey
   "4-bed-detached": 106, // 4 bed, 6 person, 2 storey
-  "2-bed-bungalow": 70, // 2 bed, 4 person, single storey — provisional bed count, see comment above
+  "3-bed-bungalow": 86, // 3 bed, 5 person, single storey
 };
 
-/** Storeys assumed per house type, for footprint = GIA / storeys. Bungalow is single-storey by definition; the other three are fixed at 2 for v0. */
+/** Storeys assumed per house type, for footprint = GIA / storeys. Bungalow is single-storey by definition (confirmed from Fern Rise's own elevations); the other three are fixed at 2 for v0. */
 export const STOREYS: Record<HouseTypeId, number> = {
   "2-bed-terrace": 2,
   "3-bed-semi": 2,
   "4-bed-detached": 2,
-  "2-bed-bungalow": 1,
+  "3-bed-bungalow": 1,
 };
 
 /**
@@ -46,15 +53,21 @@ export const STOREYS: Record<HouseTypeId, number> = {
  * housebuilder plan depth for a house of this size. This is a
  * modelling assumption (footprint width is then derived as
  * footprint area ÷ this depth), not a published standard — flagged as
- * such rather than presented as a citation. Bungalow depth is set equal
- * to 4-bed-detached's (9m) as a placeholder — same caveat, not sourced
- * from the scheme's own drawings yet.
+ * such rather than presented as a citation.
+ *
+ * Bungalow depth is set at 8m, informed by (not equal to) Fern Rise's
+ * real dimensioned plans, which show an overall building envelope of
+ * roughly 14.2-14.35m wide x 8.3-9.4m deep INCLUDING the integral
+ * garage. Since v0's footprint here represents only the habitable area
+ * (NDSS minimum, garage excluded — see NDSS_MIN_GIA_M2's comment), 8m
+ * is a deliberately slightly-shallower depth than the real overall
+ * envelope, not a direct transcription of it.
  */
 export const ASSUMED_FOOTPRINT_DEPTH_M: Record<HouseTypeId, number> = {
   "2-bed-terrace": 7.5,
   "3-bed-semi": 8,
   "4-bed-detached": 9,
-  "2-bed-bungalow": 9,
+  "3-bed-bungalow": 8,
 };
 
 /**
@@ -156,7 +169,7 @@ export const MAX_BLOCK_UNITS: Record<HouseTypeId, number> = {
   "2-bed-terrace": 6,
   "3-bed-semi": 2,
   "4-bed-detached": 1,
-  // fern-rise-neyland's "9 bungalows with garages" doesn't say attached or
-  // detached — defaulting to standalone (1) until the source PDF confirms.
-  "2-bed-bungalow": 1,
+  // Confirmed standalone from the site plan (each of the 9 plots is a
+  // separate freestanding footprint with its own driveway, no shared walls).
+  "3-bed-bungalow": 1,
 };

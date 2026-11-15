@@ -7,17 +7,17 @@
 //      frontage, road reaches the entrance, NDSS/garden/back-to-back met,
 //      and no compliance "green" on a rule violation). ANY invariant
 //      failure is a hard FAIL for that fixture, independent of #2.
-//   2. Unit count vs expectedUnits — a sense-check comparison, only
-//      meaningful for confidence="architect_verified" fixtures. Currently
-//      ALL fixtures are "sense_check" (synthetic, not real sites), so
-//      this number is not validation — see test-sites/README.md.
+//   2. Unit count vs expectedUnits — a real signal for
+//      confidence="approved_unit_count" fixtures (real LPA-approved
+//      schemes), a sense-check only (not validation) for "sense_check"
+//      ones (synthetic shapes) — see test-sites/README.md.
 //
 // Run with: npm run test:fixtures
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateLayout } from "../src/engine";
-import type { BNGPoint, BNGPolygon } from "../src/engine/types";
+import type { BNGPoint, BNGPolygon, EngineInputs } from "../src/engine/types";
 import { checkInvariants, type InvariantResult } from "./invariants";
 
 const FIXTURES_DIR = join(process.cwd(), "test-sites");
@@ -32,7 +32,13 @@ interface Fixture {
   areaHectares: number;
   expectedUnits: number;
   expectedUnitsMethod: string;
-  confidence: "sense_check" | "architect_verified";
+  confidence: "sense_check" | "approved_unit_count";
+  category?: string;
+  // Optional engine inputs for this fixture — e.g. fern-rise-neyland needs
+  // { mix: { "3-bed-bungalow": 1 } } to build the house type the real
+  // scheme actually used. Omitted fixtures get the engine's own default
+  // mix (equal terrace/semi/detached), same as before this field existed.
+  inputs?: EngineInputs;
 }
 
 interface FixtureResult {
@@ -61,9 +67,10 @@ function runFixture(fx: Fixture): FixtureResult {
   let invariants: InvariantResult[] = [];
 
   try {
-    const result = generateLayout(fx.boundaryBng, fx.entranceBng, {});
+    const inputs = fx.inputs ?? {};
+    const result = generateLayout(fx.boundaryBng, fx.entranceBng, inputs);
     totalUnits = result.metrics.totalUnits;
-    invariants = checkInvariants(result, fx.boundaryBng, fx.entranceBng, {});
+    invariants = checkInvariants(result, fx.boundaryBng, fx.entranceBng, inputs);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -106,13 +113,14 @@ function printInvariantsTable(results: FixtureResult[]) {
 }
 
 function printUnitCountTable(results: FixtureResult[]) {
-  console.log("=== UNIT COUNT vs expectedUnits (sense-check comparison, NOT validation unless architect_verified) ===\n");
-  const header = ["FIXTURE", "CONFIDENCE", "EXPECTED", "ACTUAL", "DIFF%", "RESULT"];
+  console.log("=== UNIT COUNT vs expectedUnits (sense-check for sense_check fixtures; real signal for approved_unit_count ones) ===\n");
+  const header = ["FIXTURE", "CONFIDENCE", "CATEGORY", "EXPECTED", "ACTUAL", "DIFF%", "RESULT"];
   const rows = [header];
   for (const r of results) {
     rows.push([
       r.fixture.id,
       r.fixture.confidence,
+      r.fixture.category ?? "—",
       String(r.fixture.expectedUnits),
       r.totalUnits === null ? "—" : String(r.totalUnits),
       r.unitDiffPct === null ? "—" : `${Math.round(r.unitDiffPct * 1000) / 10}%`,
@@ -123,12 +131,18 @@ function printUnitCountTable(results: FixtureResult[]) {
   for (const row of rows) {
     console.log(row.map((cell, i) => cell.padEnd(widths[i])).join("  "));
   }
-  const anyArchitectVerified = results.some((r) => r.fixture.confidence === "architect_verified");
-  console.log(
-    anyArchitectVerified
-      ? "\nAt least one fixture is architect_verified — its PASS/FAIL above is a real validation signal."
-      : "\nAll fixtures are confidence=\"sense_check\" — none of the PASS/FAIL above is a validation signal, only a ballpark check against a flat density guess."
-  );
+  const approvedFixtures = results.filter((r) => r.fixture.confidence === "approved_unit_count");
+  if (approvedFixtures.length > 0) {
+    console.log(
+      `\n${approvedFixtures.length} fixture(s) are confidence="approved_unit_count" (real LPA-approved unit counts) — their PASS/FAIL above is a real signal, not a ballpark guess. A FAIL on one tagged stress_test_known_to_exceed_v0_topology is the expected, honest result of v0's topology limits, not a surprise to chase.`
+    );
+  }
+  const senseCheckOnly = results.length - approvedFixtures.length;
+  if (senseCheckOnly > 0) {
+    console.log(
+      `The remaining ${senseCheckOnly} fixture(s) are confidence="sense_check" — their PASS/FAIL is only a ballpark check against a flat density guess, not validation.`
+    );
+  }
 }
 
 function main() {
