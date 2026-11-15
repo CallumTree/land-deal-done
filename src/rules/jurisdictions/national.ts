@@ -132,7 +132,7 @@ export const WALES_FUTURE_WALES_SUGGESTED_URBAN_NET_DPH = s(
  */
 export const WALES_TYPICAL_SOCIAL_RENT_TRANSFER_VALUE_PERCENT_OF_ACG = s(
   42,
-  "Pembrokeshire Financial Viability Report, July 2024, §5.11 (p.15) — described there as what 'most other planning authorities in Wales' typically use; Pembrokeshire itself overrides this to 55%"
+  "Pembrokeshire Financial Viability Report, July 2024, §5.11 (p.15) — described there as what 'most other planning authorities in Wales' typically use; Pembrokeshire itself overrides this to 55%. Independently corroborated: Blaenau Gwent CBC's and Bro Morgannwg (Vale of Glamorgan)'s own published supplementary guidance both state 42% of 2021 Band-1 ACG for social-rent transfer values; an earlier Monmouthshire document instead cites 58% — so 42% is common but not universal."
 );
 
 /**

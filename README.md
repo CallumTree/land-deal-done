@@ -66,14 +66,45 @@ exact field, and here):
    `pembrokeshire.ts` uses £600 (the explicit policy paragraph) and flags
    the £650 discrepancy inline.
 
-One simplification, not a source inconsistency: Welsh social-rent
-transfer values are properly a % of **ACG** (Acceptable Cost Guidance, a
-Welsh Government mechanism) including land — Pembrokeshire uses 55% of
-ACG, vs. ~42% typical elsewhere in Wales (FVR §5.11). No published ACG
-rate table (separate from open-market value) was available to this
-codebase, so ACG is approximated as equal to OMV for the engine's
-transfer-value calculation. Flagged in `generateLayout.ts`'s `finalize()`
-and in `pembrokeshire.ts`, not silently assumed.
+**ACG (not a source inconsistency — a confirmed gap, actively researched).**
+Welsh social-rent transfer values are properly a % of **ACG** (Acceptable
+Cost Guidance, a Welsh Government mechanism) including land —
+Pembrokeshire uses 55% of ACG, vs. ~42% typical elsewhere in Wales (FVR
+§5.11). This codebase does not have a published 2021 ACG-including-land
+rate table, and specifically checked for one rather than assuming it
+doesn't exist:
+
+- Welsh Government's current public ACG guidance (the 2023-07 "Costs
+  included in Social Housing Grant" document) defines ACG as Works
+  Cost/m² plus on-costs and **explicitly excludes site acquisition/land
+  cost** — i.e. the "including land" 2021 series FVR §5.11 refers to was
+  a separate, since-discontinued WG publication, not something still
+  published today.
+- Three Welsh councils' own supplementary guidance documents each derive
+  their social-rent transfer values as a stated % of "2021 Band 1 ACG
+  figures", uplifted annually by the WG social-rent-cap inflation
+  factor: Blaenau Gwent CBC (42%) and Bro Morgannwg/Vale of Glamorgan
+  (42%) corroborate Pembrokeshire's own "~42% typical elsewhere"
+  claim; an earlier Monmouthshire document instead cites 58%. **None of
+  the three publishes the underlying raw 2021 ACG-including-land table**
+  — only their own already-discounted result, each in their own
+  council's regional band, which wouldn't be valid for Pembrokeshire's
+  bands even if it were the raw figure.
+- No FOI/ATISN request was made (plausible next step, not attempted).
+
+Conclusion: the 2021 ACG-including-land table was circulated directly to
+local authorities/RSLs, not published — there's nothing citable to use
+for Pembrokeshire specifically. **The approximation stands** (ACG ≈ OMV
+for the transfer-value calculation), but every metric it touches is now
+flagged, not silently assumed:
+- `Metrics.affordableValueOverstated` is `true` whenever the scheme has
+  any affordable units under this pack (GDV, developer profit and
+  residual land value are all overstated when it's true).
+- A compliance entry (`id: "acg-approximation"`) reports `warn`, not
+  `pass`, whenever it applies.
+- The stage-3 UI shows an explicit amber banner and marks the
+  "Social-rent transfer value" provenance row "approximated", not
+  "sourced", with the full research trail above revealed on click.
 
 **What the engine does and doesn't model yet.** `finalize()` in
 `src/engine/generateLayout.ts` computes a genuine multi-line-item residual
