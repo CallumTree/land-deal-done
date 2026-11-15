@@ -278,7 +278,8 @@ export function checkInvariants(
       .sort((a, b) => a.yStart - b.yStart);
     for (let i = 0; i < sideBlocks.length - 1; i++) {
       const gap = sideBlocks[i + 1].yStart - sideBlocks[i].yEnd;
-      const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + 0.5; // 0.5m probe-step slack, matching the engine's own search granularity
+      const probeStepM = inputs.quality === "draft" ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
+      const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + probeStepM; // probe-step slack, matching the engine's own search granularity for whichever quality this run used
       if (gap > maxReasonableGap) {
         wastedGapFound = true;
         wastedGapDetail = `Between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap.`;

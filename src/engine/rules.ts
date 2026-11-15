@@ -154,3 +154,24 @@ export const MAX_BLOCK_UNITS: Record<HouseTypeId, number> = {
   "4-bed-detached": 1,
   "5-bed-detached": 1,
 };
+
+/**
+ * Candidate-position search step, metres, along a side's frontage —
+ * "full" (the default, used whenever EngineInputs.quality isn't set to
+ * "draft") probes every 0.5m; "draft" probes every 2m, a deliberately
+ * coarser/faster search intended for live use WHILE a user is dragging a
+ * boundary vertex or the entrance (one full-quality recalculation on
+ * release gets the best layout; draft just needs to be fast and still
+ * valid while the pointer is moving). This is a search-granularity
+ * trade-off, not a rule — draft can place fewer units than full (it's a
+ * strict subset of the candidates full would try) but every unit it DOES
+ * place passes the exact same hard-rule checks, so it's never less
+ * correct, only less exhaustive. Both the engine (generateLayout.ts) and
+ * the test harness (scripts/invariants.ts) import this same pair of
+ * constants so the "no gap big enough for a smaller unit to fit"
+ * tolerance — which is inherently a function of how finely the search
+ * actually probed — stays consistent between what the engine checks and
+ * what the harness independently re-checks, for either quality level.
+ */
+export const PROBE_STEP_M = 0.5;
+export const DRAFT_PROBE_STEP_M = 2;

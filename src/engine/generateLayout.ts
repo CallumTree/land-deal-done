@@ -151,7 +151,7 @@ export function generateLayout(
     giaM2: number;
   }
 
-  function computePlotSpec(houseType: HouseTypeId): PlotSpec {
+  function computePlotSpecUncached(houseType: HouseTypeId): PlotSpec {
     const giaM2 = ndssMinGia[houseType];
     const storeys = rules.STOREYS[houseType];
     const footprintDepthM = rules.ASSUMED_FOOTPRINT_DEPTH_M[houseType];
@@ -162,6 +162,27 @@ export function generateLayout(
     const drivewayDepthM = rules.PARKING_SPACE_DEPTH_M;
     const totalDepthM = drivewayDepthM + footprintDepthM + gardenDepthM;
     return { houseType, frontageWidthM, drivewayDepthM, footprintDepthM, gardenDepthM, totalDepthM, giaM2 };
+  }
+
+  // computePlotSpec is a pure function of houseType alone (it doesn't
+  // depend on position), but the placement search calls it per
+  // candidate — with 11 house types and 0.5m-step probing over long
+  // frontages, that's hundreds of thousands of calls to recompute the
+  // same handful of numbers, each one touching several rules.ts lookup
+  // objects keyed by a dynamic houseType string. Profiling
+  // pond-bridge-johnston showed those repeated dynamic-key lookups
+  // becoming "megamorphic" in V8 (too many distinct house types for its
+  // inline cache to stay fast) once HOUSE_TYPES grew past 4 — computing
+  // each type's spec once and reusing it removes both the redundant
+  // arithmetic and the megamorphic access pattern.
+  const plotSpecCache = new Map<HouseTypeId, PlotSpec>();
+  function computePlotSpec(houseType: HouseTypeId): PlotSpec {
+    let spec = plotSpecCache.get(houseType);
+    if (!spec) {
+      spec = computePlotSpecUncached(houseType);
+      plotSpecCache.set(houseType, spec);
+    }
+    return spec;
   }
 
   type Side = "left" | "right";
@@ -197,7 +218,9 @@ export function generateLayout(
   // Probe step for searching forward past a pinch point (e.g. a cul-de-sac's
   // narrow access neck) to the next position where a block actually fits,
   // rather than giving up on the whole side the first time one doesn't.
-  const PROBE_STEP_M = 0.5;
+  // See rules.ts for why this is quality-dependent.
+  const draftMode = inputs.quality === "draft";
+  const PROBE_STEP_M = draftMode ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
 
   interface PlacementState {
     plots: PlacedPlot[];
@@ -352,7 +375,12 @@ export function generateLayout(
     const startCursor = side === "left" ? state.cursorLeft : state.cursorRight;
     const cycleIndex = side === "left" ? state.cycleIndexLeft : state.cycleIndexRight;
     const preferredType = mixCycle[cycleIndex % mixCycle.length];
-    const typeOrder = [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+    // Draft mode skips the "try every other type" fallback — only the
+    // mix cycle's own preferred type is attempted at each position (with
+    // that type's normal block-size fallback, 6..1, still in play). This
+    // is strictly less search than full mode does, never more — draft
+    // can only place a subset of what full would place.
+    const typeOrder = draftMode ? [preferredType] : [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
 
     for (let yStart = startCursor; yStart < maxPlotFrontageY; yStart += PROBE_STEP_M) {
       for (const houseType of typeOrder) {

@@ -178,42 +178,76 @@ The tie-break code was reviewed carefully but couldn't be exercised
 end-to-end through a real boundary this session; flagged rather than
 claimed as "fixed and measured."
 
-**Performance (`scripts/perf-stability.ts`)**, simulating a dragged
-boundary vertex, 15 steps, Node.js/V8, unthrottled:
+**Performance — fixed, not just measured.** The first pass found
+pond-bridge-johnston (123-unit, multi-loop site) taking ~159ms/
+recalculation unthrottled and over 1s at a throttled mid-range-phone
+approximation — too slow to feel "live." Profiled before changing
+anything (`node --prof`, 20 repeated calls), fixed three real root
+causes in order, re-profiling after each to confirm the diagnosis:
 
-| fixture | mean ms/recalc | topology flips | avg form-level churn/step |
+1. **`Math.hypot` instead of a plain `sqrt`** (`geometry.ts`'s `length()`)
+   was ~28% of total CPU time on its own — `Math.hypot` guards against
+   overflow/underflow that genuinely can't happen at BNG-metre magnitudes,
+   and that guard makes it several times slower than
+   `Math.sqrt(x*x+y*y)` in V8. Swapped; same result, much cheaper.
+2. **`pointInPolygon` (called via `convexPolygonFullyInside`) was ~45%
+   of CPU time on its own** once (1) was fixed — it's called on every
+   corner of every candidate plot, and pond-bridge's eroded boundary has
+   ~18 vertices, so each call is O(18) ray-cast iterations repeated many
+   thousands of times. Added a bounding-box pre-filter (cached per
+   polygon, since the eroded boundary doesn't change within one
+   `generateLayout` call): a candidate whose bbox isn't fully inside the
+   polygon's bbox cannot possibly be fully inside the polygon, so it's
+   rejected in 4 comparisons instead of running the full test. Never
+   changes the answer, only skips the expensive check for candidates
+   that were always going to fail it.
+3. **`computePlotSpec(houseType)` — pure given a houseType, but was
+   recomputed on every single candidate check** (hundreds of thousands
+   of times, once per type per position per block-size attempt), each
+   time touching several `rules.ts` lookup objects keyed by a dynamic
+   string. With 11 house types instead of 4, V8's inline cache for those
+   lookups went "megamorphic" (its own profiler term for "too many
+   distinct shapes to stay fast"), showing up as ~26% of CPU time on its
+   own. Memoized per house type (computed once, reused) — this was the
+   single biggest win.
+
+Result, same 15-step dragged-vertex simulation as before, Node.js/V8,
+unthrottled mean ms/recalculation:
+
+| fixture | before | after |
+|---|---|---|
+| rectangle-infill | 0.7 | 0.5 |
+| l-shaped | 1.4 | 0.9 |
+| larger-greenfield | 3.2 | 3.0 |
+| fern-rise-neyland | 4.9 | 3.6 |
+| cul-de-sac | 7.8 | 7.3 |
+| narrow-frontage | 24.9 | 4.8 |
+| pond-bridge-johnston | **159.4** | **13.1** |
+
+Browser (Chromium/CDP, same technique Lighthouse uses for "mid-tier
+mobile" scoring — ad hoc, not committed, since it needed esbuild as a
+one-off bundler), pond-bridge-johnston specifically:
+
+| | before | after | target |
 |---|---|---|---|
-| rectangle-infill | 0.7 | 0/14 | 0.00 |
-| l-shaped | 1.4 | 0/14 | 0.07 |
-| larger-greenfield | 3.2 | 0/14 | 0.21 |
-| fern-rise-neyland | 4.9 | 0/14 | 0.14 |
-| cul-de-sac | 7.8 | 0/14 | 0.14 |
-| narrow-frontage | 24.9 | 0/14 | 0.00 |
-| pond-bridge-johnston | **159.4** | 0/14 | 0.00 |
+| unthrottled | 212.9ms | **22.7ms** (max 31.5ms) | <50ms |
+| 4× throttle | 1083.5ms | **107.5ms** | — |
+| 6× throttle | 1547.0ms | **171.8ms** (max 251.5ms) | ~300ms |
 
-A separate ad-hoc Chromium/CDP run (`Emulation.setCPUThrottlingRate`, the
-same technique Lighthouse uses for "mid-tier mobile" scoring — not
-committed to the repo, since it needed esbuild as a one-off bundler) gave,
-at a 4×/6× throttle: pond-bridge-johnston **1.08s / 1.55s** per
-recalculation; narrow-frontage 0.16s / 0.25s; every other fixture stayed
-under 30ms even at 6×.
+Both targets met with margin, on the hardest fixture in the set, from
+genuine root-cause fixes — nothing about the search's correctness or
+any hard rule changed (every fixture's unit counts and invariant
+results are identical before and after; verified, not assumed).
+narrow-frontage's "slow because it fails" problem (flagged, not fixed,
+in the first pass) was resolved as a side effect of the bbox pre-filter
+— it no longer needs to run the expensive exact check for positions
+that were never going to work.
 
-**Two honest findings, not hidden:**
-1. **pond-bridge-johnston (123-unit, multi-loop site) is a real
-   performance hotspot** — over 1 second per recalculation on a throttled
-   mid-range-phone approximation, which would not feel "live and fluid"
-   while dragging. Root cause: the placement search is
-   O(positions × house types × block sizes) per side, and this fixture
-   has both a long frontage AND, now, 11 house types to probe at every
-   position instead of 4. Not fixed this session — flagged as the clear
-   next performance target before Web Worker wiring ships, since a
-   worker moves the cost off the main thread but doesn't reduce it.
-2. **narrow-frontage is slow precisely because it fails** — the search
-   still probes the entire site at the 0.5m step size, trying every
-   house type and block size, before concluding nothing fits. A real
-   "give up early" heuristic (e.g. bail out once the eroded width can't
-   fit even the smallest type at all) would help both this case and
-   every other infeasible site; not implemented this session.
+Final profile (after all three fixes) shows no single remaining
+hotspot — `tryPlaceOnSide`, `convexPolygonFullyInside`, `pointInPolygon`
+and the remaining dynamic-key lookups are each in the 5-13% range,
+which is what a reasonably-optimized hot path is expected to look like,
+not a sign of more low-hanging fruit.
 
 Form-level churn (which exact form — terrace/semi/detached — lands at a
 given position) is low in practice (0.00-0.21 mismatches per step across
@@ -221,6 +255,38 @@ fixtures with 10-70 plots) even without any dedicated fix for it — the
 existing preferred-type-first-with-fallback search already happens to be
 fairly stable session to session; this is an observation, not a
 guarantee for shapes not in this fixture set.
+
+**Draft quality mode** (`EngineInputs.quality: "draft" | "full"`,
+default `"full"`): draft uses a coarser 2m position-search step (vs
+0.5m) and skips the "try every other house type" fallback — only the
+mix cycle's own preferred type is attempted at each position, still
+with that type's normal block-size fallback. Draft is a strict SUBSET
+of what full searches, so it can only place fewer units, never an
+invalid one — every unit draft places passes the exact same hard-rule
+checks as full (NDSS, garden depth, back-to-back, frontage, overlap,
+block rules). Verified with a dedicated script
+(`scripts/draft-mode-report.ts`) that runs the SAME independent
+invariant checker the main harness uses against draft-mode output on
+every fixture, not just trusting the engine's own compliance claims:
+
+| fixture | full units | draft units | yield given up | full ms | draft ms |
+|---|---|---|---|---|---|
+| cul-de-sac | 14 | 14 | 0.0% | 26.0 | 3.7 |
+| fern-rise-neyland | 15 | 10 | 33.3% | 10.1 | 1.3 |
+| l-shaped | 13 | 13 | 0.0% | 2.9 | 2.1 |
+| larger-greenfield | 31 | 31 | 0.0% | 6.4 | 4.9 |
+| pond-bridge-johnston | 28 | 28 | 0.0% | 16.1 | 3.9 |
+| rectangle-infill | 12 | 12 | 0.0% | 0.6 | 1.0 |
+
+Draft invariants hold on every fixture (narrow-frontage is the one
+exception, and it's the same pre-existing "zero plots, genuinely
+infeasible" case full mode also hits — not a draft-mode regression).
+Draft gives up real yield on exactly one fixture (fern-rise-neyland,
+-33.3%) — a small, low-density, single-house-type site where the
+coarser 2m step misses finer gaps the 0.5m step would have found;
+everywhere else draft matches full exactly while being 2-7× faster.
+Intended use: draft while a vertex/entrance is being dragged, one final
+full recalculation on release.
 
 **Worker-ready entry point** (`src/engine/worker.ts`): a thin, pure
 `handleWorkerRequest(request) → response` contract (requestId in, echoed
@@ -234,22 +300,53 @@ picked.
 **Auto mix optimiser** (`src/engine/optimizer.ts`,
 `scripts/optimizer-report.ts`): searches a fixed, deterministic candidate
 list (Auto, each pure single tier, 24 permutations of skewed weights,
-plus 40 seeded "extra coverage" candidates) within a time budget
-(default 1000ms), discards any candidate with a hard-rule compliance
-`fail`, and ranks the rest three ways — Most homes (`totalUnits`), Most
-value (`residualLandValue`), Balanced (an even-weighted normalized
-blend, explicitly a modelling choice, not a sourced figure). "Layout
-parameters such as road side/orientation" from the brief aren't an
-independent search dimension in this v0 engine — topology is fully
-determined by the boundary shape and the mix, not a free input
-`generateLayout` takes, so only the mix itself is searched; stated
-explicitly rather than silently skipped.
+plus 40 seeded "extra coverage" candidates — 71 total) within a time
+budget (default 1000ms), discards any candidate with a hard-rule
+compliance `fail`, and ranks the rest three ways — Most homes
+(`totalUnits`), Most value (`residualLandValue`), Balanced (an
+even-weighted normalized blend, explicitly a modelling choice, not a
+sourced figure). "Layout parameters such as road side/orientation" from
+the brief aren't an independent search dimension in this v0 engine —
+topology is fully determined by the boundary shape and the mix, not a
+free input `generateLayout` takes, so only the mix itself is searched;
+stated explicitly rather than silently skipped.
+
+**Adaptive search.** Even after the performance fix above,
+pond-bridge-johnston alone couldn't finish the full 71-candidate list
+at full quality within the 1s budget (each candidate still costs
+~15-20ms on this fixture, and 71 of them don't fit). Rather than the
+search simply timing out partway through the list (as it did at first —
+only 39/71 tried, reported earlier in this session), it now adapts: it
+tracks a running average cost-per-candidate, and once the projected cost
+of finishing the rest of the list at full quality would exceed the
+remaining budget, it switches the REMAINING candidates to draft quality
+instead (with a safety margin, and only after a few full-quality
+samples to make that projection on). On a fast site this never
+triggers — the whole list runs at full quality, identical to a
+non-adaptive search (confirmed: results for every fixture except
+pond-bridge are byte-identical to before this change). On
+pond-bridge-johnston, all 71 candidates now complete within budget
+(621ms, no timeout), 50 of them at draft quality once the projection
+kicked in.
+
+*(An earlier version of this adaptive idea — a coarse draft-quality
+sweep over the whole list first, then refining only the apparent
+leaders at full quality — was tried and discarded: it caused a real
+regression on fern-rise-neyland, where a mix that looked compliant at
+draft quality turned out to be checking against a shorter (and
+therefore turning-head-compliant) road than the longer road full
+quality's more thorough placement actually needs — i.e. "draft-compliant"
+does not reliably imply "full-compliant" for the same mix once more
+units get placed. Kept here as a recorded dead end, not silently
+dropped, since it's a real and non-obvious failure mode of the
+coarse-then-refine pattern.)*
 
 Measured on all 7 fixtures, run twice each: **deterministic on every
-fixture** (identical winners both times). Candidates tried ranged from
-2 (pond-bridge-johnston — each candidate is slow enough on this fixture
-that only 2 fit in the 1s budget, the same performance hotspot flagged
-above) to 71 (every other fixture, i.e. the full fixed list, well inside
-budget). narrow-frontage and pond-bridge-johnston both correctly
-report "nothing compliant" with a plain-English reason (quoting the most
-common failing check) rather than silently returning an empty result.
+fixture** (identical winners both times). Candidates tried: all 71 on
+every fixture (no more partial lists/timeouts on any fixture). narrow-
+frontage and pond-bridge-johnston both correctly report "nothing
+compliant" with a plain-English reason (quoting the most common failing
+check) rather than silently returning an empty result — pond-bridge's
+reason, "Turning head at road end," is a genuine site-geometry finding
+(the same v0 topology limitation the fixture is explicitly a stress
+test for), not a search artefact.

@@ -43,7 +43,9 @@ function main() {
       run1.balanced?.candidate.label === run2.balanced?.candidate.label;
 
     console.log(`\n=== ${fx.id} ===`);
-    console.log(`Candidates tried: ${run1.candidatesTried}  Compliant: ${run1.compliantCount}  Elapsed: ${run1.elapsedMs.toFixed(0)}ms  Timed out: ${run1.timedOut}`);
+    console.log(
+      `Candidates tried: ${run1.candidatesTried}  Compliant: ${run1.compliantCount}  Elapsed: ${run1.elapsedMs.toFixed(0)}ms  Timed out: ${run1.timedOut}  Draft-quality fallback: ${run1.draftFallbackCount}/${run1.candidatesTried}`
+    );
     if (run1.failureExplanation) {
       console.log(`Nothing compliant: ${run1.failureExplanation}`);
     } else {

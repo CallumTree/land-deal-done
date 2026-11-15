@@ -78,6 +78,21 @@ export interface EngineInputs {
    * wins over matching the hint. See generateLayout.ts's topology search.
    */
   previousTopologyHint?: "double" | "single-left" | "single-right";
+  /**
+   * "full" (default): search every candidate position at the normal
+   * 0.5m step, trying every house type's fallback cascade at each one —
+   * the best layout this engine can find. "draft": a coarser, faster
+   * search for use WHILE the user is actively dragging a vertex/entrance
+   * (a bigger position step, and no fallback-to-other-types search — only
+   * the mix cycle's preferred type is tried at each position, with that
+   * type's own block-size fallback only). Draft can therefore place
+   * FEWER units than full (it's a strict subset of what full would try),
+   * but every unit it DOES place passes the exact same hard-rule checks
+   * (NDSS, garden depth, back-to-back, frontage, overlap, block rules) —
+   * draft is never less correct, only less exhaustive. Intended use:
+   * draft while dragging, one final full recalculation on release.
+   */
+  quality?: "draft" | "full";
 }
 
 export interface PlacedPlot {

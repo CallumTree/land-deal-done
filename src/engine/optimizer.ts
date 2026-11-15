@@ -36,6 +36,8 @@ export interface OptimizerResult {
   elapsedMs: number;
   /** true if the time budget ran out before the candidate list was exhausted — candidatesTried may then be fewer than the full list. */
   timedOut: boolean;
+  /** How many of candidatesTried were evaluated at draft quality instead of full, because the projected cost of finishing the list at full quality exceeded the remaining time budget. 0 on a fast site — the adaptive switch-over never triggers there. */
+  draftFallbackCount: number;
   mostHomes: RankedCandidate | null;
   mostValue: RankedCandidate | null;
   balanced: RankedCandidate | null;
@@ -109,6 +111,23 @@ function buildCandidateList(includeBungalowOption: boolean): MixCandidate[] {
   return candidates;
 }
 
+/**
+ * Adaptive quality switch-over: after each candidate, project whether
+ * there's realistically enough budget left to run the REST of the list
+ * at full quality (using the running average cost-per-candidate seen so
+ * far). If not, the remaining candidates switch to draft quality instead
+ * of the search simply timing out and returning nothing for them. On a
+ * fast site this never triggers — the whole list finishes at full
+ * quality, identical to a non-adaptive sweep. On a slow, complex site
+ * (e.g. a large multi-loop boundary), only the TAIL of the list degrades
+ * to draft, rather than the search just running out of clock and
+ * silently giving up on most of the list. A safety margin (this
+ * constant) means the switch-over triggers a little early rather than
+ * right at the edge, since the average cost-per-candidate estimate is
+ * noisy with only a few samples.
+ */
+const ADAPTIVE_SAFETY_MARGIN = 1.3;
+
 export function optimizeMix(
   boundary: BNGPolygon,
   entrance: BNGPoint,
@@ -123,24 +142,44 @@ export function optimizeMix(
   const failureCounts = new Map<string, number>();
   let candidatesTried = 0;
   let timedOut = false;
+  let draftFallbackCount = 0;
+  let fullCostTotalMs = 0;
+  let fullCostSamples = 0;
 
-  for (const candidate of candidates) {
-    if (performance.now() - start > timeBudgetMs) {
+  for (let i = 0; i < candidates.length; i++) {
+    const elapsed = performance.now() - start;
+    if (elapsed > timeBudgetMs) {
       timedOut = true;
       break;
     }
+    const candidate = candidates[i];
+    const remainingCandidates = candidates.length - i;
+    const remainingBudget = timeBudgetMs - elapsed;
+    const avgFullCost = fullCostSamples > 0 ? fullCostTotalMs / fullCostSamples : 0;
+    const projectedFullCost = avgFullCost * remainingCandidates * ADAPTIVE_SAFETY_MARGIN;
+    // Only degrade to draft once we have a real cost estimate (a few full
+    // samples in) AND that estimate says the rest of the list won't fit.
+    const useDraft = fullCostSamples >= 3 && projectedFullCost > remainingBudget;
+
     candidatesTried++;
+    if (useDraft) draftFallbackCount++;
     const inputs: EngineInputs = {
       ...baseInputs,
       mix: undefined,
       sizeMix: candidate.sizeMix,
       includeBungalows: candidate.includeBungalows,
+      quality: useDraft ? "draft" : "full",
     };
+    const callStart = performance.now();
     let output: EngineOutput;
     try {
       output = generateLayout(boundary, entrance, inputs);
     } catch {
       continue;
+    }
+    if (!useDraft) {
+      fullCostTotalMs += performance.now() - callStart;
+      fullCostSamples++;
     }
     const failing = output.compliance.filter((c) => c.status === "fail");
     if (failing.length === 0 && output.metrics.totalUnits > 0) {
@@ -159,7 +198,7 @@ export function optimizeMix(
     const failureExplanation = top
       ? `No compliant layout found among ${candidatesTried} mix${candidatesTried === 1 ? "" : "es"} tried${timedOut ? " (time budget ran out)" : ""}. The most common reason: "${top[0]}" (${top[1]}/${candidatesTried} candidates). Try a different entrance point or a less ambitious mix.`
       : `No compliant layout found among ${candidatesTried} mixes tried — every candidate produced zero buildable units. This site/entrance combination may be too small or too awkwardly shaped for any mix v0 can place.`;
-    return { candidatesTried, compliantCount: 0, elapsedMs, timedOut, mostHomes: null, mostValue: null, balanced: null, failureExplanation };
+    return { candidatesTried, compliantCount: 0, elapsedMs, timedOut, draftFallbackCount, mostHomes: null, mostValue: null, balanced: null, failureExplanation };
   }
 
   const mostHomes = compliant.reduce((best, c) => (c.output.metrics.totalUnits > best.output.metrics.totalUnits ? c : best));
@@ -185,6 +224,7 @@ export function optimizeMix(
     compliantCount: compliant.length,
     elapsedMs,
     timedOut,
+    draftFallbackCount,
     mostHomes,
     mostValue,
     balanced,
