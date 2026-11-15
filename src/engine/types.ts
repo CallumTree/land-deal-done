@@ -40,6 +40,12 @@ export interface PlacedPlot {
   gardenBng: BNGPolygon | null;
   /** Gross internal area, m². */
   giaM2: number;
+  /** Id shared by every unit placed in the same attached block (terrace run, semi pair, or a lone detached unit). */
+  blockId: string;
+  /** This plot's position within its block, 0-indexed from the block's first unit. */
+  blockPosition: number;
+  /** Total number of units in this plot's block. */
+  blockSize: number;
 }
 
 export interface RoadSegment {

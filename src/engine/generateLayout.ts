@@ -88,7 +88,9 @@ export function generateLayout(
   // greedily and finding out afterwards there's no room to turn around.
   const maxPlotFrontageY = maxBoundaryY - turningHeadSide;
 
-  // --- Mix cycle: repeat each house type `weight` times (default 1 each) ---
+  // --- Mix cycle at the TYPE level: each "turn" attempts a whole attached
+  // block (terrace run / semi pair / lone detached), not just one unit —
+  // see rules.MAX_BLOCK_UNITS. ---
   const mixCycle = buildMixCycle(inputs.mix);
 
   interface PlotSpec {
@@ -115,71 +117,83 @@ export function generateLayout(
   }
 
   type Side = "left" | "right";
-  const plots: PlacedPlot[] = [];
-  const parkingSpacesLocal: BNGPoint[] = [];
-  // Plots start at the boundary offset, not 0 — the first row sits right
-  // next to the entrance along the same edge the entrance is on, which
-  // still needs the same no-build setback as the rest of that edge; only
-  // the road itself is exempt.
-  let cursorLeft = rules.BOUNDARY_OFFSET_M;
-  let cursorRight = rules.BOUNDARY_OFFSET_M;
-  let cycleIndexLeft = 0;
-  let cycleIndexRight = 0;
-  let plotCounter = 0;
+
+  // Types ordered smallest-frontage-first, for backtracking to a smaller
+  // type when the preferred one won't fit anywhere in the remaining room.
+  const typesByFrontageAsc = [...HOUSE_TYPES].sort(
+    (a, b) => computePlotSpec(a).frontageWidthM - computePlotSpec(b).frontageWidthM
+  );
+  const smallestFrontageWidthM = Math.min(...HOUSE_TYPES.map((t) => computePlotSpec(t).frontageWidthM));
+  const smallestTotalDepthM = Math.min(...HOUSE_TYPES.map((t) => computePlotSpec(t).totalDepthM));
 
   function depthToX(side: Side, frontageX: number, depth: number): number {
     return side === "left" ? frontageX - depth : frontageX + depth;
   }
 
+  function buildPlotRect(side: Side, frontageX: number, rearX: number, yStart: number, yEnd: number): BNGPolygon {
+    return side === "left"
+      ? [
+          [frontageX, yStart],
+          [frontageX, yEnd],
+          [rearX, yEnd],
+          [rearX, yStart],
+        ]
+      : [
+          [frontageX, yStart],
+          [rearX, yStart],
+          [rearX, yEnd],
+          [frontageX, yEnd],
+        ];
+  }
+
   // Probe step for searching forward past a pinch point (e.g. a cul-de-sac's
-  // narrow access neck) to the next position where a plot actually fits,
+  // narrow access neck) to the next position where a block actually fits,
   // rather than giving up on the whole side the first time one doesn't.
   const PROBE_STEP_M = 0.5;
 
-  function tryPlaceOnSide(side: Side): boolean {
-    const startCursor = side === "left" ? cursorLeft : cursorRight;
-    const cycleIndex = side === "left" ? cycleIndexLeft : cycleIndexRight;
-    const houseType = mixCycle[cycleIndex % mixCycle.length];
-    const spec = computePlotSpec(houseType);
-    const frontageX = side === "left" ? -roadHalfWidth : roadHalfWidth;
-    const rearX = depthToX(side, frontageX, spec.totalDepthM);
-
-    for (let yStart = startCursor; yStart + spec.frontageWidthM <= maxPlotFrontageY; yStart += PROBE_STEP_M) {
-      const yEnd = yStart + spec.frontageWidthM;
-
-      const plotRectLocal: BNGPolygon =
-        side === "left"
-          ? [
-              [frontageX, yStart],
-              [frontageX, yEnd],
-              [rearX, yEnd],
-              [rearX, yStart],
-            ]
-          : [
-              [frontageX, yStart],
-              [rearX, yStart],
-              [rearX, yEnd],
-              [frontageX, yEnd],
-            ];
-
-      if (geo.convexPolygonFullyInside(plotRectLocal, erodedLocal)) {
-        return placePlot(side, spec, frontageX, rearX, yStart, yEnd, plotRectLocal);
-      }
-    }
-    return false;
+  interface PlacementState {
+    plots: PlacedPlot[];
+    parkingSpacesLocal: BNGPoint[];
+    cursorLeft: number;
+    cursorRight: number;
+    cycleIndexLeft: number;
+    cycleIndexRight: number;
+    plotCounter: number;
+    blockCounter: number;
   }
 
-  function placePlot(
+  function freshState(): PlacementState {
+    // Plots start at the boundary offset, not 0 — the first row sits right
+    // next to the entrance along the same edge the entrance is on, which
+    // still needs the same no-build setback as the rest of that edge; only
+    // the road itself is exempt.
+    return {
+      plots: [],
+      parkingSpacesLocal: [],
+      cursorLeft: rules.BOUNDARY_OFFSET_M,
+      cursorRight: rules.BOUNDARY_OFFSET_M,
+      cycleIndexLeft: 0,
+      cycleIndexRight: 0,
+      plotCounter: 0,
+      blockCounter: 0,
+    };
+  }
+
+  function placeUnit(
+    state: PlacementState,
     side: Side,
-    spec: ReturnType<typeof computePlotSpec>,
+    spec: PlotSpec,
     frontageX: number,
     rearX: number,
     yStart: number,
     yEnd: number,
-    plotRectLocal: BNGPolygon
-  ): boolean {
+    blockId: string,
+    blockPosition: number,
+    blockSize: number
+  ) {
     const driveX = depthToX(side, frontageX, spec.drivewayDepthM);
     const houseX = depthToX(side, frontageX, spec.drivewayDepthM + spec.footprintDepthM);
+    const plotRectLocal = buildPlotRect(side, frontageX, rearX, yStart, yEnd);
 
     const footprintLocal: BNGPolygon =
       side === "left"
@@ -211,41 +225,156 @@ export function generateLayout(
             [houseX, yEnd],
           ];
 
-    plotCounter += 1;
-    plots.push({
-      id: `plot-${plotCounter}`,
+    state.plotCounter += 1;
+    state.plots.push({
+      id: `plot-${state.plotCounter}`,
       houseType: spec.houseType,
       plotBng: plotRectLocal.map(toWorld),
       footprintBng: footprintLocal.map(toWorld),
       gardenBng: gardenLocal.map(toWorld),
       giaM2: spec.giaM2,
+      blockId,
+      blockPosition,
+      blockSize,
     });
 
     const spacesNeeded = Math.max(1, Math.round(parkingRatio));
     const spaceWidth = spec.frontageWidthM / spacesNeeded;
     for (let s = 0; s < spacesNeeded; s++) {
       const centerY = yStart + spaceWidth * (s + 0.5);
-      parkingSpacesLocal.push([depthToX(side, frontageX, spec.drivewayDepthM / 2), centerY]);
+      state.parkingSpacesLocal.push([depthToX(side, frontageX, spec.drivewayDepthM / 2), centerY]);
     }
+  }
 
-    if (side === "left") {
-      cursorLeft = yEnd;
-      cycleIndexLeft += 1;
+  // Does a block of `blockSize` units of `houseType` fit with its first
+  // unit starting exactly at `yStart` (no searching)? Checked, not placed.
+  function fitsBlockAt(
+    side: Side,
+    houseType: HouseTypeId,
+    blockSize: number,
+    yStart: number
+  ): { fits: boolean; frontageX: number; rearX: number; spec: PlotSpec } {
+    const spec = computePlotSpec(houseType);
+    const frontageX = side === "left" ? -roadHalfWidth : roadHalfWidth;
+    const rearX = depthToX(side, frontageX, spec.totalDepthM);
+    const blockWidth = spec.frontageWidthM * blockSize;
+    if (yStart + blockWidth > maxPlotFrontageY) {
+      return { fits: false, frontageX, rearX, spec };
+    }
+    for (let u = 0; u < blockSize; u++) {
+      const uStart = yStart + u * spec.frontageWidthM;
+      const uEnd = uStart + spec.frontageWidthM;
+      if (!geo.convexPolygonFullyInside(buildPlotRect(side, frontageX, rearX, uStart, uEnd), erodedLocal)) {
+        return { fits: false, frontageX, rearX, spec };
+      }
+    }
+    return { fits: true, frontageX, rearX, spec };
+  }
+
+  function placeBlockAt(
+    state: PlacementState,
+    side: Side,
+    blockSize: number,
+    yStart: number,
+    frontageX: number,
+    rearX: number,
+    spec: PlotSpec
+  ): number {
+    state.blockCounter += 1;
+    const blockId = `block-${state.blockCounter}`;
+    for (let u = 0; u < blockSize; u++) {
+      const uStart = yStart + u * spec.frontageWidthM;
+      const uEnd = uStart + spec.frontageWidthM;
+      placeUnit(state, side, spec, frontageX, rearX, uStart, uEnd, blockId, u, blockSize);
+    }
+    return yStart + spec.frontageWidthM * blockSize + rules.SIDE_GAP_M;
+  }
+
+  // One "turn" for a side: try the preferred type (per the mix cycle) at
+  // decreasing block sizes, then fall back through progressively smaller
+  // house types, before giving up on this side entirely.
+  // Check every candidate position before advancing — not "let the
+  // preferred type probe ahead to wherever IT fits" (which can skip right
+  // over a gap a smaller type would have filled; an earlier version did
+  // exactly that and tripped the no-wasted-gaps invariant). At each
+  // position, try the preferred type (largest block down to 1), then
+  // progressively smaller types, and only step forward once NONE of them
+  // fit right there.
+  function tryPlaceOnSide(state: PlacementState, side: Side): boolean {
+    const startCursor = side === "left" ? state.cursorLeft : state.cursorRight;
+    const cycleIndex = side === "left" ? state.cycleIndexLeft : state.cycleIndexRight;
+    const preferredType = mixCycle[cycleIndex % mixCycle.length];
+    const typeOrder = [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+
+    for (let yStart = startCursor; yStart < maxPlotFrontageY; yStart += PROBE_STEP_M) {
+      for (const houseType of typeOrder) {
+        for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
+          const check = fitsBlockAt(side, houseType, blockSize, yStart);
+          if (check.fits) {
+            const newCursor = placeBlockAt(state, side, blockSize, yStart, check.frontageX, check.rearX, check.spec);
+            if (side === "left") {
+              state.cursorLeft = newCursor;
+              state.cycleIndexLeft += 1;
+            } else {
+              state.cursorRight = newCursor;
+              state.cycleIndexRight += 1;
+            }
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function runPlacement(sides: Side[]): PlacementState {
+    const state = freshState();
+    let progress = true;
+    while (progress) {
+      const results = sides.map((side) => tryPlaceOnSide(state, side));
+      progress = results.some(Boolean);
+    }
+    return state;
+  }
+
+  // Double-loaded first; only if that fits literally nothing does it fall
+  // back to a single-sided ribbon (road stays centred on the entrance;
+  // only one side gets plots) — "try before giving up," not "prefer."
+  let topology: "double" | "single-left" | "single-right" | "none" = "double";
+  let state = runPlacement(["left", "right"]);
+  if (state.plots.length === 0) {
+    const singleLeft = runPlacement(["left"]);
+    const singleRight = runPlacement(["right"]);
+    if (singleLeft.plots.length === 0 && singleRight.plots.length === 0) {
+      topology = "none";
+      state = singleLeft;
+    } else if (singleLeft.plots.length >= singleRight.plots.length) {
+      topology = "single-left";
+      state = singleLeft;
     } else {
-      cursorRight = yEnd;
-      cycleIndexRight += 1;
+      topology = "single-right";
+      state = singleRight;
     }
-    return true;
   }
 
-  // Alternate sides so the road grows roughly evenly rather than filling
-  // one side completely before starting the other.
-  let progress = true;
-  while (progress) {
-    const placedLeft = tryPlaceOnSide("left");
-    const placedRight = tryPlaceOnSide("right");
-    progress = placedLeft || placedRight;
-  }
+  const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
+
+  const erodedXs = erodedLocal.map((p) => p[0]);
+  const erodedWidthM = Math.max(...erodedXs) - Math.min(...erodedXs);
+  compliance.push({
+    id: "topology",
+    label: "Road/plot topology used",
+    status: topology === "none" ? "fail" : "pass",
+    ruleRef: "v0 fallback order: double-loaded ribbon, then single-sided ribbon, before giving up",
+    detail:
+      topology === "double"
+        ? "Double-loaded: plots on both sides of the road."
+        : topology === "single-left"
+          ? "Double-loading fit nothing; fell back to a single-sided ribbon (left side only)."
+          : topology === "single-right"
+            ? "Double-loading fit nothing; fell back to a single-sided ribbon (right side only)."
+            : `No topology fits any house type. Eroded buildable width here is ${erodedWidthM.toFixed(1)}m. Even the smallest unit needs road (${rules.ROAD_WIDTH_M}m) + driveway/footprint/garden (${smallestTotalDepthM.toFixed(1)}m) = ${(rules.ROAD_WIDTH_M + smallestTotalDepthM).toFixed(1)}m for a single row — short by ${(rules.ROAD_WIDTH_M + smallestTotalDepthM - erodedWidthM).toFixed(1)}m. Two flanking rows would need ${(rules.ROAD_WIDTH_M + 2 * smallestTotalDepthM).toFixed(1)}m.`,
+  });
 
   const roadEndY = Math.max(cursorLeft, cursorRight, 0);
   const roadLengthWithHead = roadEndY + turningHeadSide;
@@ -366,6 +495,100 @@ export function generateLayout(
     detail: overlapFound
       ? "At least one pair of plots/road overlap."
       : `${plots.length} plot(s) and the road checked pairwise — no overlaps.`,
+  });
+
+  // --- Block length cap ---
+  const blockGroups = new Map<string, PlacedPlot[]>();
+  for (const p of plots) {
+    const group = blockGroups.get(p.blockId) ?? [];
+    group.push(p);
+    blockGroups.set(p.blockId, group);
+  }
+  let blockLengthOk = true;
+  let blockLengthDetail = "";
+  for (const [blockId, group] of blockGroups) {
+    const houseType = group[0].houseType;
+    const maxAllowed = rules.MAX_BLOCK_UNITS[houseType];
+    const sameType = group.every((p) => p.houseType === houseType);
+    if (!sameType || group.length > maxAllowed || group.length !== group[0].blockSize) {
+      blockLengthOk = false;
+      blockLengthDetail = `Block ${blockId}: ${group.length} unit(s) of ${houseType} (max ${maxAllowed}).`;
+      break;
+    }
+  }
+  compliance.push({
+    id: "block-length",
+    label: "Attached block length cap",
+    status: plots.length > 0 ? (blockLengthOk ? "pass" : "fail") : "warn",
+    ruleRef: "rules.ts MAX_BLOCK_UNITS (terrace configurable; semi=2 and detached=1 by definition)",
+    detail:
+      plots.length > 0
+        ? blockLengthOk
+          ? `${blockGroups.size} block(s), all within their house type's cap.`
+          : blockLengthDetail
+        : "No plots placed.",
+  });
+
+  // --- Attached units genuinely share a wall (zero gap between consecutive footprints in a block) ---
+  let attachedOk = true;
+  let attachedDetail = "";
+  outerBlocks: for (const [blockId, group] of blockGroups) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort((a, b) => a.blockPosition - b.blockPosition);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const gap = geo.minDistanceBetweenPolygons(sorted[i].footprintBng, sorted[i + 1].footprintBng);
+      if (gap > 1e-3) {
+        attachedOk = false;
+        attachedDetail = `Block ${blockId}: units ${sorted[i].id} and ${sorted[i + 1].id} are ${gap.toFixed(2)}m apart, not sharing a wall.`;
+        break outerBlocks;
+      }
+    }
+  }
+  compliance.push({
+    id: "attached-share-wall",
+    label: "Attached units genuinely share a wall",
+    status: plots.length > 0 ? (attachedOk ? "pass" : "fail") : "warn",
+    ruleRef: "Brief requirement — terrace/semi units must be structurally adjacent, not just nearby",
+    detail:
+      plots.length > 0
+        ? attachedOk
+          ? "Every multi-unit block's consecutive footprints touch with zero gap."
+          : attachedDetail
+        : "No plots placed.",
+  });
+
+  // --- No gap between blocks big enough that a smaller unit could have fit and didn't ---
+  let wastedGapFound = false;
+  let wastedGapDetail = "";
+  for (const side of ["left", "right"] as Side[]) {
+    const sideBlocks = [...blockGroups.values()]
+      .filter((group) => plotSideLocal(group[0]) === side)
+      .map((group) => {
+        const localPts = group.flatMap((p) => p.plotBng.map(toLocal));
+        const ys = localPts.map((pt) => pt[1]);
+        return { blockId: group[0].blockId, yStart: Math.min(...ys), yEnd: Math.max(...ys) };
+      })
+      .sort((a, b) => a.yStart - b.yStart);
+    for (let i = 0; i < sideBlocks.length - 1; i++) {
+      const gap = sideBlocks[i + 1].yStart - sideBlocks[i].yEnd;
+      const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + PROBE_STEP_M;
+      if (gap > maxReasonableGap) {
+        wastedGapFound = true;
+        wastedGapDetail = `${side} side, between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap — room for another ${smallestFrontageWidthM.toFixed(1)}m-wide unit plus its side gap.`;
+      }
+    }
+  }
+  compliance.push({
+    id: "no-wasted-gaps",
+    label: "No gap large enough for a smaller unit to fit",
+    status: plots.length > 0 ? (wastedGapFound ? "fail" : "pass") : "warn",
+    ruleRef: "Brief requirement — backtrack to a smaller type before leaving a gap empty",
+    detail:
+      plots.length > 0
+        ? wastedGapFound
+          ? wastedGapDetail
+          : "No gap between blocks is large enough to have fit another unit."
+        : "No plots placed.",
   });
 
   // --- NDSS GIA ---

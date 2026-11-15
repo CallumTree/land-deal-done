@@ -119,3 +119,29 @@ export const DEFAULT_GDV_PER_SQFT = 300;
 export const DEFAULT_BUILD_COST_PER_SQFT = 180;
 
 export const SQM_PER_SQFT = 0.09290304;
+
+/**
+ * Minimum gap between separate buildings/blocks (i.e. between the last
+ * unit of one terrace/semi/detached block and the first unit of the
+ * next). Source: a nominal fire/visual-separation convention — Approved
+ * Document B and most UK design guides expect SOME clear gap between
+ * unattached external walls, commonly around 1m minimum. This is
+ * distinct from BACK_TO_BACK_M (rear-to-rear) and MIN_GARDEN_DEPTH_M
+ * (front-to-back) — this is side-to-side, between blocks along the
+ * street. Editable via a future EngineInputs field (not yet wired up).
+ */
+export const SIDE_GAP_M = 1;
+
+/**
+ * Maximum units per attached block, by house type. A "3-bed-semi" is
+ * definitionally a pair (2) and "4-bed-detached" definitionally never
+ * shares a wall (1) — those aren't really configurable. The terrace
+ * figure IS configurable: common UK streetscape convention breaks
+ * terraces into runs of around 4-6 units for visual variety and to cap
+ * cumulative party-wall runs; 6 is used here as the v0 default.
+ */
+export const MAX_BLOCK_UNITS: Record<HouseTypeId, number> = {
+  "2-bed-terrace": 6,
+  "3-bed-semi": 2,
+  "4-bed-detached": 1,
+};

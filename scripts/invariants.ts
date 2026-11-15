@@ -147,8 +147,17 @@ export function checkInvariants(
 
   const backToBackRequired = inputs.backToBackM ?? rules.BACK_TO_BACK_M;
   const tangentAxis = roadDir as BNGPoint;
+  // Reference point to subtract before taking any dot product used for a
+  // sign/bucket decision (which side of the road). BNG eastings/northings
+  // are large and always positive, so a dot product of the raw coordinate
+  // has the same sign for every plot regardless of which side it's on —
+  // this bit once already (see the no-wasted-gaps side filter below,
+  // fixed the same way). Localizing relative to the road's own start
+  // point removes that offset; differences (depths, gaps) don't need it,
+  // only signs do.
+  const localOrigin = road ? road.centerlineBng[0] : entrance;
   function rearInfo(p: PlacedPlot) {
-    const garden = p.gardenBng!;
+    const garden = p.gardenBng!.map((pt) => geo.sub(pt, localOrigin));
     const depthProj = garden.map((pt) => geo.dot(pt, depthAxis));
     const tangentProj = garden.map((pt) => geo.dot(pt, tangentAxis));
     const avgDepth = depthProj.reduce((s, v) => s + v, 0) / depthProj.length;
@@ -187,7 +196,103 @@ export function checkInvariants(
       : "No two plots face each other in this layout — nothing to violate (a real limitation of v0's single-ribbon topology, not proof the rule would hold for a denser one).",
   });
 
-  // 5. No compliance "green" on a rule violation — cross-check the subset
+  // 5. Block length cap, independently grouped and counted from blockId.
+  const blockGroups = new Map<string, PlacedPlot[]>();
+  for (const p of plots) {
+    const group = blockGroups.get(p.blockId) ?? [];
+    group.push(p);
+    blockGroups.set(p.blockId, group);
+  }
+  let blockLengthOk = true;
+  let blockLengthDetail = "";
+  for (const [blockId, group] of blockGroups) {
+    const houseType = group[0].houseType;
+    const maxAllowed = rules.MAX_BLOCK_UNITS[houseType];
+    const sameType = group.every((p) => p.houseType === houseType);
+    if (!sameType || group.length > maxAllowed) {
+      blockLengthOk = false;
+      blockLengthDetail = `Block ${blockId}: ${group.length} unit(s) of ${houseType} (max ${maxAllowed}).`;
+      break;
+    }
+  }
+  results.push({
+    id: "block-length",
+    label: "Attached block length cap",
+    pass: blockLengthOk,
+    detail: blockLengthOk
+      ? `${blockGroups.size} block(s), all within their house type's cap (independently counted).`
+      : blockLengthDetail,
+  });
+
+  // 6. Attached units genuinely share a wall — zero gap between consecutive footprints in a block.
+  let attachedOk = true;
+  let attachedDetail = "";
+  outerAttached: for (const [blockId, group] of blockGroups) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort((a, b) => a.blockPosition - b.blockPosition);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const gap = geo.minDistanceBetweenPolygons(sorted[i].footprintBng, sorted[i + 1].footprintBng);
+      if (gap > 1e-3) {
+        attachedOk = false;
+        attachedDetail = `Block ${blockId}: units ${sorted[i].id} and ${sorted[i + 1].id} are ${gap.toFixed(2)}m apart.`;
+        break outerAttached;
+      }
+    }
+  }
+  results.push({
+    id: "attached-share-wall",
+    label: "Attached units genuinely share a wall",
+    pass: attachedOk,
+    detail: attachedOk
+      ? "Every multi-unit block's consecutive footprints touch with zero gap."
+      : attachedDetail,
+  });
+
+  // 7. No gap between blocks big enough that a smaller unit could have fit and didn't.
+  const smallestFrontageWidthM = Math.min(
+    ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached"] as HouseTypeId[]).map((t) => {
+      const giaM2 = (inputs.ndssMinGiaM2?.[t] ?? rules.NDSS_MIN_GIA_M2[t]) as number;
+      const footprintDepthM = rules.ASSUMED_FOOTPRINT_DEPTH_M[t];
+      const footprintWidthM = giaM2 / rules.STOREYS[t] / footprintDepthM;
+      const parkingWidthM = (inputs.parkingRatioPerUnit ?? rules.PARKING_SPACES_PER_UNIT) * rules.PARKING_SPACE_WIDTH_M;
+      return Math.max(footprintWidthM, parkingWidthM);
+    })
+  );
+  let wastedGapFound = false;
+  let wastedGapDetail = "";
+  for (const sideSign of [-1, 1]) {
+    const sideBlocks = [...blockGroups.values()]
+      .filter((group) => {
+        // Same fix as rearInfo above: localize relative to the road's
+        // start point before taking the sign, or every block comes out
+        // on the same "side" because raw BNG coordinates are always
+        // positive.
+        const avgDepth =
+          group.reduce((s, p) => s + geo.dot(geo.sub(p.plotBng[0], localOrigin), depthAxis), 0) / group.length;
+        return (Math.sign(avgDepth) || 1) === sideSign;
+      })
+      .map((group) => {
+        const tangentProj = group.flatMap((p) => p.plotBng.map((pt) => geo.dot(pt, tangentAxis)));
+        return { blockId: group[0].blockId, yStart: Math.min(...tangentProj), yEnd: Math.max(...tangentProj) };
+      })
+      .sort((a, b) => a.yStart - b.yStart);
+    for (let i = 0; i < sideBlocks.length - 1; i++) {
+      const gap = sideBlocks[i + 1].yStart - sideBlocks[i].yEnd;
+      const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + 0.5; // 0.5m probe-step slack, matching the engine's own search granularity
+      if (gap > maxReasonableGap) {
+        wastedGapFound = true;
+        wastedGapDetail = `Between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap.`;
+      }
+    }
+  }
+  results.push({
+    id: "no-wasted-gaps",
+    label: "No gap large enough for a smaller unit to fit",
+    pass: !wastedGapFound,
+    detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
+  });
+
+  // 8. No compliance "green" on a rule violation — cross-check the subset
   // of engine-reported compliance checks that have a direct independent
   // counterpart above. (Turning head / road width / parking / fire access
   // aren't independently recomputed yet — flagged, not silently assumed covered.)
@@ -199,6 +304,9 @@ export function checkInvariants(
     { engineId: "ndss-gia", harnessPass: ndssOk },
     { engineId: "garden-depth", harnessPass: gardenOk },
     { engineId: "back-to-back", harnessPass: backToBackOk },
+    { engineId: "block-length", harnessPass: blockLengthOk },
+    { engineId: "attached-share-wall", harnessPass: attachedOk },
+    { engineId: "no-wasted-gaps", harnessPass: !wastedGapFound },
   ];
   const greenOnViolation: string[] = [];
   for (const { engineId, harnessPass } of crossCheck) {
