@@ -16,9 +16,16 @@ const LOCAL_AUTHORITY_OPTIONS = [{ id: "pembrokeshire", label: "Pembrokeshire Co
 
 const DEFAULT_MIX: Record<HouseTypeId, number> = {
   "2-bed-terrace": 1,
+  "2-bed-semi": 0,
+  "2-bed-detached": 0,
+  "3-bed-terrace": 0,
   "3-bed-semi": 1,
-  "4-bed-detached": 1,
+  "3-bed-detached": 0,
   "3-bed-bungalow": 0,
+  "4-bed-terrace": 0,
+  "4-bed-semi": 0,
+  "4-bed-detached": 1,
+  "5-bed-detached": 0,
 };
 
 export default function Home() {

@@ -12,14 +12,57 @@ import type {
 } from "./types";
 import * as geo from "./geometry";
 import * as rules from "./rules";
-import { resolveJurisdiction } from "../rules/jurisdictions";
+import { resolveJurisdiction, type ResolvedJurisdiction } from "../rules/jurisdictions";
 import {
   schemeSizeBandForUnits,
   isUnsourced,
   type MarketBand,
 } from "../rules/jurisdictions/types";
+import { SIZE_TIERS, expandSizeMixToHouseMix } from "./sizeTiers";
 
-const HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"];
+const HOUSE_TYPES: HouseTypeId[] = [
+  "2-bed-terrace",
+  "2-bed-semi",
+  "2-bed-detached",
+  "3-bed-terrace",
+  "3-bed-semi",
+  "3-bed-detached",
+  "3-bed-bungalow",
+  "4-bed-terrace",
+  "4-bed-semi",
+  "4-bed-detached",
+  "5-bed-detached",
+];
+
+/**
+ * Decides which mix the engine actually builds from, in priority order:
+ *   1. `inputs.mix` (pro/advanced override) — any real HouseTypeId weight
+ *      given at all wins outright, exactly as before this feature existed.
+ *   2. `inputs.sizeMix` (the simplified Small/Medium/Large/XL control) —
+ *      expanded into real HouseTypeId weights via sizeTiers.ts.
+ *   3. "Auto" — the resolved jurisdiction's own sourced dwelling-mix
+ *      evidence (see pembrokeshire.ts's defaultAutoSizeMixPercent), or an
+ *      equal Small/Medium/Large split with XL excluded if no local pack
+ *      is resolved at all (there's nothing council-specific to fall back
+ *      on in that case, so this stays a flat, clearly-unsourced default
+ *      rather than inventing evidence).
+ */
+function resolveEffectiveHouseMix(
+  inputs: EngineInputs,
+  jurisdiction: ResolvedJurisdiction
+): Partial<Record<HouseTypeId, number>> {
+  if (inputs.mix && Object.values(inputs.mix).some((w) => (w ?? 0) > 0)) {
+    return inputs.mix;
+  }
+  const includeBungalows = inputs.includeBungalows ?? false;
+  if (inputs.sizeMix && Object.values(inputs.sizeMix).some((w) => (w ?? 0) > 0)) {
+    return expandSizeMixToHouseMix(inputs.sizeMix, includeBungalows);
+  }
+  const autoSizeMix = jurisdiction.localAppraisal
+    ? Object.fromEntries(SIZE_TIERS.map((t) => [t, jurisdiction.localAppraisal!.defaultAutoSizeMixPercent[t].value]))
+    : { Small: 1, Medium: 1, Large: 1, XL: 0 };
+  return expandSizeMixToHouseMix(autoSizeMix, includeBungalows);
+}
 
 /**
  * Engine v0 — a deliberately simple topology: one straight dead-end access
@@ -47,6 +90,7 @@ export function generateLayout(
     ...rules.NDSS_MIN_GIA_M2,
     ...inputs.ndssMinGiaM2,
   };
+  const jurisdiction = resolveJurisdiction(inputs.localAuthority);
 
   // --- Local frame: entrance at origin, inward normal of its edge = +Y ---
   const { normal } = geo.entranceEdgeFrame(boundary, entrance);
@@ -82,7 +126,7 @@ export function generateLayout(
       plots: [],
       roads: [],
       parkingSpacesBng: [],
-    }, compliance, boundaryAreaM2, inputs, t0);
+    }, compliance, boundaryAreaM2, inputs, jurisdiction, t0);
   }
 
   const maxBoundaryY = Math.max(...localBoundary.map((p) => p[1]));
@@ -95,7 +139,7 @@ export function generateLayout(
   // --- Mix cycle at the TYPE level: each "turn" attempts a whole attached
   // block (terrace run / semi pair / lone detached), not just one unit —
   // see rules.MAX_BLOCK_UNITS. ---
-  const mixCycle = buildMixCycle(inputs.mix);
+  const mixCycle = buildMixCycle(resolveEffectiveHouseMix(inputs, jurisdiction));
 
   interface PlotSpec {
     houseType: HouseTypeId;
@@ -344,15 +388,32 @@ export function generateLayout(
   // Double-loaded first; only if that fits literally nothing does it fall
   // back to a single-sided ribbon (road stays centred on the entrance;
   // only one side gets plots) — "try before giving up," not "prefer."
+  //
+  // Stability/hysteresis: when single-left and single-right come out
+  // close (within TOPOLOGY_TIE_MARGIN_UNITS units of each other — not
+  // just an exact tie), prefer whichever side the caller's
+  // `previousTopologyHint` says the last call used, rather than always
+  // breaking ties the same arbitrary way (left-wins). This is purely a
+  // tie-breaker for genuinely ambiguous cases during interactive
+  // dragging — it never overrides a side that's clearly better by more
+  // than the margin, and it never turns an infeasible side feasible.
+  const TOPOLOGY_TIE_MARGIN_UNITS = 1;
   let topology: "double" | "single-left" | "single-right" | "none" = "double";
   let state = runPlacement(["left", "right"]);
   if (state.plots.length === 0) {
     const singleLeft = runPlacement(["left"]);
     const singleRight = runPlacement(["right"]);
+    const diff = singleLeft.plots.length - singleRight.plots.length;
+    const isTie = Math.abs(diff) <= TOPOLOGY_TIE_MARGIN_UNITS;
+    const hintSide =
+      inputs.previousTopologyHint === "single-left" ? "left" : inputs.previousTopologyHint === "single-right" ? "right" : null;
     if (singleLeft.plots.length === 0 && singleRight.plots.length === 0) {
       topology = "none";
       state = singleLeft;
-    } else if (singleLeft.plots.length >= singleRight.plots.length) {
+    } else if (isTie && hintSide === "right" && singleRight.plots.length > 0) {
+      topology = "single-right";
+      state = singleRight;
+    } else if (diff >= 0 || (isTie && hintSide !== "right")) {
       topology = "single-left";
       state = singleLeft;
     } else {
@@ -718,7 +779,7 @@ export function generateLayout(
     parkingSpacesBng: parkingSpacesLocal.map(toWorld),
   };
 
-  return finalize(layout, compliance, boundaryAreaM2, inputs, t0);
+  return finalize(layout, compliance, boundaryAreaM2, inputs, jurisdiction, t0, topology);
 }
 
 const DEFAULT_HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
@@ -746,13 +807,22 @@ function finalize(
   compliance: ComplianceCheck[],
   boundaryAreaM2: number,
   inputs: EngineInputs,
-  t0: number
+  jurisdiction: ResolvedJurisdiction,
+  t0: number,
+  topologyUsed: "double" | "single-left" | "single-right" | "none" = "none"
 ): EngineOutput {
   const mix: Record<HouseTypeId, number> = {
     "2-bed-terrace": 0,
+    "2-bed-semi": 0,
+    "2-bed-detached": 0,
+    "3-bed-terrace": 0,
     "3-bed-semi": 0,
-    "4-bed-detached": 0,
+    "3-bed-detached": 0,
     "3-bed-bungalow": 0,
+    "4-bed-terrace": 0,
+    "4-bed-semi": 0,
+    "4-bed-detached": 0,
+    "5-bed-detached": 0,
   };
   let totalGiaM2 = 0;
   for (const p of layout.plots) {
@@ -770,7 +840,6 @@ function finalize(
   const netDensityDph = netAreaM2 > 0 ? totalUnits / (netAreaM2 / 10000) : 0;
   const grossDensityDph = boundaryAreaM2 > 0 ? totalUnits / (boundaryAreaM2 / 10000) : 0;
 
-  const jurisdiction = resolveJurisdiction(inputs.localAuthority);
   const schemeSizeBand = schemeSizeBandForUnits(totalUnits);
   const marketBand: MarketBand = inputs.marketBand ?? jurisdiction.localAppraisal?.defaultMarketBand ?? 2;
 
@@ -903,6 +972,7 @@ function finalize(
     marketBand,
     affordableValueOverstated,
     residualLandValueIndicative: true,
+    topologyUsed,
   };
 
   compliance.push({

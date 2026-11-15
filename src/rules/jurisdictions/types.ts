@@ -8,6 +8,7 @@
 // to national.ts, or to the engine.
 
 import type { HouseTypeId } from "../../engine/types";
+import type { SizeTier } from "../../engine/sizeTiers";
 
 /** A value plus where it came from. `source` is literally the string "unsourced default" for anything invented rather than read off a document — the UI can key off that exact string. */
 export interface Sourced<T> {
@@ -107,6 +108,16 @@ export interface LocalAppraisalDefaults {
   tenureSplitSocialRentPercent: Sourced<number>;
   tenureSplitIntermediatePercent: Sourced<number>;
   defaultMarketBand: MarketBand;
+  /**
+   * "Auto" size-tier mix default when the user hasn't specified a mix at
+   * all — the engine's own evidence-based starting point, not an
+   * arbitrary equal split. Sourced from the council's own dwelling-type/
+   * tenure mix evidence (see pembrokeshire.ts). XL (5-bed) commonly has
+   * no evidence at all in this kind of table (it predates most councils'
+   * mix evidence, which stops at 4-bed) — 0% in that case is honest
+   * about the evidence, not a claim that 5-beds shouldn't be built.
+   */
+  defaultAutoSizeMixPercent: Record<SizeTier, Sourced<number>>;
   /**
    * true when no published ACG-including-land rate table could be
    * sourced, so ACG is approximated as equal to the market band's OMV

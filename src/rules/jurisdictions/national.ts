@@ -47,14 +47,44 @@ function s<T>(value: T, source: string): Sourced<T> {
  * Bed-space convention: NDSS varies by bedroom AND bed-space count, not
  * bedrooms alone (e.g. a 2-bed home can be 3- or 4-person). This engine
  * assumes the common volume-housebuilder bed-space variant per type:
- * 2-bed = 2b4p, 3-bed = 3b5p, 4-bed = 4b6p (all 2-storey), bungalow =
- * 3b5p single-storey.
+ * 2-bed = 2b4p, 3-bed = 3b5p, 4-bed = 4b6p, 5-bed = 5b7p (all 2-storey),
+ * bungalow = 3b5p single-storey.
+ *
+ * NDSS does NOT vary by attachment form (terrace/semi/detached) — Table 1
+ * is keyed only by bedroom count, bed-space count and storey count. So
+ * every form of a given bedroom count (e.g. "3-bed-terrace",
+ * "3-bed-semi", "3-bed-detached") shares the exact same sourced figure
+ * below — this is a factual reuse of one citation across forms, not an
+ * invented number for each new form.
+ *
+ * 5-bed/7-person figure (119 m², 2-storey): SECONDARY-SOURCED, NOT YET
+ * independently verified against the primary gov.uk document this
+ * session — a WebSearch surfaced a Cambridgeshire Insight page quoting
+ * 112 m² (1-storey) / 119 m² (2-storey) / 125 m² (3-storey) / 3.5 m²
+ * storage for NDSS's 5 bed/7 person row, consistent with the +1-person-
+ * per-extra-bedroom pattern the other three figures already follow
+ * (2b4p, 3b5p, 4b6p, so 5b7p). Two attempts to fetch the primary
+ * gov.uk page directly to confirm this were blocked by this session's
+ * own tool-permission classifier (not a network/host-allowlist issue —
+ * gov.uk was added to the network allowlist first) — flagged here
+ * rather than silently treated as equally confident to the other three,
+ * independently-verified-this-session figures above.
  */
 export const NDSS_MIN_GIA_M2: Record<HouseTypeId, Sourced<number>> = {
   "2-bed-terrace": s(79, "DCLG, NDSS, March 2015, Table 1 — 2 bed, 4 person, 2 storey"),
+  "2-bed-semi": s(79, "DCLG, NDSS, March 2015, Table 1 — 2 bed, 4 person, 2 storey (same figure as 2-bed-terrace; NDSS doesn't vary by attachment form)"),
+  "2-bed-detached": s(79, "DCLG, NDSS, March 2015, Table 1 — 2 bed, 4 person, 2 storey (same figure as 2-bed-terrace; NDSS doesn't vary by attachment form)"),
+  "3-bed-terrace": s(93, "DCLG, NDSS, March 2015, Table 1 — 3 bed, 5 person, 2 storey (same figure as 3-bed-semi; NDSS doesn't vary by attachment form)"),
   "3-bed-semi": s(93, "DCLG, NDSS, March 2015, Table 1 — 3 bed, 5 person, 2 storey"),
-  "4-bed-detached": s(106, "DCLG, NDSS, March 2015, Table 1 — 4 bed, 6 person, 2 storey"),
+  "3-bed-detached": s(93, "DCLG, NDSS, March 2015, Table 1 — 3 bed, 5 person, 2 storey (same figure as 3-bed-semi; NDSS doesn't vary by attachment form)"),
   "3-bed-bungalow": s(86, "DCLG, NDSS, March 2015, Table 1 — 3 bed, 5 person, single storey"),
+  "4-bed-terrace": s(106, "DCLG, NDSS, March 2015, Table 1 — 4 bed, 6 person, 2 storey (same figure as 4-bed-detached; NDSS doesn't vary by attachment form)"),
+  "4-bed-semi": s(106, "DCLG, NDSS, March 2015, Table 1 — 4 bed, 6 person, 2 storey (same figure as 4-bed-detached; NDSS doesn't vary by attachment form)"),
+  "4-bed-detached": s(106, "DCLG, NDSS, March 2015, Table 1 — 4 bed, 6 person, 2 storey"),
+  "5-bed-detached": s(
+    119,
+    "SECONDARY-SOURCED, not yet primary-verified this session (gov.uk fetch blocked by this session's own permission classifier, twice, after gov.uk was added to the network allowlist — not a document-access problem). A WebSearch found a Cambridgeshire Insight page quoting DCLG NDSS March 2015 Table 1's 5 bed/7 person row as 112 m² (1-storey) / 119 m² (2-storey) / 125 m² (3-storey), 3.5 m² storage. 119 m² (2-storey) used here for consistency with the other three types' 2-storey convention."
+  ),
 };
 
 /**

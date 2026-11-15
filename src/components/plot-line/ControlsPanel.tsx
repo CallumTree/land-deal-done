@@ -3,11 +3,22 @@
 import type { HouseTypeId } from "@/engine/types";
 import type { MarketBand } from "@/rules/jurisdictions/types";
 
+// Pro-view labels for the real engine types this dev control panel
+// exposes directly today. The user-facing simplified Small/Medium/Large/
+// XL + bungalow-toggle control (src/engine/sizeTiers.ts) isn't wired into
+// this panel yet — deferred until a visual style is picked.
 const HOUSE_TYPE_LABEL: Record<HouseTypeId, string> = {
   "2-bed-terrace": "2-bed terrace",
+  "2-bed-semi": "2-bed semi",
+  "2-bed-detached": "2-bed detached",
+  "3-bed-terrace": "3-bed terrace",
   "3-bed-semi": "3-bed semi",
-  "4-bed-detached": "4-bed detached",
+  "3-bed-detached": "3-bed detached",
   "3-bed-bungalow": "3-bed bungalow",
+  "4-bed-terrace": "4-bed terrace",
+  "4-bed-semi": "4-bed semi",
+  "4-bed-detached": "4-bed detached",
+  "5-bed-detached": "5-bed detached",
 };
 
 export type DesignStandard = "ndss" | "generous";

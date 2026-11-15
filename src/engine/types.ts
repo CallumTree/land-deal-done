@@ -5,6 +5,7 @@
 // and later from a Web Worker, unchanged.
 
 import type { MarketBand } from "../rules/jurisdictions/types";
+import type { SizeTier } from "./sizeTiers";
 
 /** A point in British National Grid (EPSG:27700) metres: [easting, northing]. */
 export type BNGPoint = [number, number];
@@ -12,11 +13,45 @@ export type BNGPoint = [number, number];
 /** Closed or open ring of BNG points describing a polygon boundary. */
 export type BNGPolygon = BNGPoint[];
 
-export type HouseTypeId = "2-bed-terrace" | "3-bed-semi" | "4-bed-detached" | "3-bed-bungalow";
+/**
+ * Every HouseTypeId the engine can actually place. User-facing UI should
+ * not expose this list directly — see src/engine/sizeTiers.ts for the
+ * simplified Small/Medium/Large/XL (+ bungalow toggle) view the user
+ * actually picks from; the engine chooses which of these real types to
+ * build. "Pro view" means showing this full breakdown (Metrics.mix),
+ * one level deeper than the simplified tiers.
+ */
+export type HouseTypeId =
+  | "2-bed-terrace"
+  | "2-bed-semi"
+  | "2-bed-detached"
+  | "3-bed-terrace"
+  | "3-bed-semi"
+  | "3-bed-detached"
+  | "3-bed-bungalow"
+  | "4-bed-terrace"
+  | "4-bed-semi"
+  | "4-bed-detached"
+  | "5-bed-detached";
 
 export interface EngineInputs {
-  /** Relative weight per house type, e.g. { "2-bed-terrace": 1, "3-bed-semi": 1, "4-bed-detached": 1 }. Missing types default to 0. */
+  /**
+   * Pro/advanced override: relative weight per REAL house type, e.g.
+   * { "2-bed-terrace": 1, "3-bed-semi": 1, "4-bed-detached": 1 }. Missing
+   * types default to 0. Takes priority over `sizeMix` when both are
+   * given — this is the "pick the exact form yourself" escape hatch.
+   */
   mix?: Partial<Record<HouseTypeId, number>>;
+  /**
+   * User-facing simplified mix: relative weight per SIZE TIER (Small=2-
+   * bed .. XL=5-bed — see sizeTiers.ts). The engine distributes each
+   * tier's weight across its candidate forms (terrace/semi/detached) and
+   * then picks whichever form actually fits at each position. Ignored if
+   * `mix` is also given.
+   */
+  sizeMix?: Partial<Record<SizeTier, number>>;
+  /** The single bungalow on/off switch — applies to the Medium (3-bed) tier only; see sizeTiers.ts BUNGALOW_TIER for why. Defaults to false. */
+  includeBungalows?: boolean;
   /** Off-street parking spaces required per unit. Overrides rules.ts default. */
   parkingRatioPerUnit?: number;
   /** Minimum private garden depth in metres. Overrides rules.ts default. */
@@ -33,6 +68,16 @@ export interface EngineInputs {
   gdvPerSqm?: number;
   /** £ per m² used to estimate build cost, overriding the resolved jurisdiction's own sourced default for this scheme-size band. */
   buildCostPerSqm?: number;
+  /**
+   * Stability hint for interactive dragging: the previous call's chosen
+   * road-topology side ("double" | "single-left" | "single-right"), if
+   * known. When the current input is ambiguous between equally-valid
+   * topologies, the engine prefers whichever matches this hint, to avoid
+   * the whole layout flipping/reshuffling on a small pointer move. Purely
+   * a preference tie-breaker — a hard rule or a clearly better fit still
+   * wins over matching the hint. See generateLayout.ts's topology search.
+   */
+  previousTopologyHint?: "double" | "single-left" | "single-right";
 }
 
 export interface PlacedPlot {
@@ -91,6 +136,8 @@ export interface Metrics {
   affordableValueOverstated: boolean;
   /** residualLandValue is always a simplified, single-point calculation (no real cash-flow model) — present so the UI doesn't need to hardcode that fact; always true in v0. */
   residualLandValueIndicative: true;
+  /** Which road/plot topology this call actually used. Feed back as the NEXT call's EngineInputs.previousTopologyHint during interactive dragging, to reduce flip-flopping between single-left/single-right when the site is near the double-loaded/single-sided boundary. */
+  topologyUsed: "double" | "single-left" | "single-right" | "none";
 }
 
 export interface ComplianceCheck {

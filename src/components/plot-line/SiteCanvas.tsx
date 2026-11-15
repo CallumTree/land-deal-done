@@ -5,11 +5,22 @@ import type { BNGPoint, BNGPolygon, HouseTypeId, LayoutResult } from "@/engine/t
 
 export type DrawMode = "boundary" | "entrance" | "done";
 
+// Placeholder dev-canvas palette only — grouped by bedroom-count tier
+// (shades of one hue per tier) so the pro-view breakdown stays visually
+// distinguishable. Not a brand/style decision; revisit once a visual
+// style is picked (see "UI wiring waits until I pick a style").
 const HOUSE_TYPE_COLOR: Record<HouseTypeId, string> = {
   "2-bed-terrace": "#38bdf8", // sky-400
+  "2-bed-semi": "#0ea5e9", // sky-500
+  "2-bed-detached": "#0284c7", // sky-600
+  "3-bed-terrace": "#c4b5fd", // violet-300
   "3-bed-semi": "#a78bfa", // violet-400
-  "4-bed-detached": "#f59e0b", // amber-500
+  "3-bed-detached": "#8b5cf6", // violet-500
   "3-bed-bungalow": "#14b8a6", // teal-500
+  "4-bed-terrace": "#fcd34d", // amber-300
+  "4-bed-semi": "#fbbf24", // amber-400
+  "4-bed-detached": "#f59e0b", // amber-500
+  "5-bed-detached": "#f43f5e", // rose-500
 };
 
 const VIEW_SIZE_M = 400;

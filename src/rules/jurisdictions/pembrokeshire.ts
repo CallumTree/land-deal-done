@@ -272,6 +272,22 @@ export const PEMBROKESHIRE_APPRAISAL_DEFAULTS: LocalAppraisalDefaults = {
   tenureSplitSocialRentPercent: s(75, "FVR §5.13 (p.15): assumes 75% of s.106 affordable homes are social rented tenure, based on the most recent LHMA"),
   tenureSplitIntermediatePercent: s(25, "FVR §5.13 (p.15): remaining 25% intermediate tenure"),
   defaultMarketBand: 2,
+  /**
+   * FVR §4.19 (p.13)'s starting dwelling-mix table, open-market column:
+   * 2p 1-bed flat/hse 10%, 3p 2-bed house 10%, 3p 2-bed bungalow 10%,
+   * 4p 2-bed house 10%, 4p 3-bed house 20%, 5p 3-bed house 20%,
+   * 6p 4-bed house 20% (sums to 100%). This engine has no 1-bed house
+   * type, so that 10% is EXCLUDED and the remaining 90% renormalized:
+   * 2-bed (10+10+10=30/90=33.3%), 3-bed (20+20=40/90=44.4%),
+   * 4-bed (20/90=22.2%). The table has no 5-bed/XL row at all — 0% here
+   * is honest about the evidence gap, not a claim 5-beds are unwanted.
+   */
+  defaultAutoSizeMixPercent: {
+    Small: s(33.3, "FVR §4.19 (p.13) dwelling-mix table, 2-bed rows (30% of the 90% this engine's house types cover), renormalized"),
+    Medium: s(44.4, "FVR §4.19 (p.13) dwelling-mix table, 3-bed rows (40% of the 90% this engine's house types cover), renormalized"),
+    Large: s(22.2, "FVR §4.19 (p.13) dwelling-mix table, 4-bed row (20% of the 90% this engine's house types cover), renormalized"),
+    XL: s(0, "No 5-bed/XL row exists in FVR §4.19's dwelling-mix table — 0% reflects the evidence gap, not a policy position"),
+  },
   acgApproximatedAsOmv: true,
   acgApproximationNote: s(
     "Actively researched, not just unchecked: Welsh Government's own current public ACG guidance (the 2023-07 'Costs included in Social Housing Grant' document) defines ACG as Works Cost/m² plus on-costs and explicitly EXCLUDES site acquisition/land cost — confirming the 'including land' 2021 series FVR §5.11 refers to was a separate, since-discontinued publication, not something WG still publishes. Three Welsh councils' own supplementary guidance (Blaenau Gwent, Bro Morgannwg, and an earlier Monmouthshire document) each derive their social-rent transfer values as a stated % of '2021 Band 1 ACG figures' (42%, 42%, 58% respectively) uplifted annually by the WG social-rent-cap inflation factor — none of them publish the underlying raw 2021 ACG-including-land table itself, only their own already-discounted result, and in a different council's own regional band at that. No FOI/ATISN route was pursued. Conclusion: the 2021 ACG-including-land table was circulated directly to local authorities/RSLs, not published, so there is nothing to cite for Pembrokeshire specifically — ACG is therefore approximated as equal to the market band's OMV sales price for the social-rent transfer-value calculation. Real ACG-including-land rates are materially below OMV, so this OVERSTATES social-rent transfer value and every metric derived from it (affordable-housing revenue, GDV, residual land value) whenever affordableUnits > 0. Flagged via Metrics.affordableValueOverstated — not silently assumed.",

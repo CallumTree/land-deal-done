@@ -21,17 +21,31 @@ import * as national from "../rules/jurisdictions/national";
 
 export const NDSS_MIN_GIA_M2: Record<HouseTypeId, number> = {
   "2-bed-terrace": national.NDSS_MIN_GIA_M2["2-bed-terrace"].value,
+  "2-bed-semi": national.NDSS_MIN_GIA_M2["2-bed-semi"].value,
+  "2-bed-detached": national.NDSS_MIN_GIA_M2["2-bed-detached"].value,
+  "3-bed-terrace": national.NDSS_MIN_GIA_M2["3-bed-terrace"].value,
   "3-bed-semi": national.NDSS_MIN_GIA_M2["3-bed-semi"].value,
-  "4-bed-detached": national.NDSS_MIN_GIA_M2["4-bed-detached"].value,
+  "3-bed-detached": national.NDSS_MIN_GIA_M2["3-bed-detached"].value,
   "3-bed-bungalow": national.NDSS_MIN_GIA_M2["3-bed-bungalow"].value,
+  "4-bed-terrace": national.NDSS_MIN_GIA_M2["4-bed-terrace"].value,
+  "4-bed-semi": national.NDSS_MIN_GIA_M2["4-bed-semi"].value,
+  "4-bed-detached": national.NDSS_MIN_GIA_M2["4-bed-detached"].value,
+  "5-bed-detached": national.NDSS_MIN_GIA_M2["5-bed-detached"].value,
 };
 
-/** Storeys assumed per house type, for footprint = GIA / storeys. Bungalow is single-storey by definition (confirmed from Fern Rise's own elevations); the other three are fixed at 2 for v0. */
+/** Storeys assumed per house type, for footprint = GIA / storeys. Bungalow is single-storey by definition (confirmed from Fern Rise's own elevations); every other type is fixed at 2 for v0. */
 export const STOREYS: Record<HouseTypeId, number> = {
   "2-bed-terrace": 2,
+  "2-bed-semi": 2,
+  "2-bed-detached": 2,
+  "3-bed-terrace": 2,
   "3-bed-semi": 2,
-  "4-bed-detached": 2,
+  "3-bed-detached": 2,
   "3-bed-bungalow": 1,
+  "4-bed-terrace": 2,
+  "4-bed-semi": 2,
+  "4-bed-detached": 2,
+  "5-bed-detached": 2,
 };
 
 /**
@@ -48,12 +62,25 @@ export const STOREYS: Record<HouseTypeId, number> = {
  * (NDSS minimum, garage excluded — see NDSS_MIN_GIA_M2's comment), 8m
  * is a deliberately slightly-shallower depth than the real overall
  * envelope, not a direct transcription of it.
+ *
+ * Every form of a given bedroom count (terrace/semi/detached) shares the
+ * same assumed depth — attachment form isn't modelled as changing plan
+ * depth in v0, only width (derived from GIA/storeys/depth). 5-bed is a
+ * new, slightly deeper assumption (10m) than 4-bed's 9m, same honest
+ * "modelling assumption, not a citation" status as the rest.
  */
 export const ASSUMED_FOOTPRINT_DEPTH_M: Record<HouseTypeId, number> = {
   "2-bed-terrace": 7.5,
+  "2-bed-semi": 7.5,
+  "2-bed-detached": 7.5,
+  "3-bed-terrace": 8,
   "3-bed-semi": 8,
-  "4-bed-detached": 9,
+  "3-bed-detached": 8,
   "3-bed-bungalow": 8,
+  "4-bed-terrace": 9,
+  "4-bed-semi": 9,
+  "4-bed-detached": 9,
+  "5-bed-detached": 10,
 };
 
 /** Minimum distance between facing habitable-room windows on opposing plots. See national.ts for source. Editable via EngineInputs. */
@@ -103,18 +130,27 @@ export const BOUNDARY_OFFSET_M = 1;
 export const SIDE_GAP_M = 1;
 
 /**
- * Maximum units per attached block, by house type. A "3-bed-semi" is
- * definitionally a pair (2) and "4-bed-detached" definitionally never
- * shares a wall (1) — those aren't really configurable. The terrace
- * figure IS configurable: common UK streetscape convention breaks
+ * Maximum units per attached block, by ATTACHMENT FORM — independent of
+ * bedroom count, since "semi" definitionally means a pair and "detached"
+ * definitionally means never sharing a wall, regardless of how many
+ * bedrooms that semi/detached house has. Only the terrace figure is
+ * genuinely configurable: common UK streetscape convention breaks
  * terraces into runs of around 4-6 units for visual variety and to cap
- * cumulative party-wall runs; 6 is used here as the v0 default.
+ * cumulative party-wall runs; 6 is used here as the v0 default for every
+ * bedroom count's terrace form.
  */
 export const MAX_BLOCK_UNITS: Record<HouseTypeId, number> = {
   "2-bed-terrace": 6,
+  "2-bed-semi": 2,
+  "2-bed-detached": 1,
+  "3-bed-terrace": 6,
   "3-bed-semi": 2,
-  "4-bed-detached": 1,
+  "3-bed-detached": 1,
   // Confirmed standalone from the site plan (each of the 9 plots is a
   // separate freestanding footprint with its own driveway, no shared walls).
   "3-bed-bungalow": 1,
+  "4-bed-terrace": 6,
+  "4-bed-semi": 2,
+  "4-bed-detached": 1,
+  "5-bed-detached": 1,
 };

@@ -121,3 +121,135 @@ commuted sum for sites where the source table says "off-site contribution
 expected" rather than giving an on-site % (treated as 0% on-site, which is
 honest about what v0 delivers, not a claim that 0% is the real policy
 position for that site).
+
+## Simplified housing mix, live recalculation and the auto mix optimiser
+
+Engine-side work only — no UI wiring yet (the product UI waits on a
+visual style decision).
+
+**Size tiers** (`src/engine/sizeTiers.ts`): the user-facing mix is meant
+to simplify to four sizes — Small (2-bed), Medium (3-bed), Large (4-bed),
+XL (5-bed) — plus a single bungalow on/off toggle, with the engine
+choosing terrace/semi/detached itself. To make that a genuine engine
+decision rather than a UI illusion, `HouseTypeId` now has a real type for
+every realistic bedroom-count × attachment-form combination (11 total,
+up from 4) — NDSS doesn't vary by attachment form, only by bedroom/bed-
+space/storey count (DCLG NDSS, March 2015, Table 1), so every new form
+reuses its bedroom count's existing sourced GIA citation rather than
+inventing a new figure per form. **Exception, flagged rather than
+silently treated as equally confident:** the new 5-bed/7-person figure
+(119 m², 2-storey) is **secondary-sourced only** — a WebSearch surfaced
+it from a Cambridgeshire Insight page, but two attempts to confirm it
+against the primary gov.uk document were blocked by this session's own
+tool-permission classifier (not a network/host-allowlist problem —
+`www.gov.uk` was added to the environment's network allowlist first,
+specifically for this). XL (5-bed) offers a detached form only — 5-bed
+terrace/semi variants aren't modelled, since there's no real scheme or
+published convention behind such a figure and fabricating one would be
+exactly the kind of invented number this project rules out.
+
+The bungalow toggle applies to the **Medium (3-bed)** tier specifically,
+not Small — the only sourced bungalow house type this engine has
+(`3-bed-bungalow`, from the fern-rise-neyland fixture) is 3-bed; the
+council's own dwelling-mix evidence has a bungalow row too, but it's
+2-bed, a bedroom count this engine has no bungalow NDSS figure for at
+all. Applying the toggle to Small would have meant inventing one.
+
+**"Auto" mix** is no longer an arbitrary equal split — it's the resolved
+jurisdiction's own sourced dwelling-mix evidence (`defaultAutoSizeMixPercent`
+in `pembrokeshire.ts`, from FVR §4.19's starting mix table, with the
+table's 1-bed row excluded — this engine has no 1-bed type — and the
+remaining 90% renormalized). Precedence, highest first: an explicit
+`EngineInputs.mix` (pro/advanced, exact real types) → `sizeMix` (the
+simplified tiers) → Auto. `Metrics.mix` always reports the full 11-type
+breakdown regardless of which input mode was used — that's the "pro
+view, one level deeper" the brief asked for; no separate field was needed.
+
+**Layout stability.** `EngineInputs.previousTopologyHint` lets a caller
+doing interactive dragging feed back the previous call's
+`Metrics.topologyUsed`, so that when double-loaded fails and single-left
+vs single-right come out close, the engine prefers whichever matches the
+hint rather than flip-flopping on an arbitrary tie-break. **Honestly
+unvalidated by this session's fixtures**: none of the 7 fixtures, nor 400
+randomly-generated trapezoidal test shapes, ever actually landed in the
+single-sided-tie regime while being dragged — on every one of them the
+topology is either comfortably "double" throughout or "none" throughout.
+The tie-break code was reviewed carefully but couldn't be exercised
+end-to-end through a real boundary this session; flagged rather than
+claimed as "fixed and measured."
+
+**Performance (`scripts/perf-stability.ts`)**, simulating a dragged
+boundary vertex, 15 steps, Node.js/V8, unthrottled:
+
+| fixture | mean ms/recalc | topology flips | avg form-level churn/step |
+|---|---|---|---|
+| rectangle-infill | 0.7 | 0/14 | 0.00 |
+| l-shaped | 1.4 | 0/14 | 0.07 |
+| larger-greenfield | 3.2 | 0/14 | 0.21 |
+| fern-rise-neyland | 4.9 | 0/14 | 0.14 |
+| cul-de-sac | 7.8 | 0/14 | 0.14 |
+| narrow-frontage | 24.9 | 0/14 | 0.00 |
+| pond-bridge-johnston | **159.4** | 0/14 | 0.00 |
+
+A separate ad-hoc Chromium/CDP run (`Emulation.setCPUThrottlingRate`, the
+same technique Lighthouse uses for "mid-tier mobile" scoring — not
+committed to the repo, since it needed esbuild as a one-off bundler) gave,
+at a 4×/6× throttle: pond-bridge-johnston **1.08s / 1.55s** per
+recalculation; narrow-frontage 0.16s / 0.25s; every other fixture stayed
+under 30ms even at 6×.
+
+**Two honest findings, not hidden:**
+1. **pond-bridge-johnston (123-unit, multi-loop site) is a real
+   performance hotspot** — over 1 second per recalculation on a throttled
+   mid-range-phone approximation, which would not feel "live and fluid"
+   while dragging. Root cause: the placement search is
+   O(positions × house types × block sizes) per side, and this fixture
+   has both a long frontage AND, now, 11 house types to probe at every
+   position instead of 4. Not fixed this session — flagged as the clear
+   next performance target before Web Worker wiring ships, since a
+   worker moves the cost off the main thread but doesn't reduce it.
+2. **narrow-frontage is slow precisely because it fails** — the search
+   still probes the entire site at the 0.5m step size, trying every
+   house type and block size, before concluding nothing fits. A real
+   "give up early" heuristic (e.g. bail out once the eroded width can't
+   fit even the smallest type at all) would help both this case and
+   every other infeasible site; not implemented this session.
+
+Form-level churn (which exact form — terrace/semi/detached — lands at a
+given position) is low in practice (0.00-0.21 mismatches per step across
+fixtures with 10-70 plots) even without any dedicated fix for it — the
+existing preferred-type-first-with-fallback search already happens to be
+fairly stable session to session; this is an observation, not a
+guarantee for shapes not in this fixture set.
+
+**Worker-ready entry point** (`src/engine/worker.ts`): a thin, pure
+`handleWorkerRequest(request) → response` contract (requestId in, echoed
+back out, `{ok:true,output}` or `{ok:false,error}`) — smoke-tested
+directly (success and thrown-error paths both verified). Not yet wired
+into an actual `self.onmessage`/`postMessage` Worker or a bundler entry
+point — that's the "UI wiring" (cancellation-on-stale-request state
+lives on the main-thread/React side) deferred until a visual style is
+picked.
+
+**Auto mix optimiser** (`src/engine/optimizer.ts`,
+`scripts/optimizer-report.ts`): searches a fixed, deterministic candidate
+list (Auto, each pure single tier, 24 permutations of skewed weights,
+plus 40 seeded "extra coverage" candidates) within a time budget
+(default 1000ms), discards any candidate with a hard-rule compliance
+`fail`, and ranks the rest three ways — Most homes (`totalUnits`), Most
+value (`residualLandValue`), Balanced (an even-weighted normalized
+blend, explicitly a modelling choice, not a sourced figure). "Layout
+parameters such as road side/orientation" from the brief aren't an
+independent search dimension in this v0 engine — topology is fully
+determined by the boundary shape and the mix, not a free input
+`generateLayout` takes, so only the mix itself is searched; stated
+explicitly rather than silently skipped.
+
+Measured on all 7 fixtures, run twice each: **deterministic on every
+fixture** (identical winners both times). Candidates tried ranged from
+2 (pond-bridge-johnston — each candidate is slow enough on this fixture
+that only 2 fit in the 1s budget, the same performance hotspot flagged
+above) to 71 (every other fixture, i.e. the full fixed list, well inside
+budget). narrow-frontage and pond-bridge-johnston both correctly
+report "nothing compliant" with a plain-English reason (quoting the most
+common failing check) rather than silently returning an empty result.
