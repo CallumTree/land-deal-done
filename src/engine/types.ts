@@ -93,6 +93,16 @@ export interface EngineInputs {
    * draft while dragging, one final full recalculation on release.
    */
   quality?: "draft" | "full";
+  /**
+   * Plain-English "design standard" control for the gap between
+   * separate blocks (terrace run / semi pair / detached) along the
+   * street — see rules.ts's SIDE_GAP_TIER_M for sourcing. Defaults to
+   * "tighter", i.e. today's existing SIDE_GAP_M — omitting this field
+   * entirely reproduces identical behaviour to before it existed.
+   * Never relaxes a hard rule: all three tiers only ever widen the gap,
+   * never narrow it below the sourced ~1m minimum.
+   */
+  sideGapTier?: "tighter" | "typical" | "roomier";
 }
 
 export interface PlacedPlot {
@@ -162,6 +172,15 @@ export interface ComplianceCheck {
   /** Where the rule comes from — a citation, not a magic number. */
   ruleRef: string;
   detail: string;
+  /**
+   * Set ONLY by checks that are genuinely per-plot (a specific home's
+   * own GIA/garden/parking is under the minimum) rather than scheme-
+   * structural (road/topology/turning-head) — the ids of PlacedPlot
+   * entries this specific check actually failed for. Lets the UI report
+   * a real "N homes affected" count instead of inventing one; absent
+   * entirely on checks where "which plot" doesn't apply.
+   */
+  affectedPlotIds?: string[];
 }
 
 export interface EngineOutput {

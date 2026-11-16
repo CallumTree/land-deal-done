@@ -125,9 +125,49 @@ export const BOUNDARY_OFFSET_M = 1;
  * unattached external walls, commonly around 1m minimum. This is
  * distinct from BACK_TO_BACK_M (rear-to-rear) and MIN_GARDEN_DEPTH_M
  * (front-to-back) — this is side-to-side, between blocks along the
- * street. Editable via a future EngineInputs field (not yet wired up).
+ * street.
+ *
+ * Default (unchanged from before the tiers below existed). Kept as its
+ * own export, still used directly by anything that doesn't pass
+ * EngineInputs.sideGapTier — see SIDE_GAP_TIER_M for the editable
+ * version.
  */
 export const SIDE_GAP_M = 1;
+
+/**
+ * User-facing design-standard tiers for the side gap between blocks —
+ * the real lever behind the plain-English "Tighter / Typical / Roomier"
+ * control (see EngineInputs.sideGapTier). Resolved via
+ * resolveSideGapM() in generateLayout.ts, never used to go BELOW the
+ * sourced minimum above — "roomier" only ever widens.
+ *
+ * - tighter: exactly SIDE_GAP_M (1m) — today's existing default,
+ *   unchanged, and the floor this engine will ever build at. This is
+ *   already at the documented ~1m fire/visual-separation convention;
+ *   nothing here goes any tighter than that sourced minimum.
+ * - typical: 2m. A step up with no specific citation — flagged
+ *   honestly as this engine's own modelling choice (same status as the
+ *   "Generous (+20%)" NDSS toggle elsewhere), not a second sourced
+ *   standard.
+ * - roomier: 4m. Estimated BY EYE from the real Fern Rise, Neyland
+ *   site plan (test-sites/source/fern-rise/PA-Plans_general-
+ *   15092008.pdf, page 5, the 1:500 "Site Plan" sheet) against its own
+ *   printed graphic scale bar — the gap between adjacent detached
+ *   bungalow plots (e.g. plots 20/22, 14/16) reads as roughly 3-5m on
+ *   that drawing, not pixel-measured precisely. Same eyeball-against-
+ *   a-real-scale-bar method, and the same kind of error margin, this
+ *   fixture's other measurements already use throughout test-sites/
+ *   README.md — not a new, lower evidence bar invented for this one
+ *   number. This is exactly the "general capability improvement...
+ *   justified on its own terms" that same README flagged as future
+ *   work when SIDE_GAP_M (1m) was found to under-space real detached
+ *   schemes like this one.
+ */
+export const SIDE_GAP_TIER_M: Record<"tighter" | "typical" | "roomier", number> = {
+  tighter: SIDE_GAP_M,
+  typical: 2,
+  roomier: 4,
+};
 
 /**
  * Maximum units per attached block, by ATTACHMENT FORM — independent of

@@ -86,6 +86,7 @@ export function generateLayout(
   const parkingRatio = inputs.parkingRatioPerUnit ?? rules.PARKING_SPACES_PER_UNIT;
   const gardenDepthM = inputs.minGardenDepthM ?? rules.MIN_GARDEN_DEPTH_M;
   const backToBackM = inputs.backToBackM ?? rules.BACK_TO_BACK_M;
+  const sideGapM = rules.SIDE_GAP_TIER_M[inputs.sideGapTier ?? "tighter"];
   const ndssMinGia: Record<HouseTypeId, number> = {
     ...rules.NDSS_MIN_GIA_M2,
     ...inputs.ndssMinGiaM2,
@@ -402,7 +403,7 @@ export function generateLayout(
       const uEnd = uStart + spec.frontageWidthM;
       placeUnit(state, side, spec, frontageX, rearX, uStart, uEnd, blockId, u, blockSize);
     }
-    return yStart + spec.frontageWidthM * blockSize + rules.SIDE_GAP_M;
+    return yStart + spec.frontageWidthM * blockSize + sideGapM;
   }
 
   // One "turn" for a side: try the preferred type (per the mix cycle) at
@@ -704,7 +705,7 @@ export function generateLayout(
       .sort((a, b) => a.yStart - b.yStart);
     for (let i = 0; i < sideBlocks.length - 1; i++) {
       const gap = sideBlocks[i + 1].yStart - sideBlocks[i].yEnd;
-      const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + PROBE_STEP_M;
+      const maxReasonableGap = sideGapM + smallestFrontageWidthM + PROBE_STEP_M;
       if (gap > maxReasonableGap) {
         wastedGapFound = true;
         wastedGapDetail = `${side} side, between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap — room for another ${smallestFrontageWidthM.toFixed(1)}m-wide unit plus its side gap.`;
@@ -725,7 +726,8 @@ export function generateLayout(
   });
 
   // --- NDSS GIA ---
-  const ndssOk = plots.every((p) => p.giaM2 >= ndssMinGia[p.houseType] - 1e-6);
+  const ndssFailingIds = plots.filter((p) => p.giaM2 < ndssMinGia[p.houseType] - 1e-6).map((p) => p.id);
+  const ndssOk = ndssFailingIds.length === 0;
   compliance.push({
     id: "ndss-gia",
     label: "NDSS minimum GIA",
@@ -733,17 +735,20 @@ export function generateLayout(
     ruleRef: "DCLG, NDSS, March 2015, Table 1",
     detail: ndssOk
       ? "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
-      : "At least one plot is below its NDSS minimum GIA.",
+      : `${ndssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
+    affectedPlotIds: ndssFailingIds,
   });
 
   // --- Garden depth ---
-  const gardenOk = plots.every((p) => {
+  function gardenDepthOk(p: PlacedPlot): boolean {
     if (!p.gardenBng) return false;
     const localGarden = p.gardenBng.map(toLocal);
     const xs = localGarden.map((pt) => pt[0]);
     const depth = Math.max(...xs) - Math.min(...xs);
     return depth >= gardenDepthM - 1e-6;
-  });
+  }
+  const gardenFailingIds = plots.filter((p) => !gardenDepthOk(p)).map((p) => p.id);
+  const gardenOk = gardenFailingIds.length === 0;
   compliance.push({
     id: "garden-depth",
     label: "Minimum garden depth",
@@ -753,8 +758,9 @@ export function generateLayout(
       plots.length > 0
         ? gardenOk
           ? `Every plot's garden is at least ${gardenDepthM}m deep.`
-          : "At least one plot's garden is shallower than the minimum."
+          : `${gardenFailingIds.length} plot(s) have a garden shallower than the minimum.`
         : "No plots placed.",
+    affectedPlotIds: gardenFailingIds,
   });
 
   // --- Back-to-back: genuinely checked, not assumed ---
@@ -813,10 +819,12 @@ export function generateLayout(
   });
 
   // --- Parking: frontage width already sized to fit the ratio, verify ---
-  const parkingOk = plots.every((p) => {
+  function parkingOkFor(p: PlacedPlot): boolean {
     const spec = computePlotSpec(p.houseType);
     return spec.frontageWidthM >= parkingRatio * rules.PARKING_SPACE_WIDTH_M - 1e-6;
-  });
+  }
+  const parkingFailingIds = plots.filter((p) => !parkingOkFor(p)).map((p) => p.id);
+  const parkingOk = parkingFailingIds.length === 0;
   compliance.push({
     id: "parking",
     label: `Parking (${parkingRatio}/unit)`,
@@ -826,8 +834,9 @@ export function generateLayout(
       plots.length > 0
         ? parkingOk
           ? "Every plot's frontage is sized to fit its required parking."
-          : "At least one plot is narrower than its required parking allocation."
+          : `${parkingFailingIds.length} plot(s) are narrower than their required parking allocation.`
         : "No plots placed.",
+    affectedPlotIds: parkingFailingIds,
   });
 
   // --- Fire/refuse access: every plot fronts directly onto the road in this topology ---
