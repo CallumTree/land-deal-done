@@ -110,27 +110,17 @@ export default function StyleB() {
     setMode("boundary");
   };
 
+  // Below `sm` (640px), the fixed-width floating panels this style is
+  // built around (w-80/w-96) are wider than the viewport itself and
+  // completely overlap each other and the top bar — confirmed via a
+  // real phone-width browser check, not assumed. Below `sm` everything
+  // instead stacks in normal document flow, full width, on a page that
+  // scrolls; at `sm` and up it's the original full-bleed-map-with-
+  // floating-glass-panels design, unchanged.
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-zinc-950">
-      <SiteCanvas
-        boundary={boundary}
-        entrance={entrance}
-        layout={live.output?.layout ?? null}
-        mode={mode}
-        fill
-        onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
-        onSetEntrance={(p) => {
-          setEntrance(p);
-          setMode("done");
-        }}
-        onBoundaryChange={setBoundary}
-        onEntranceChange={setEntrance}
-        onDragStateChange={handleDragStateChange}
-        flyTo={flyTo}
-      />
-
+    <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-zinc-950 sm:h-screen sm:overflow-hidden">
       {/* Top bar */}
-      <div className={`absolute left-4 right-4 top-4 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2 ${GLASS}`}>
+      <div className={`relative z-20 m-4 flex flex-wrap items-center justify-between gap-2 px-4 py-2 sm:absolute sm:left-4 sm:right-4 sm:top-4 sm:m-0 ${GLASS}`}>
         <div>
           <h1 className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Plot Line</h1>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -177,8 +167,28 @@ export default function StyleB() {
         </div>
       </div>
 
-      {/* Left floating panel: mix controls */}
-      <div className={`absolute bottom-4 left-4 top-20 z-20 w-80 overflow-y-auto p-3 ${GLASS}`}>
+      {/* Map: a fixed-height block in normal flow on mobile, full-bleed absolute from sm+ */}
+      <div className="relative h-64 w-full shrink-0 sm:absolute sm:inset-0 sm:h-auto">
+        <SiteCanvas
+          boundary={boundary}
+          entrance={entrance}
+          layout={live.output?.layout ?? null}
+          mode={mode}
+          fill
+          onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
+          onSetEntrance={(p) => {
+            setEntrance(p);
+            setMode("done");
+          }}
+          onBoundaryChange={setBoundary}
+          onEntranceChange={setEntrance}
+          onDragStateChange={handleDragStateChange}
+          flyTo={flyTo}
+        />
+      </div>
+
+      {/* Left panel: mix controls */}
+      <div className={`relative z-20 m-4 p-3 sm:absolute sm:bottom-4 sm:left-4 sm:top-20 sm:m-0 sm:w-80 sm:overflow-y-auto ${GLASS}`}>
         <MixPanel
           mix={mix}
           optimizer={optimizer}
@@ -248,9 +258,9 @@ export default function StyleB() {
         </div>
       </div>
 
-      {/* Right floating panel: results */}
+      {/* Right panel: results */}
       {rightPanelOpen && (
-        <div className={`absolute bottom-4 right-4 top-20 z-20 w-96 overflow-y-auto p-3 ${GLASS}`}>
+        <div className={`relative z-20 m-4 mt-0 p-3 sm:absolute sm:bottom-4 sm:right-4 sm:top-20 sm:m-0 sm:w-96 sm:overflow-y-auto ${GLASS}`}>
           {live.error && <p className="mb-2 text-xs text-red-600">{live.error}</p>}
           {live.output ? (
             <div className="space-y-3">
