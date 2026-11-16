@@ -20,6 +20,7 @@ import { MetricsPanel } from "@/components/plot-line/MetricsPanel";
 import { ComplianceList } from "@/components/plot-line/ComplianceList";
 import { ProvenanceRow } from "@/components/plot-line/ProvenanceDisclosure";
 import { MixPanel } from "@/components/plot-line/MixPanel";
+import { PostcodeSearch } from "@/components/plot-line/PostcodeSearch";
 import { useEngineWorker } from "@/hooks/useEngineWorker";
 import { useLiveLayout } from "@/hooks/useLiveLayout";
 import { useMixState } from "@/hooks/useMixState";
@@ -41,6 +42,13 @@ export default function StyleB() {
   const [marketBand, setMarketBand] = useState<MarketBand>(2);
   const [proView, setProView] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+
+  const [flyTo, setFlyTo] = useState<{ center: BNGPoint; resolution?: number; key: number } | undefined>();
+  const [searchedPostcode, setSearchedPostcode] = useState<string | null>(null);
+  const handlePostcodeFound = useCallback((center: BNGPoint, postcode: string) => {
+    setFlyTo({ center, resolution: 5, key: Date.now() });
+    setSearchedPostcode(postcode);
+  }, []);
 
   const worker = useEngineWorker();
   const mix = useMixState();
@@ -118,15 +126,25 @@ export default function StyleB() {
         onBoundaryChange={setBoundary}
         onEntranceChange={setEntrance}
         onDragStateChange={handleDragStateChange}
+        flyTo={flyTo}
       />
 
       {/* Top bar */}
-      <div className={`absolute left-4 right-4 top-4 z-20 flex items-center justify-between gap-2 px-4 py-2 ${GLASS}`}>
+      <div className={`absolute left-4 right-4 top-4 z-20 flex flex-wrap items-center justify-between gap-2 px-4 py-2 ${GLASS}`}>
         <div>
           <h1 className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Plot Line</h1>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Pan/zoom the map, draw your boundary, set an entrance.</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            {searchedPostcode ? `Showing ${searchedPostcode}. ` : "Search a postcode to find your site. "}
+            Draw your boundary, set an entrance.
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <PostcodeSearch
+            onFound={handlePostcodeFound}
+            className="flex items-center gap-1"
+            inputClassName="w-36 rounded-md border border-zinc-300 bg-white/80 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/80"
+            buttonClassName="rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          />
           {isRefining && <span className="text-[11px] text-cyan-500">Refining…</span>}
           {live.isComputing && !isDraggingVertex && !isRefining && (
             <span className="text-[11px] text-cyan-600 dark:text-cyan-400">Recalculating…</span>

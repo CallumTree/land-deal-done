@@ -19,6 +19,7 @@ import { MetricsPanel } from "@/components/plot-line/MetricsPanel";
 import { ComplianceList } from "@/components/plot-line/ComplianceList";
 import { ProvenanceRow } from "@/components/plot-line/ProvenanceDisclosure";
 import { MixPanel } from "@/components/plot-line/MixPanel";
+import { PostcodeSearch } from "@/components/plot-line/PostcodeSearch";
 import { useEngineWorker } from "@/hooks/useEngineWorker";
 import { useLiveLayout } from "@/hooks/useLiveLayout";
 import { useMixState } from "@/hooks/useMixState";
@@ -32,6 +33,16 @@ export default function StyleA() {
   const [boundary, setBoundary] = useState<BNGPolygon>([]);
   const [entrance, setEntrance] = useState<BNGPoint | null>(null);
   const [mode, setMode] = useState<DrawMode>("boundary");
+
+  // Set by a successful postcode search — the map opens on wherever the
+  // user actually searches, not permanently on SiteCanvas's own fixed
+  // placeholder default (which still shows until the first search).
+  const [flyTo, setFlyTo] = useState<{ center: BNGPoint; resolution?: number; key: number } | undefined>();
+  const [searchedPostcode, setSearchedPostcode] = useState<string | null>(null);
+  const handlePostcodeFound = useCallback((center: BNGPoint, postcode: string) => {
+    setFlyTo({ center, resolution: 5, key: Date.now() });
+    setSearchedPostcode(postcode);
+  }, []);
 
   const [standard, setStandard] = useState<DesignStandard>("ndss");
   const [localAuthority, setLocalAuthority] = useState("pembrokeshire");
@@ -121,11 +132,18 @@ export default function StyleA() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Plot Line</h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Draw a site boundary on the real map, set the entrance, and get a live buildable layout with
-            compliance and viability.
+            {searchedPostcode
+              ? `Showing ${searchedPostcode}. Draw a site boundary, set the entrance, and get a live buildable layout.`
+              : "Search a postcode to find your site, then draw a boundary and set the entrance."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <PostcodeSearch
+            onFound={handlePostcodeFound}
+            className="flex items-center gap-1"
+            inputClassName="w-40 rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            buttonClassName="rounded-md border border-zinc-300 px-2 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          />
           {canFinishBoundary && (
             <button
               type="button"
@@ -161,6 +179,7 @@ export default function StyleA() {
           onBoundaryChange={setBoundary}
           onEntranceChange={setEntrance}
           onDragStateChange={handleDragStateChange}
+          flyTo={flyTo}
         />
 
         <div className="space-y-4 overflow-y-auto">

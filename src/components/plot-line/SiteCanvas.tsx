@@ -86,6 +86,14 @@ interface SiteCanvasProps {
   onEntranceChange?: (entrance: BNGPoint) => void;
   /** true for the whole span of a drag gesture (vertex pointerdown through pointerup/release) — lets the parent run the engine at draft quality while dragging and one final full-quality pass on release. */
   onDragStateChange?: (dragging: boolean) => void;
+  /**
+   * Set this (e.g. from a postcode search result) to animate the map to
+   * a new BNG location/resolution. `key` must change on every request
+   * — including a repeat search of the same postcode — since this is
+   * read via a plain prop-change effect, not a queue; an unchanged `key`
+   * with an identical center would not re-trigger the animation.
+   */
+  flyTo?: { center: BNGPoint; resolution?: number; key: number };
   /** true: fill the parent container exactly (for a full-bleed layout) instead of the default square card with its own rounded border — the parent decides sizing/chrome in that case. */
   fill?: boolean;
 }
@@ -100,6 +108,7 @@ export function SiteCanvas({
   onBoundaryChange,
   onEntranceChange,
   onDragStateChange,
+  flyTo,
   fill = false,
 }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
@@ -449,6 +458,21 @@ export function SiteCanvas({
   useEffect(() => {
     redrawRef.current?.();
   }, [boundary, entrance, layout, mode]);
+
+  // Animate to a new location (e.g. from a postcode search) whenever
+  // `flyTo` changes. Guarded on `map` existing; `flyTo.key` (not just
+  // `flyTo.center`) is in the deps so a repeat search of the same
+  // postcode still re-triggers the animation.
+  useEffect(() => {
+    if (!map || !flyTo) return;
+    const view = map.getView();
+    view.animate({
+      center: flyTo.center,
+      resolution: flyTo.resolution ?? view.getResolution(),
+      duration: 600,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, flyTo?.key]);
 
   const canFinishHint = mode === "boundary" && boundary.length >= 3;
 
