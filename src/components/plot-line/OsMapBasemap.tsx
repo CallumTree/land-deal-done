@@ -42,16 +42,24 @@ const EPSG_27700_PROJ4 =
   "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs";
 
 export interface OsMapBasemapProps {
-  /** BNG [easting, northing] to center the map on. */
+  /** BNG [easting, northing] to center the map on. Only used on first mount — the map's own pan/zoom interactions own the view after that, same as any normal interactive map. */
   centerBng: [number, number];
-  /** OpenLayers EPSG:27700 view resolution, metres/pixel — smaller = more zoomed in. ~1 is roughly "building-level". */
+  /** OpenLayers EPSG:27700 view resolution, metres/pixel — smaller = more zoomed in. ~1 is roughly "building-level". Only used on first mount, see centerBng. */
   resolution?: number;
   className?: string;
+  /**
+   * Called once the real `ol/Map` instance exists, so a parent (e.g.
+   * SiteCanvas) can add its own vector layers and click handlers onto
+   * the SAME map — one map, one set of tiles, drawing on top, rather
+   * than a second map instance or a hand-synced overlay. Called again
+   * with `null` just before the map is torn down.
+   */
+  onMapChange?: (map: import("ol/Map").default | null) => void;
 }
 
 type MapStatus = "loading" | "ready" | "error";
 
-export function OsMapBasemap({ centerBng, resolution = 2, className }: OsMapBasemapProps) {
+export function OsMapBasemap({ centerBng, resolution = 2, className, onMapChange }: OsMapBasemapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [tileErrorCount, setTileErrorCount] = useState(0);
@@ -59,6 +67,15 @@ export function OsMapBasemap({ centerBng, resolution = 2, className }: OsMapBase
   useEffect(() => {
     let destroyed = false;
     let map: import("ol/Map").default | undefined;
+    // centerBng/resolution are read once, below, as the map's initial
+    // view only — intentionally NOT in this effect's deps (see empty
+    // array at the bottom). The map owns its own pan/zoom after that;
+    // re-running this on every centerBng/resolution change would tear
+    // down and recreate the whole map (and the parent's vector overlay
+    // riding on it, via onMapChange) on every pan, which is both wrong
+    // and visibly janky.
+    const initialCenterBng = centerBng;
+    const initialResolution = resolution;
 
     (async () => {
       const [{ default: Map }, { default: View }, { default: TileLayer }, { default: XYZ }, proj4Module, { register }] =
@@ -110,18 +127,22 @@ export function OsMapBasemap({ centerBng, resolution = 2, className }: OsMapBase
         layers: [new TileLayer({ source: tileSource })],
         view: new View({
           projection: "EPSG:27700",
-          center: centerBng,
-          resolution,
+          center: initialCenterBng,
+          resolution: initialResolution,
         }),
       });
+      onMapChange?.(map);
     })();
 
     return () => {
       destroyed = true;
+      onMapChange?.(null);
       map?.setTarget(undefined);
     };
+    // Deliberately empty: this effect creates the map exactly once per
+    // mount — see the comment above initialCenterBng/initialResolution.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerBng[0], centerBng[1], resolution]);
+  }, []);
 
   return (
     <div className={className}>
