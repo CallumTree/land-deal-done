@@ -35,32 +35,33 @@ export function useEngineWorker(): UseEngineWorkerResult {
 
   useEffect(() => {
     const worker = new Worker(new URL("../engine/worker-entry.ts", import.meta.url));
+    const pending = pendingRef.current; // captured once — always the same Map instance for this hook's lifetime
     worker.onmessage = (e: MessageEvent<WorkerResponseMessage>) => {
       const msg = e.data;
-      const pending = pendingRef.current.get(msg.requestId);
-      if (!pending) return; // response for a request nobody's waiting on (unmounted, or genuinely stale) — drop it
-      pendingRef.current.delete(msg.requestId);
+      const entry = pending.get(msg.requestId);
+      if (!entry) return; // response for a request nobody's waiting on (unmounted, or genuinely stale) — drop it
+      pending.delete(msg.requestId);
       if (msg.kind === "layout") {
-        if (msg.ok) pending.resolve(msg.output);
-        else pending.reject(new Error(msg.error));
+        if (msg.ok) entry.resolve(msg.output);
+        else entry.reject(new Error(msg.error));
       } else {
-        if (msg.ok) pending.resolve(msg.result);
-        else pending.reject(new Error(msg.error));
+        if (msg.ok) entry.resolve(msg.result);
+        else entry.reject(new Error(msg.error));
       }
     };
     worker.onerror = (e) => {
       // A worker-level error (e.g. a syntax/load failure) has no requestId
       // to route to — reject everything outstanding so no caller hangs.
-      for (const pending of pendingRef.current.values()) {
-        pending.reject(new Error(e.message || "Engine worker error"));
+      for (const entry of pending.values()) {
+        entry.reject(new Error(e.message || "Engine worker error"));
       }
-      pendingRef.current.clear();
+      pending.clear();
     };
     workerRef.current = worker;
     return () => {
       worker.terminate();
       workerRef.current = null;
-      pendingRef.current.clear();
+      pending.clear();
     };
   }, []);
 

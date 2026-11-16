@@ -50,17 +50,28 @@ export function useLiveLayout(worker: UseEngineWorkerResult, opts: UseLiveLayout
 
   const latestSeqRef = useRef(0);
   const topologyHintRef = useRef<EngineInputs["previousTopologyHint"]>(undefined);
+  const isValid = boundary.length >= 3 && entrance !== null;
 
   useEffect(() => {
-    if (boundary.length < 3 || !entrance) {
-      setOutput(null);
-      setIsComputing(false);
-      setError(null);
+    if (!isValid) {
+      // Nothing to compute — bump the sequence so any in-flight request's
+      // result gets discarded as stale, and reset hysteresis. The
+      // output/isComputing/error returned below are overridden to
+      // null/false/null directly (see the return statement) rather than
+      // via setState here, so an invalid input never causes a render-
+      // triggered state update inside this effect.
+      latestSeqRef.current++;
       topologyHintRef.current = undefined;
       return;
     }
 
     const seq = ++latestSeqRef.current;
+    // Standard "effect kicks off an async fetch, flip a loading flag
+    // first" pattern — this stricter lint rule flags any synchronous
+    // setState in an effect body on principle, but there's no React-
+    // idiomatic way to show a loading state for an effect-triggered
+    // async request without one.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsComputing(true);
 
     const fullInputs: EngineInputs = {
@@ -83,8 +94,10 @@ export function useLiveLayout(worker: UseEngineWorkerResult, opts: UseLiveLayout
         setIsComputing(false);
         setError(err.message);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundary, entrance, inputs, isDragging, worker]);
+  }, [isValid, boundary, entrance, inputs, isDragging, worker]);
 
+  if (!isValid) {
+    return { output: null, isComputing: false, error: null };
+  }
   return { output, isComputing, error };
 }
