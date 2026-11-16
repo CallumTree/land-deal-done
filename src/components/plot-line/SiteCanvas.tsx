@@ -76,9 +76,11 @@ interface SiteCanvasProps {
   mode: DrawMode;
   onAddBoundaryPoint: (p: BNGPoint) => void;
   onSetEntrance: (p: BNGPoint) => void;
+  /** true: fill the parent container exactly (for a full-bleed layout) instead of the default square card with its own rounded border — the parent decides sizing/chrome in that case. */
+  fill?: boolean;
 }
 
-export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoint, onSetEntrance }: SiteCanvasProps) {
+export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoint, onSetEntrance, fill = false }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
   const redrawRef = useRef<(() => void) | null>(null);
 
@@ -259,7 +261,13 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
   const canFinishHint = mode === "boundary" && boundary.length >= 3;
 
   return (
-    <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+    <div
+      className={
+        fill
+          ? "relative h-full w-full overflow-hidden"
+          : "relative aspect-square w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
+      }
+    >
       <OsMapBasemap
         centerBng={DEFAULT_CENTER_BNG}
         resolution={DEFAULT_RESOLUTION_M_PER_PX}
