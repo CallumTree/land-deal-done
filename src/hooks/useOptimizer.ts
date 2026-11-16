@@ -5,7 +5,7 @@
 // every input change like useLiveLayout. Exposes the three ranked cards
 // (mostHomes/mostValue/balanced) plus the plain-English failure case.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { BNGPoint, BNGPolygon, EngineInputs } from "@/engine/types";
 import type { OptimizerResult } from "@/engine/optimizer";
 import type { UseEngineWorkerResult } from "./useEngineWorker";
@@ -44,5 +44,10 @@ export function useOptimizer(worker: UseEngineWorkerResult): UseOptimizerResult 
     [worker]
   );
 
-  return { result, isRunning, error, run };
+  // Memoized for the same reason as useEngineWorker's and useMixState's
+  // return values — see their comments. Not currently wired into another
+  // hook's effect dependencies, but keeping the same contract (stable
+  // reference unless the actual contents changed) across all of these
+  // hooks avoids reintroducing the same class of bug the moment one is.
+  return useMemo(() => ({ result, isRunning, error, run }), [result, isRunning, error, run]);
 }

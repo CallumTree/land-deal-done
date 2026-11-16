@@ -76,21 +76,67 @@ interface SiteCanvasProps {
   mode: DrawMode;
   onAddBoundaryPoint: (p: BNGPoint) => void;
   onSetEntrance: (p: BNGPoint) => void;
+  /**
+   * Called with the full updated point list whenever the user drags an
+   * EXISTING boundary corner (mode "done" only — dragging edits an
+   * already-drawn site, it's not part of the initial click-to-draw flow).
+   */
+  onBoundaryChange?: (boundary: BNGPolygon) => void;
+  /** Called with the new entrance position (already snapped onto the boundary edge) whenever the user drags the entrance marker, mode "done" only. */
+  onEntranceChange?: (entrance: BNGPoint) => void;
+  /** true for the whole span of a drag gesture (vertex pointerdown through pointerup/release) — lets the parent run the engine at draft quality while dragging and one final full-quality pass on release. */
+  onDragStateChange?: (dragging: boolean) => void;
   /** true: fill the parent container exactly (for a full-bleed layout) instead of the default square card with its own rounded border — the parent decides sizing/chrome in that case. */
   fill?: boolean;
 }
 
-export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoint, onSetEntrance, fill = false }: SiteCanvasProps) {
+export function SiteCanvas({
+  boundary,
+  entrance,
+  layout,
+  mode,
+  onAddBoundaryPoint,
+  onSetEntrance,
+  onBoundaryChange,
+  onEntranceChange,
+  onDragStateChange,
+  fill = false,
+}: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
   const redrawRef = useRef<(() => void) | null>(null);
+  // True for the whole span of a drag gesture — guards the props->edit-
+  // feature sync in redraw() so an external re-render mid-drag (e.g. the
+  // draft-quality layout coming back) never overwrites the vertex the
+  // user is actively holding with a stale prop position.
+  const isDraggingRef = useRef(false);
 
   // Click handling and redraws both need the LATEST props without
   // re-registering the map click listener or rebuilding the vector layer
   // on every boundary/entrance/layout change — store them in a ref the
   // stable callbacks read from at call time.
-  const propsRef = useRef({ boundary, entrance, layout, mode, onAddBoundaryPoint, onSetEntrance });
+  const propsRef = useRef({
+    boundary,
+    entrance,
+    layout,
+    mode,
+    onAddBoundaryPoint,
+    onSetEntrance,
+    onBoundaryChange,
+    onEntranceChange,
+    onDragStateChange,
+  });
   useEffect(() => {
-    propsRef.current = { boundary, entrance, layout, mode, onAddBoundaryPoint, onSetEntrance };
+    propsRef.current = {
+      boundary,
+      entrance,
+      layout,
+      mode,
+      onAddBoundaryPoint,
+      onSetEntrance,
+      onBoundaryChange,
+      onEntranceChange,
+      onDragStateChange,
+    };
   });
 
   const handleMapChange = useCallback((m: OlMap | null) => setMap(m), []);
@@ -103,7 +149,12 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
     if (!map) return;
     let cancelled = false;
     let layer: OlVectorLayer | undefined;
+    let boundaryEditLayer: OlVectorLayer | undefined;
+    let entranceEditLayer: OlVectorLayer | undefined;
     let clickKey: import("ol/events").EventsKey | undefined;
+    let modify: import("ol/interaction/Modify").default | undefined;
+    let translate: import("ol/interaction/Translate").default | undefined;
+    let boundaryFeatureChangeKey: import("ol/events").EventsKey | undefined;
 
     (async () => {
       const [
@@ -116,6 +167,9 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
         { default: Fill },
         { default: Stroke },
         { default: CircleStyle },
+        { default: Modify },
+        { default: Translate },
+        { default: Collection },
       ] = await Promise.all([
         import("ol/source/Vector"),
         import("ol/layer/Vector"),
@@ -126,12 +180,129 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
         import("ol/style/Fill"),
         import("ol/style/Stroke"),
         import("ol/style/Circle"),
+        import("ol/interaction/Modify"),
+        import("ol/interaction/Translate"),
+        import("ol/Collection"),
       ]);
       if (cancelled) return;
 
       const source: OlVectorSource = new VectorSource();
       layer = new VectorLayer({ source, zIndex: 10 });
       map.addLayer(layer);
+
+      // --- Draggable boundary corners + entrance (vertex editing) ---
+      // Separate, normally-invisible features/sources from the display
+      // layer above — Modify/Translate need a STABLE feature identity to
+      // track across an entire drag gesture, which the display layer's
+      // own source.clear()-and-rebuild-every-render pattern would break
+      // mid-drag. Styled invisible because the display layer already
+      // draws the visible boundary outline/vertex dots/entrance marker
+      // at the exact same coordinates (kept in sync below) — these exist
+      // purely to provide drag behaviour at those same positions, not a
+      // second visible layer.
+      const invisibleStyle = new Style({});
+      const boundaryEditSource = new VectorSource();
+      const boundaryEditFeature = new Feature();
+      boundaryEditFeature.setStyle(invisibleStyle);
+      boundaryEditSource.addFeature(boundaryEditFeature);
+
+      const entranceEditSource = new VectorSource();
+      const entranceEditFeature = new Feature();
+      entranceEditFeature.setStyle(invisibleStyle);
+      entranceEditSource.addFeature(entranceEditFeature);
+      entranceEditLayer = new VectorLayer({ source: entranceEditSource, zIndex: 11 });
+      map.addLayer(entranceEditLayer);
+      boundaryEditLayer = new VectorLayer({ source: boundaryEditSource, zIndex: 11 });
+      map.addLayer(boundaryEditLayer);
+
+      modify = new Modify({
+        source: boundaryEditSource,
+        style: invisibleStyle,
+        insertVertexCondition: () => false, // only drag EXISTING corners — no inserting new ones mid-edge
+      });
+      translate = new Translate({ features: new Collection([entranceEditFeature]) });
+      modify.setActive(false);
+      translate.setActive(false);
+      map.addInteraction(modify);
+      map.addInteraction(translate);
+
+      // rAF-coalesced live updates while dragging — OL fires a geometry
+      // change on every pointermove, which is far more often than a
+      // React state update (and a worker request) needs to run.
+      let rafId: number | null = null;
+      function scheduleBoundaryChange() {
+        // Feedback-loop guard: redraw() below sets this SAME feature's
+        // geometry to sync it FROM props whenever boundary/entrance/
+        // layout/mode change — and Feature#setGeometry itself fires a
+        // 'change' event, which is what this listener is attached to.
+        // Without this guard, that prop-sync write would itself trigger
+        // this handler, which calls onBoundaryChange, which updates
+        // React state, which re-triggers redraw()'s sync, forever. Only
+        // forward changes outward while an actual user drag is the
+        // source of them.
+        if (!isDraggingRef.current) return;
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          const ring = (boundaryEditFeature.getGeometry() as InstanceType<typeof Polygon> | undefined)?.getCoordinates()[0];
+          if (!ring) return;
+          // Drop the closing duplicate vertex Polygon geometries carry.
+          const pts: BNGPolygon = ring.slice(0, -1) as BNGPolygon;
+          propsRef.current.onBoundaryChange?.(pts);
+        });
+      }
+
+      modify.on("modifystart", () => {
+        isDraggingRef.current = true;
+        propsRef.current.onDragStateChange?.(true);
+      });
+      boundaryFeatureChangeKey = boundaryEditFeature.on("change", scheduleBoundaryChange);
+      modify.on("modifyend", () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        const ring = (boundaryEditFeature.getGeometry() as InstanceType<typeof Polygon> | undefined)?.getCoordinates()[0];
+        if (ring) propsRef.current.onBoundaryChange?.(ring.slice(0, -1) as BNGPolygon);
+        isDraggingRef.current = false;
+        propsRef.current.onDragStateChange?.(false);
+      });
+
+      let entranceRafId: number | null = null;
+      function snapEntranceToBoundary() {
+        const geom = entranceEditFeature.getGeometry() as InstanceType<typeof Point> | undefined;
+        if (!geom) return;
+        const raw = geom.getCoordinates() as BNGPoint;
+        const b = propsRef.current.boundary;
+        if (b.length < 3) return;
+        const snapped = nearestPointOnPolygon(raw, b);
+        // Pull the marker back onto the boundary edge as the user drags
+        // away from it, rather than letting it float freely.
+        geom.setCoordinates(snapped);
+        return snapped;
+      }
+      translate.on("translatestart", () => {
+        isDraggingRef.current = true;
+        propsRef.current.onDragStateChange?.(true);
+      });
+      translate.on("translating", () => {
+        if (entranceRafId !== null) return;
+        entranceRafId = requestAnimationFrame(() => {
+          entranceRafId = null;
+          const snapped = snapEntranceToBoundary();
+          if (snapped) propsRef.current.onEntranceChange?.(snapped);
+        });
+      });
+      translate.on("translateend", () => {
+        if (entranceRafId !== null) {
+          cancelAnimationFrame(entranceRafId);
+          entranceRafId = null;
+        }
+        const snapped = snapEntranceToBoundary();
+        if (snapped) propsRef.current.onEntranceChange?.(snapped);
+        isDraggingRef.current = false;
+        propsRef.current.onDragStateChange?.(false);
+      });
 
       /** Buffers a straight 2-point road centerline into a rectangle polygon, widthM wide — v0's engine only ever emits a single straight segment per road (see generateLayout.ts), so that's the only case handled. */
       function bufferStraightRoad(centerline: BNGPoint[], widthM: number): BNGPolygon | null {
@@ -153,7 +324,20 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
 
       function redraw() {
         source.clear();
-        const { boundary: b, entrance: e, layout: l } = propsRef.current;
+        const { boundary: b, entrance: e, layout: l, mode: m } = propsRef.current;
+
+        // Draggable corners/entrance only make sense once a boundary and
+        // entrance already exist. Skip syncing their geometry while a
+        // drag is actively in progress — the interaction itself is the
+        // source of truth for that span, and overwriting it with a
+        // (momentarily stale) prop position would yank the vertex out
+        // from under the user's cursor.
+        modify?.setActive(m === "done");
+        translate?.setActive(m === "done");
+        if (m === "done" && !isDraggingRef.current) {
+          boundaryEditFeature.setGeometry(b.length >= 3 ? new Polygon([[...b, b[0]]]) : undefined);
+          entranceEditFeature.setGeometry(e ? new Point(e) : undefined);
+        }
 
         for (const road of l?.roads ?? []) {
           const rect = bufferStraightRoad(road.centerlineBng, road.widthM);
@@ -234,10 +418,17 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
 
     return () => {
       cancelled = true;
-      if (clickKey) {
-        import("ol/Observable").then(({ unByKey }) => unByKey(clickKey!));
+      if (clickKey || boundaryFeatureChangeKey) {
+        import("ol/Observable").then(({ unByKey }) => {
+          if (clickKey) unByKey(clickKey!);
+          if (boundaryFeatureChangeKey) unByKey(boundaryFeatureChangeKey!);
+        });
       }
       if (layer) map.removeLayer(layer);
+      if (boundaryEditLayer) map.removeLayer(boundaryEditLayer);
+      if (entranceEditLayer) map.removeLayer(entranceEditLayer);
+      if (modify) map.removeInteraction(modify);
+      if (translate) map.removeInteraction(translate);
       redrawRef.current = null;
     };
   }, [map]);
@@ -253,10 +444,11 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
     dblClickZoom?.setActive(mode === "done");
   }, [map, mode]);
 
-  // Redraw the vector overlay whenever the actual data changes.
+  // Redraw the vector overlay whenever the actual data changes (also
+  // toggles the drag interactions' active state — see redraw()).
   useEffect(() => {
     redrawRef.current?.();
-  }, [boundary, entrance, layout]);
+  }, [boundary, entrance, layout, mode]);
 
   const canFinishHint = mode === "boundary" && boundary.length >= 3;
 
@@ -281,7 +473,7 @@ export function SiteCanvas({ boundary, entrance, layout, mode, onAddBoundaryPoin
             ? "Click to add more boundary points, or tap “Finish boundary”"
             : "Pan/zoom to your site, then click to place boundary points (3+)")}
         {mode === "entrance" && "Click near the boundary to place the site entrance"}
-        {mode === "done" && "Layout live — edit inputs on the right"}
+        {mode === "done" && "Layout live — drag a corner or the entrance to adjust, or edit inputs on the right"}
       </div>
     </div>
   );

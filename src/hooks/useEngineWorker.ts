@@ -6,7 +6,7 @@
 // (useLiveLayout, useOptimizer), which know what "latest" means for
 // their own use case. This hook only knows how to talk to the worker.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { BNGPoint, BNGPolygon, EngineInputs, EngineOutput } from "@/engine/types";
 import type { OptimizerResult } from "@/engine/optimizer";
 import type { WorkerRequestMessage, WorkerResponseMessage } from "@/engine/workerProtocol";
@@ -99,5 +99,13 @@ export function useEngineWorker(): UseEngineWorkerResult {
     []
   );
 
-  return { requestLayout, requestOptimize };
+  // Memoized: requestLayout/requestOptimize are individually stable
+  // (useCallback, empty deps), but without this the WRAPPING object
+  // would still be a fresh literal every render — and useLiveLayout's
+  // effect takes this whole object as a dependency, so an unstable
+  // reference here would retrigger it on every render of whatever
+  // consumes this hook, with no real input change behind it. Found via
+  // the same infinite-recompute-loop browser test that caught
+  // useMixState's identical issue — this was the OTHER half of it.
+  return useMemo(() => ({ requestLayout, requestOptimize }), [requestLayout, requestOptimize]);
 }

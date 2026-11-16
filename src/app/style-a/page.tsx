@@ -8,7 +8,7 @@
 // temporary comparison routes; CLAUDE.md's main page stays the
 // pre-existing one until a style is picked.
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rules } from "@/engine";
 import type { BNGPoint, BNGPolygon, HouseTypeId } from "@/engine/types";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
@@ -60,13 +60,45 @@ export default function StyleA() {
 
   const liveInputs = useMemo(() => ({ ...baseInputs, ...mix.engineMixFields }), [baseInputs, mix.engineMixFields]);
 
-  // No vertex-dragging UI exists yet in SiteCanvas (click-to-place only,
-  // no dragging an already-placed point) — so this is always "full"
-  // quality. The engine/hook machinery for draft-while-dragging
-  // (generateLayout's quality input, useLiveLayout's isDragging option)
-  // is real and already wired; there's just no UI interaction yet that
-  // would set isDragging=true. Stated plainly rather than implied.
-  const live = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs });
+  // Dragging a boundary corner or the entrance (SiteCanvas's
+  // onDragStateChange) runs the live layout at draft quality for the
+  // whole span of the gesture; releasing flips this back to false,
+  // which useLiveLayout's effect picks up as a request for one final
+  // full-quality pass at the released position.
+  const [isDraggingVertex, setIsDraggingVertex] = useState(false);
+  // True only for the specific "just released, waiting for the full-
+  // quality refine pass to land" window — distinct from isComputing,
+  // which is also true during every draft frame while actively
+  // dragging (where we deliberately show no banner at all, since draft
+  // mode is fast enough that a flashing "computing" message would be
+  // more distracting than the live-updating layout itself).
+  const [isRefining, setIsRefining] = useState(false);
+  // Edge-triggered, not a raw "!isComputing" check: right after release,
+  // isComputing can still read false from the last draft frame's ALREADY-
+  // RESOLVED promise, for one render, before the new full-quality
+  // request has even started — a plain "!isComputing -> clear" effect
+  // would catch that stale false and clear isRefining instantly. Instead
+  // wait for an explicit true (confirms the full-quality request has
+  // actually started) before letting a later false clear it.
+  const sawComputingSinceReleaseRef = useRef(false);
+  const handleDragStateChange = useCallback((dragging: boolean) => {
+    setIsDraggingVertex(dragging);
+    if (!dragging) {
+      sawComputingSinceReleaseRef.current = false;
+      setIsRefining(true);
+    }
+  }, []);
+
+  const live = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs, isDragging: isDraggingVertex });
+
+  useEffect(() => {
+    if (!isRefining) return;
+    if (live.isComputing) {
+      sawComputingSinceReleaseRef.current = true;
+    } else if (sawComputingSinceReleaseRef.current) {
+      setIsRefining(false);
+    }
+  }, [isRefining, live.isComputing]);
 
   const schemeSizeBand = live.output ? schemeSizeBandForUnits(live.output.metrics.totalUnits) : "1";
   const appraisalEntries = useMemo(
@@ -126,6 +158,9 @@ export default function StyleA() {
             setEntrance(p);
             setMode("done");
           }}
+          onBoundaryChange={setBoundary}
+          onEntranceChange={setEntrance}
+          onDragStateChange={handleDragStateChange}
         />
 
         <div className="space-y-4 overflow-y-auto">
@@ -192,7 +227,12 @@ export default function StyleA() {
             </div>
           </div>
 
-          {live.isComputing && (
+          {isRefining && (
+            <div className="rounded-xl border border-dashed border-sky-300 p-2 text-center text-[11px] text-sky-500 dark:border-sky-800">
+              Refining…
+            </div>
+          )}
+          {live.isComputing && !isDraggingVertex && !isRefining && (
             <div className="rounded-xl border border-dashed border-sky-300 p-3 text-center text-xs text-sky-600 dark:border-sky-800">
               Recalculating…
             </div>

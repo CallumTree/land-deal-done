@@ -9,7 +9,7 @@
 // this style's one accent colour (style-a uses sky); CLAUDE.md: "a few
 // purposeful accents... clean, restrained, futuristic."
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rules } from "@/engine";
 import type { BNGPoint, BNGPolygon, HouseTypeId } from "@/engine/types";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
@@ -64,9 +64,28 @@ export default function StyleB() {
 
   const liveInputs = useMemo(() => ({ ...baseInputs, ...mix.engineMixFields }), [baseInputs, mix.engineMixFields]);
 
-  // See style-a's identical comment: no vertex-dragging UI exists yet,
-  // so this always runs at full quality.
-  const live = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs });
+  // See style-a's identical comments for the drag/refine-state design.
+  const [isDraggingVertex, setIsDraggingVertex] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
+  const sawComputingSinceReleaseRef = useRef(false);
+  const handleDragStateChange = useCallback((dragging: boolean) => {
+    setIsDraggingVertex(dragging);
+    if (!dragging) {
+      sawComputingSinceReleaseRef.current = false;
+      setIsRefining(true);
+    }
+  }, []);
+
+  const live = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs, isDragging: isDraggingVertex });
+
+  useEffect(() => {
+    if (!isRefining) return;
+    if (live.isComputing) {
+      sawComputingSinceReleaseRef.current = true;
+    } else if (sawComputingSinceReleaseRef.current) {
+      setIsRefining(false);
+    }
+  }, [isRefining, live.isComputing]);
 
   const schemeSizeBand = live.output ? schemeSizeBandForUnits(live.output.metrics.totalUnits) : "1";
   const appraisalEntries = useMemo(
@@ -96,6 +115,9 @@ export default function StyleB() {
           setEntrance(p);
           setMode("done");
         }}
+        onBoundaryChange={setBoundary}
+        onEntranceChange={setEntrance}
+        onDragStateChange={handleDragStateChange}
       />
 
       {/* Top bar */}
@@ -105,7 +127,10 @@ export default function StyleB() {
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Pan/zoom the map, draw your boundary, set an entrance.</p>
         </div>
         <div className="flex items-center gap-2">
-          {live.isComputing && <span className="text-[11px] text-cyan-600 dark:text-cyan-400">Recalculating…</span>}
+          {isRefining && <span className="text-[11px] text-cyan-500">Refining…</span>}
+          {live.isComputing && !isDraggingVertex && !isRefining && (
+            <span className="text-[11px] text-cyan-600 dark:text-cyan-400">Recalculating…</span>
+          )}
           {canFinishBoundary && (
             <button
               type="button"

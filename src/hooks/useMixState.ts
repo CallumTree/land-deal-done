@@ -8,7 +8,7 @@
 // per-HouseTypeId "pro view" breakdown lives in the engine output
 // (Metrics.mix / summarizeMixByTier), not here.
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { SIZE_TIERS, type SizeTier } from "@/engine/sizeTiers";
 import type { MixCandidate } from "@/engine/optimizer";
 
@@ -46,8 +46,16 @@ export function useMixState(): UseMixStateResult {
     setIncludeBungalows(candidate.includeBungalows);
   }, []);
 
-  const engineMixFields =
-    mode === "auto" ? { sizeMix: undefined, includeBungalows } : { sizeMix, includeBungalows };
+  // Memoized: a fresh object here on every render would, once spread into
+  // a caller's own useMemo (e.g. style-a/b's liveInputs), change THAT
+  // object's reference on every render too, re-triggering
+  // useLiveLayout's effect forever — a self-sustaining recompute loop
+  // with no actual input change behind it. Caught via a real browser
+  // drag test that never stopped showing "Recalculating…".
+  const engineMixFields = useMemo(
+    () => (mode === "auto" ? { sizeMix: undefined, includeBungalows } : { sizeMix, includeBungalows }),
+    [mode, sizeMix, includeBungalows]
+  );
 
   return { mode, setMode, sizeMix, setTierWeight, includeBungalows, setIncludeBungalows, applyMixCandidate, engineMixFields };
 }
