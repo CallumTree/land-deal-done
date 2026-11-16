@@ -129,12 +129,63 @@ export function generateLayout(
     }, compliance, boundaryAreaM2, inputs, jurisdiction, t0);
   }
 
+  // Probe step for searching forward past a pinch point (e.g. a cul-de-sac's
+  // narrow access neck) to the next position where a block actually fits,
+  // rather than giving up on the whole side the first time one doesn't.
+  // See rules.ts for why this is quality-dependent. Hoisted above the
+  // turning-head reservation below, which also needs it.
+  const draftMode = inputs.quality === "draft";
+  const PROBE_STEP_M = draftMode ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
+
   const maxBoundaryY = Math.max(...localBoundary.map((p) => p[1]));
   const roadHalfWidth = rules.ROAD_WIDTH_M / 2;
   const turningHeadSide = rules.TURNING_HEAD_DIAMETER_M;
+
+  /** Does a turningHeadSide × turningHeadSide square, starting at local Y `y`, fit fully inside the ORIGINAL (non-eroded) boundary? Same check the final "Turning head at road end" compliance result uses — defined once, used both to size the placement ceiling below and for that compliance check later, so they can never disagree. */
+  function turningHeadFitsAt(y: number): boolean {
+    const half = turningHeadSide / 2;
+    const square: BNGPolygon = [
+      [-half, y],
+      [half, y],
+      [half, y + turningHeadSide],
+      [-half, y + turningHeadSide],
+    ];
+    return geo.convexPolygonFullyInside(square, localBoundary);
+  }
+
   // Reserve room for the turning head up front, rather than placing plots
   // greedily and finding out afterwards there's no room to turn around.
-  const maxPlotFrontageY = maxBoundaryY - turningHeadSide;
+  //
+  // `maxBoundaryY - turningHeadSide` is only a valid ceiling for a
+  // boundary that's roughly rectangular (constant width with Y) — on an
+  // irregular polygon the usable width can narrow and widen unevenly, so
+  // the turning head can fit in a window partway up the site and then
+  // NEVER fit again all the way to that naive ceiling (confirmed on the
+  // real pond-bridge-johnston fixture: fits across roughly y=50-100m,
+  // then fails everywhere from y=110m up to the naive ceiling at
+  // y=220.3m). Placement is a one-directional greedy fill with no
+  // backtracking once a block is committed, so if the naive ceiling sits
+  // inside a dead zone, EVERY mix with enough demand to keep filling
+  // ribbon frontage walks straight into it and the turning head fails
+  // regardless of which houses were chosen — not a mix problem at all.
+  //
+  // Fix: search downward from the naive ceiling for the highest Y where
+  // the turning head actually still fits, and use THAT as the real
+  // ceiling instead. This is a one-off search over the boundary's shape
+  // alone (independent of mix/topology), run once per generateLayout
+  // call, so the extra cost is negligible next to the per-position
+  // placement search below. If nothing fits anywhere — not even at
+  // y=0 — maxPlotFrontageY stays 0 and the final turning-head check
+  // legitimately fails: that's a genuinely infeasible site shape, not
+  // something to paper over.
+  const naiveTurningHeadCeiling = maxBoundaryY - turningHeadSide;
+  let maxPlotFrontageY = 0;
+  for (let y = naiveTurningHeadCeiling; y >= 0; y -= PROBE_STEP_M) {
+    if (turningHeadFitsAt(y)) {
+      maxPlotFrontageY = y;
+      break;
+    }
+  }
 
   // --- Mix cycle at the TYPE level: each "turn" attempts a whole attached
   // block (terrace run / semi pair / lone detached), not just one unit —
@@ -214,13 +265,6 @@ export function generateLayout(
           [frontageX, yEnd],
         ];
   }
-
-  // Probe step for searching forward past a pinch point (e.g. a cul-de-sac's
-  // narrow access neck) to the next position where a block actually fits,
-  // rather than giving up on the whole side the first time one doesn't.
-  // See rules.ts for why this is quality-dependent.
-  const draftMode = inputs.quality === "draft";
-  const PROBE_STEP_M = draftMode ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
 
   interface PlacementState {
     plots: PlacedPlot[];
@@ -481,14 +525,10 @@ export function generateLayout(
     },
   ];
 
-  // --- Turning head: does it fit inside the ORIGINAL boundary? ---
-  const turningHeadLocal: BNGPolygon = [
-    [-turningHeadSide / 2, roadEndY],
-    [turningHeadSide / 2, roadEndY],
-    [turningHeadSide / 2, roadEndY + turningHeadSide],
-    [-turningHeadSide / 2, roadEndY + turningHeadSide],
-  ];
-  const turningHeadFits = geo.convexPolygonFullyInside(turningHeadLocal, localBoundary);
+  // --- Turning head: does it fit inside the ORIGINAL boundary? Same
+  // helper used to size maxPlotFrontageY above, so this can never
+  // disagree with the ceiling placement was actually constrained by. ---
+  const turningHeadFits = turningHeadFitsAt(roadEndY);
   compliance.push({
     id: "turning-head",
     label: "Turning head at road end",
@@ -818,7 +858,23 @@ function buildMixCycle(mix: Partial<Record<HouseTypeId, number>> | undefined): H
   // silently pulled bungalows into every unlabelled mix the moment a 4th
   // type existed. Missing really does mean 0 now; an explicit mix with
   // only "3-bed-bungalow" set builds bungalows only, nothing else.
-  const weights = HOUSE_TYPES.map((t) => Math.max(0, Math.round(mix?.[t] ?? 0)));
+  //
+  // Round UP (not to nearest) for any positive weight. `inputs.mix`'s own
+  // direct pro-view weights are always already integers, so ceil is a
+  // no-op there — this only changes behaviour for sizeMix-derived
+  // weights, which sizeTiers.expandSizeMixToHouseMix splits EQUALLY
+  // across a tier's 3 forms (e.g. a tier weight of 1 becomes 0.333 per
+  // form). Rounding to nearest turned every one of those into 0, so a
+  // single-tier request like sizeMix={Small:1} ("All Small") had its
+  // entire cycle vanish and silently fall back to DEFAULT_HOUSE_TYPES
+  // below — which includes 3-bed-semi and 4-bed-detached, nothing like
+  // what was actually asked for. Rounding up instead guarantees any
+  // explicitly-requested nonzero tier/type is always represented by at
+  // least one form, never discarded outright.
+  const weights = HOUSE_TYPES.map((t) => {
+    const w = mix?.[t] ?? 0;
+    return w > 0 ? Math.ceil(w) : 0;
+  });
   const cycle: HouseTypeId[] = [];
   for (let i = 0; i < HOUSE_TYPES.length; i++) {
     for (let k = 0; k < weights[i]; k++) cycle.push(HOUSE_TYPES[i]);
