@@ -1,26 +1,129 @@
 @import "tailwindcss";
 
+/*
+ * "Grid Runner" design tokens — dark neon, mobile-first. Named with a
+ * distinct prefix (not Tailwind's own default colour names) since this
+ * is a from-scratch palette, not an override of the defaults — the few
+ * remaining "pro view"/detail components (MetricsPanel, ComplianceList,
+ * ProvenanceDisclosure) still use Tailwind's own zinc/sky/etc defaults
+ * for their own internals; only this app's own surfaces use these.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-ink: #05060d;
+  --color-panel: #0c1130;
+  --color-sheet: rgba(8, 10, 22, 0.94);
+  --color-grid-border: #2a3358;
+
+  --color-grid-cyan: #19f6ff;
+  --color-grid-lime: #c6ff3d;
+  --color-grid-magenta: #ff2bd6;
+  --color-grid-violet: #8b5cff;
+  --color-grid-amber: #ffb020;
+  --color-grid-green: #27ff8a;
+
+  --color-grid-text: #e8ecff;
+  --color-grid-muted: #a6b0c8;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--color-ink);
+  --color-panel: var(--color-panel);
+  --color-sheet: var(--color-sheet);
+  --color-grid-border: var(--color-grid-border);
+  --color-grid-cyan: var(--color-grid-cyan);
+  --color-grid-lime: var(--color-grid-lime);
+  --color-grid-magenta: var(--color-grid-magenta);
+  --color-grid-violet: var(--color-grid-violet);
+  --color-grid-amber: var(--color-grid-amber);
+  --color-grid-green: var(--color-grid-green);
+  --color-grid-text: var(--color-grid-text);
+  --color-grid-muted: var(--color-grid-muted);
+  --font-display: var(--font-space-grotesk);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-grid-text);
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+/*
+ * Motion: slow pulses/glows only, hard limits per the brief — no cycle
+ * shorter than 2s, nothing flashing faster than once/second, no
+ * strobing. Every animated element gets its "on" state as the DEFAULT,
+ * static rule below; the animation itself only applies inside this
+ * prefers-reduced-motion guard, so reduced-motion users see the same
+ * colours/glow at a fixed intensity with no movement at all, not a
+ * frozen mid-animation frame.
+ */
+@keyframes grid-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(39, 255, 138, 0.55);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 6px rgba(39, 255, 138, 0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes grid-glow-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+}
+
+/*
+ * One-shot, not a repeating cycle — "quick" means a single brief event,
+ * not a fast loop; the >=2s-per-cycle hard limit still applies to
+ * anything that actually repeats, so this plays once per refine (2s)
+ * and simply stops, rather than looping.
+ */
+@keyframes grid-refining-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(25, 246, 255, 0.45);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(25, 246, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(25, 246, 255, 0);
+  }
+}
+
+/*
+ * Dark basemap treatment (see OsMapBasemap.tsx's `dark` prop doc
+ * comment for why this is a CSS filter on the real "Light" OS raster
+ * layer, not an OS vector night style). `className` on an ol/layer/Tile
+ * gives that layer its own canvas, separate from the vector overlay's
+ * canvas, so this filter never touches the boundary/homes/road drawing.
+ * Standard invert+hue-rotate "fake dark map" recipe.
+ */
+.grid-dark-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.18) saturate(0.55);
+}
+
+.grid-live-dot {
+  background: var(--color-grid-green);
+}
+.grid-glow-text {
+  text-shadow: 0 0 10px currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .grid-live-dot {
+    animation: grid-pulse-dot 2.1s ease-in-out infinite;
+  }
+  .grid-glow-text {
+    animation: grid-glow-breathe 2.4s ease-in-out infinite;
+  }
+  .grid-refining {
+    animation: grid-refining-ring 2s ease-out 1;
+  }
 }

@@ -48,6 +48,20 @@ export interface OsMapBasemapProps {
   resolution?: number;
   className?: string;
   /**
+   * Dark-mode tile treatment for the "Grid Runner" look. NOT an OS
+   * vector-tile "night" style — this session has no way to test the
+   * real OS Data Hub key locally (it exists only in Vercel's
+   * environment), and "Night" is attested by exactly one archived,
+   * unconfirmed secondary source (see the layer-sourcing comment
+   * above); rather than ship an unverified raster layer name that might
+   * 404 or might not even be this exact ZXY raster product, this
+   * applies a standard invert+hue-rotate CSS filter to the already-
+   * proven-working "Light" layer's own canvas (via its `className`, so
+   * it never touches the vector overlay's separate canvas). Revisit
+   * with the real vector night style once the real key can be tested.
+   */
+  dark?: boolean;
+  /**
    * Called once the real `ol/Map` instance exists, so a parent (e.g.
    * SiteCanvas) can add its own vector layers and click handlers onto
    * the SAME map — one map, one set of tiles, drawing on top, rather
@@ -59,7 +73,7 @@ export interface OsMapBasemapProps {
 
 type MapStatus = "loading" | "ready" | "error";
 
-export function OsMapBasemap({ centerBng, resolution = 2, className, onMapChange }: OsMapBasemapProps) {
+export function OsMapBasemap({ centerBng, resolution = 2, className, dark = false, onMapChange }: OsMapBasemapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [tileErrorCount, setTileErrorCount] = useState(0);
@@ -124,7 +138,7 @@ export function OsMapBasemap({ centerBng, resolution = 2, className, onMapChange
       if (!containerRef.current) return;
       map = new Map({
         target: containerRef.current,
-        layers: [new TileLayer({ source: tileSource })],
+        layers: [new TileLayer({ source: tileSource, className: dark ? "grid-dark-tiles" : undefined })],
         view: new View({
           projection: "EPSG:27700",
           center: initialCenterBng,
@@ -145,18 +159,24 @@ export function OsMapBasemap({ centerBng, resolution = 2, className, onMapChange
   }, []);
 
   return (
-    <div className={className}>
+    <div className={`relative ${className ?? ""}`}>
       <div ref={containerRef} className="h-full w-full" />
-      {status === "error" && (
-        <p className="p-2 text-xs text-red-600">
-          NEXT_PUBLIC_OS_API_KEY is not set in this environment — the OS basemap can&apos;t load.
-        </p>
-      )}
-      {tileErrorCount > 0 && (
-        <p className="p-2 text-xs text-amber-600">
-          {tileErrorCount} OS tile request{tileErrorCount === 1 ? "" : "s"} failed to load at the current view.
-        </p>
-      )}
+      {/* Stacked below top-14 rather than flush against the container's
+          own top edge — clears a parent's floating top chrome (e.g. the
+          Grid Runner top pill), which this component has no knowledge
+          of, without needing that parent to coordinate z-index/position. */}
+      <div className="pointer-events-none absolute inset-x-2 top-14 z-10 flex flex-col gap-1 text-center text-xs font-medium text-black">
+        {status === "error" && (
+          <p className="rounded-md bg-grid-amber/90 p-2">
+            NEXT_PUBLIC_OS_API_KEY is not set in this environment — the OS basemap can&apos;t load.
+          </p>
+        )}
+        {tileErrorCount > 0 && (
+          <p className="rounded-md bg-grid-amber/80 p-1.5 text-[11px]">
+            {tileErrorCount} OS tile request{tileErrorCount === 1 ? "" : "s"} failed to load at the current view.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -21,23 +21,30 @@ type OlMap = import("ol/Map").default;
 type OlVectorSource = import("ol/source/Vector").default;
 type OlVectorLayer = import("ol/layer/Vector").default;
 
-// Placeholder dev-canvas palette — grouped by bedroom-count tier (shades
-// of one hue per tier) so the pro-view breakdown stays visually
-// distinguishable. Not a brand/style decision; style-a/style-b may
-// override this per their own visual identity.
+// "Grid Runner" map palette: homes in magenta (small = the Small size
+// tier, 2-bed forms) or violet (everything larger) per the brief —
+// size, not a per-bedroom-tier gradient. A plot in `tightPlotIds` (a
+// per-plot hard-rule check the engine actually failed — see
+// ComplianceCheck.affectedPlotIds) gets an amber outline instead of the
+// normal one, regardless of its fill colour.
 const HOUSE_TYPE_COLOR: Record<HouseTypeId, string> = {
-  "2-bed-terrace": "#38bdf8",
-  "2-bed-semi": "#0ea5e9",
-  "2-bed-detached": "#0284c7",
-  "3-bed-terrace": "#c4b5fd",
-  "3-bed-semi": "#a78bfa",
-  "3-bed-detached": "#8b5cf6",
-  "3-bed-bungalow": "#14b8a6",
-  "4-bed-terrace": "#fcd34d",
-  "4-bed-semi": "#fbbf24",
-  "4-bed-detached": "#f59e0b",
-  "5-bed-detached": "#f43f5e",
+  "2-bed-terrace": "#ff2bd6",
+  "2-bed-semi": "#ff2bd6",
+  "2-bed-detached": "#ff2bd6",
+  "3-bed-terrace": "#8b5cff",
+  "3-bed-semi": "#8b5cff",
+  "3-bed-detached": "#8b5cff",
+  "3-bed-bungalow": "#8b5cff",
+  "4-bed-terrace": "#8b5cff",
+  "4-bed-semi": "#8b5cff",
+  "4-bed-detached": "#8b5cff",
+  "5-bed-detached": "#8b5cff",
 };
+
+const GRID_CYAN = "#19f6ff";
+const GRID_AMBER = "#ffb020";
+const GRID_GREEN = "#27ff8a";
+const ROAD_GREY_BLUE = "#4b5a7a";
 
 // Placeholder default view: Pond Bridge, Johnston, Pembrokeshire (a real,
 // sourced location — see test-sites/pond-bridge-johnston.json) — picked
@@ -94,9 +101,13 @@ interface SiteCanvasProps {
    * with an identical center would not re-trigger the animation.
    */
   flyTo?: { center: BNGPoint; resolution?: number; key: number };
+  /** Plot ids a per-plot hard-rule check actually failed (ComplianceCheck.affectedPlotIds, unioned across checks) — drawn with an amber outline instead of the normal one. */
+  tightPlotIds?: ReadonlySet<string>;
   /** true: fill the parent container exactly (for a full-bleed layout) instead of the default square card with its own rounded border — the parent decides sizing/chrome in that case. */
   fill?: boolean;
 }
+
+const EMPTY_TIGHT_IDS: ReadonlySet<string> = new Set();
 
 export function SiteCanvas({
   boundary,
@@ -109,6 +120,7 @@ export function SiteCanvas({
   onEntranceChange,
   onDragStateChange,
   flyTo,
+  tightPlotIds = EMPTY_TIGHT_IDS,
   fill = false,
 }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
@@ -128,6 +140,7 @@ export function SiteCanvas({
     entrance,
     layout,
     mode,
+    tightPlotIds,
     onAddBoundaryPoint,
     onSetEntrance,
     onBoundaryChange,
@@ -140,6 +153,7 @@ export function SiteCanvas({
       entrance,
       layout,
       mode,
+      tightPlotIds,
       onAddBoundaryPoint,
       onSetEntrance,
       onBoundaryChange,
@@ -333,7 +347,7 @@ export function SiteCanvas({
 
       function redraw() {
         source.clear();
-        const { boundary: b, entrance: e, layout: l, mode: m } = propsRef.current;
+        const { boundary: b, entrance: e, layout: l, mode: m, tightPlotIds: tight } = propsRef.current;
 
         // Draggable corners/entrance only make sense once a boundary and
         // entrance already exist. Skip syncing their geometry while a
@@ -352,25 +366,28 @@ export function SiteCanvas({
           const rect = bufferStraightRoad(road.centerlineBng, road.widthM);
           if (!rect) continue;
           const f = new Feature(new Polygon([rect]));
-          f.setStyle(new Style({ fill: new Fill({ color: "#71717a" }) }));
+          f.setStyle(new Style({ fill: new Fill({ color: ROAD_GREY_BLUE }) }));
           source.addFeature(f);
         }
 
         for (const plot of l?.plots ?? []) {
           if (plot.gardenBng) {
             const f = new Feature(new Polygon([plot.gardenBng]));
-            f.setStyle(new Style({ fill: new Fill({ color: "rgba(134,239,172,0.35)" }) }));
+            f.setStyle(new Style({ fill: new Fill({ color: "rgba(39,255,138,0.10)" }) }));
             source.addFeature(f);
           }
+          const isTight = tight.has(plot.id);
           const outline = new Feature(new Polygon([plot.plotBng]));
-          outline.setStyle(new Style({ stroke: new Stroke({ color: "#a1a1aa", width: 1, lineDash: [3, 3] }) }));
+          outline.setStyle(
+            new Style({ stroke: new Stroke({ color: "rgba(166,176,200,0.45)", width: 1, lineDash: [3, 3] }) })
+          );
           source.addFeature(outline);
 
           const footprint = new Feature(new Polygon([plot.footprintBng]));
           footprint.setStyle(
             new Style({
               fill: new Fill({ color: HOUSE_TYPE_COLOR[plot.houseType] }),
-              stroke: new Stroke({ color: "#18181b", width: 0.5 }),
+              stroke: new Stroke({ color: isTight ? GRID_AMBER : "rgba(232,236,255,0.3)", width: isTight ? 2 : 0.5 }),
             })
           );
           source.addFeature(footprint);
@@ -378,36 +395,44 @@ export function SiteCanvas({
 
         for (const p of l?.parkingSpacesBng ?? []) {
           const f = new Feature(new Point(p));
-          f.setStyle(new Style({ image: new CircleStyle({ radius: 2, fill: new Fill({ color: "#3f3f46" }) }) }));
+          f.setStyle(new Style({ image: new CircleStyle({ radius: 2, fill: new Fill({ color: "rgba(166,176,200,0.6)" }) }) }));
           source.addFeature(f);
         }
 
         if (b.length > 0) {
           if (b.length >= 3) {
+            // Simulated glow: a wider, low-opacity stroke underneath the
+            // crisp dashed line — OL's canvas renderer has no CSS-filter-
+            // style blur per feature, so this stacks two strokes on the
+            // same geometry instead.
             const closed = new Feature(new Polygon([[...b, b[0]]]));
-            closed.setStyle(
-              new Style({ fill: new Fill({ color: "rgba(56,189,248,0.1)" }), stroke: new Stroke({ color: "#0ea5e9", width: 2 }) })
-            );
+            closed.setStyle([
+              new Style({ stroke: new Stroke({ color: "rgba(25,246,255,0.35)", width: 8 }) }),
+              new Style({
+                fill: new Fill({ color: "rgba(25,246,255,0.07)" }),
+                stroke: new Stroke({ color: GRID_CYAN, width: 2, lineDash: [6, 5] }),
+              }),
+            ]);
             source.addFeature(closed);
           }
           for (const p of b) {
             const f = new Feature(new Point(p));
-            f.setStyle(new Style({ image: new CircleStyle({ radius: 5, fill: new Fill({ color: "#0ea5e9" }) }) }));
+            f.setStyle([
+              new Style({ image: new CircleStyle({ radius: 9, fill: new Fill({ color: "rgba(25,246,255,0.3)" }) }) }),
+              new Style({ image: new CircleStyle({ radius: 4.5, fill: new Fill({ color: GRID_CYAN }) }) }),
+            ]);
             source.addFeature(f);
           }
         }
 
         if (e) {
           const f = new Feature(new Point(e));
-          f.setStyle(
+          f.setStyle([
+            new Style({ image: new CircleStyle({ radius: 11, fill: new Fill({ color: "rgba(39,255,138,0.3)" }) }) }),
             new Style({
-              image: new CircleStyle({
-                radius: 8,
-                fill: new Fill({ color: "rgba(239,68,68,0.25)" }),
-                stroke: new Stroke({ color: "#ef4444", width: 2 }),
-              }),
-            })
-          );
+              image: new CircleStyle({ radius: 5, fill: new Fill({ color: GRID_GREEN }), stroke: new Stroke({ color: "#05060d", width: 1.5 }) }),
+            }),
+          ]);
           source.addFeature(f);
         }
       }
@@ -481,17 +506,18 @@ export function SiteCanvas({
       className={
         fill
           ? "relative h-full w-full overflow-hidden"
-          : "relative aspect-square w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
+          : "relative aspect-square w-full overflow-hidden rounded-xl border border-grid-border"
       }
     >
       <OsMapBasemap
         centerBng={DEFAULT_CENTER_BNG}
         resolution={DEFAULT_RESOLUTION_M_PER_PX}
         className="h-full w-full"
+        dark
         onMapChange={handleMapChange}
       />
 
-      <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-white/90 px-2 py-1 text-xs text-zinc-600 shadow-sm dark:bg-zinc-900/90 dark:text-zinc-300">
+      <div className="pointer-events-none absolute left-2 top-2 rounded-md border border-grid-border bg-sheet px-2 py-1 text-xs text-grid-muted shadow-sm">
         {mode === "boundary" &&
           (canFinishHint
             ? "Click to add more boundary points, or tap “Finish boundary”"
