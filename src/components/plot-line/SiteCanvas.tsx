@@ -90,6 +90,8 @@ interface SiteCanvasProps {
   fill?: boolean;
   /** Mirrors the Dark/Light map toggle — forwarded straight to OsMapBasemap's own `dark` prop (see mapFilter.ts). Defaults to true (dark) to match this app's default. */
   dark?: boolean;
+  /** Called on every map tap/click, before any mode-specific handling (adding a boundary point, setting the entrance, or nothing in "done" mode) — lets the parent collapse an overlapping bottom sheet back to peek so the map stays reachable. */
+  onMapInteraction?: () => void;
 }
 
 const EMPTY_TIGHT_IDS: ReadonlySet<string> = new Set();
@@ -108,6 +110,7 @@ export function SiteCanvas({
   tightPlotIds = EMPTY_TIGHT_IDS,
   fill = false,
   dark = true,
+  onMapInteraction,
 }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
   const redrawRef = useRef<(() => void) | null>(null);
@@ -132,6 +135,7 @@ export function SiteCanvas({
     onBoundaryChange,
     onEntranceChange,
     onDragStateChange,
+    onMapInteraction,
   });
   useEffect(() => {
     propsRef.current = {
@@ -145,6 +149,7 @@ export function SiteCanvas({
       onBoundaryChange,
       onEntranceChange,
       onDragStateChange,
+      onMapInteraction,
     };
   });
 
@@ -409,7 +414,8 @@ export function SiteCanvas({
 
       clickKey = map.on("singleclick", (evt) => {
         const [x, y] = evt.coordinate;
-        const { mode: m, boundary: b, onAddBoundaryPoint: add, onSetEntrance: setEnt } = propsRef.current;
+        const { mode: m, boundary: b, onAddBoundaryPoint: add, onSetEntrance: setEnt, onMapInteraction } = propsRef.current;
+        onMapInteraction?.();
         if (m === "boundary") {
           add([x, y]);
         } else if (m === "entrance" && b.length >= 3) {

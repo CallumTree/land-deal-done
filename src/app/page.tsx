@@ -124,7 +124,22 @@ export default function Home() {
   const [refining, setRefining] = useState(false);
   const handleDragStateChange = useCallback((dragging: boolean) => {
     setIsDragging(dragging);
-    if (!dragging) pendingRefineRef.current = true;
+    if (dragging) {
+      // Dragging an existing boundary corner/entrance is itself a map
+      // interaction — collapse an overlapping sheet the same as a tap
+      // does (handleMapInteraction below), so the map stays visible
+      // the moment the user actually starts working on it.
+      setSheetSnap("peek");
+    } else {
+      pendingRefineRef.current = true;
+    }
+  }, []);
+
+  // Any tap on the map (adding a boundary point, setting the entrance,
+  // or just tapping while in "done" mode) drops an overlapping sheet
+  // back to peek — "the map is always one gesture away."
+  const handleMapInteraction = useCallback(() => {
+    setSheetSnap("peek");
   }, []);
   useEffect(() => {
     if (liveLayout.isComputing || !pendingRefineRef.current) return;
@@ -220,6 +235,7 @@ export default function Home() {
           onBoundaryChange={setBoundary}
           onEntranceChange={setEntrance}
           onDragStateChange={handleDragStateChange}
+          onMapInteraction={handleMapInteraction}
           flyTo={flyTo}
           tightPlotIds={tightPlotIds}
           dark={mapDark}
