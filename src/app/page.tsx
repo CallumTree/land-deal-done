@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SiteCanvas, type DrawMode } from "@/components/plot-line/SiteCanvas";
+import { Scene3D } from "@/components/plot-line/Scene3D";
 import { BottomSheet, type SheetSnap } from "@/components/plot-line/BottomSheet";
 import { PostcodeSearch } from "@/components/plot-line/PostcodeSearch";
 import { MetricsPanel } from "@/components/plot-line/MetricsPanel";
@@ -61,6 +62,7 @@ export default function Home() {
   const [entrance, setEntrance] = useState<BNGPoint | null>(null);
   const [mode, setMode] = useState<DrawMode>("boundary");
   const [isDragging, setIsDragging] = useState(false);
+  const [view3D, setView3D] = useState(false);
 
   const [marketBand] = useState<MarketBand>(2);
   const [sideGapTier, setSideGapTier] = useState<(typeof SIDE_GAP_TIERS)[number]>("tighter");
@@ -163,23 +165,38 @@ export default function Home() {
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-ink">
-      <SiteCanvas
-        boundary={boundary}
-        entrance={entrance}
-        layout={output?.layout ?? null}
-        mode={mode}
-        onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
-        onSetEntrance={(p) => {
-          setEntrance(p);
-          setMode("done");
-        }}
-        onBoundaryChange={setBoundary}
-        onEntranceChange={setEntrance}
-        onDragStateChange={handleDragStateChange}
-        flyTo={flyTo}
-        tightPlotIds={tightPlotIds}
-        fill
-      />
+      {/*
+        2D and 3D are mutually exclusive, never both mounted — each owns
+        a real GPU context (OpenLayers' tile/vector canvases vs three's
+        WebGL context), and running both at once on a phone is wasted
+        work at best and a WebGL-context-limit risk at worst. Toggling
+        away from 3D and back does lose camera position (no "preserve it
+        across the toggle" requirement in the brief — only "live updates
+        while viewing 3D", which this still gives in full), but drawing/
+        dragging stays 2D-only either way, so nothing is lost by
+        remounting on re-entry.
+      */}
+      {view3D ? (
+        <Scene3D boundary={boundary} entrance={entrance} layout={output?.layout ?? null} tightPlotIds={tightPlotIds} />
+      ) : (
+        <SiteCanvas
+          boundary={boundary}
+          entrance={entrance}
+          layout={output?.layout ?? null}
+          mode={mode}
+          onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
+          onSetEntrance={(p) => {
+            setEntrance(p);
+            setMode("done");
+          }}
+          onBoundaryChange={setBoundary}
+          onEntranceChange={setEntrance}
+          onDragStateChange={handleDragStateChange}
+          flyTo={flyTo}
+          tightPlotIds={tightPlotIds}
+          fill
+        />
+      )}
 
       {/*
         Refining glow: see the pendingRefineRef effect above. Inset by a
@@ -209,6 +226,16 @@ export default function Home() {
 
         {/* Draw-flow action buttons */}
         <div className="pointer-events-auto absolute right-3 top-16 z-20 flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => setView3D((v) => !v)}
+            aria-pressed={view3D}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold shadow-[0_0_16px_rgba(139,92,255,0.35)] ${
+              view3D ? "border-grid-violet bg-grid-violet text-ink" : "border-grid-border bg-sheet text-grid-text"
+            }`}
+          >
+            {view3D ? "2D" : "3D"}
+          </button>
           {canFinishBoundary && (
             <button
               type="button"

@@ -13,7 +13,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OsMapBasemap } from "./OsMapBasemap";
-import type { BNGPoint, BNGPolygon, HouseTypeId, LayoutResult } from "@/engine/types";
+import { GRID_AMBER, GRID_CYAN, GRID_GREEN, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "./gridColors";
+import { bufferStraightRoad } from "./bufferRoad";
+import type { BNGPoint, BNGPolygon, LayoutResult } from "@/engine/types";
 
 export type DrawMode = "boundary" | "entrance" | "done";
 
@@ -21,30 +23,11 @@ type OlMap = import("ol/Map").default;
 type OlVectorSource = import("ol/source/Vector").default;
 type OlVectorLayer = import("ol/layer/Vector").default;
 
-// "Grid Runner" map palette: homes in magenta (small = the Small size
-// tier, 2-bed forms) or violet (everything larger) per the brief —
-// size, not a per-bedroom-tier gradient. A plot in `tightPlotIds` (a
-// per-plot hard-rule check the engine actually failed — see
-// ComplianceCheck.affectedPlotIds) gets an amber outline instead of the
-// normal one, regardless of its fill colour.
-const HOUSE_TYPE_COLOR: Record<HouseTypeId, string> = {
-  "2-bed-terrace": "#ff2bd6",
-  "2-bed-semi": "#ff2bd6",
-  "2-bed-detached": "#ff2bd6",
-  "3-bed-terrace": "#8b5cff",
-  "3-bed-semi": "#8b5cff",
-  "3-bed-detached": "#8b5cff",
-  "3-bed-bungalow": "#8b5cff",
-  "4-bed-terrace": "#8b5cff",
-  "4-bed-semi": "#8b5cff",
-  "4-bed-detached": "#8b5cff",
-  "5-bed-detached": "#8b5cff",
-};
-
-const GRID_CYAN = "#19f6ff";
-const GRID_AMBER = "#ffb020";
-const GRID_GREEN = "#27ff8a";
-const ROAD_GREY_BLUE = "#4b5a7a";
+// "Grid Runner" map palette — see ./gridColors.ts, shared with the 3D
+// scene so colours never drift between the two views. A plot in
+// `tightPlotIds` (a per-plot hard-rule check the engine actually failed
+// — see ComplianceCheck.affectedPlotIds) gets an amber outline instead
+// of the normal one, regardless of its fill colour.
 
 // Placeholder default view: Pond Bridge, Johnston, Pembrokeshire (a real,
 // sourced location — see test-sites/pond-bridge-johnston.json) — picked
@@ -326,24 +309,6 @@ export function SiteCanvas({
         isDraggingRef.current = false;
         propsRef.current.onDragStateChange?.(false);
       });
-
-      /** Buffers a straight 2-point road centerline into a rectangle polygon, widthM wide — v0's engine only ever emits a single straight segment per road (see generateLayout.ts), so that's the only case handled. */
-      function bufferStraightRoad(centerline: BNGPoint[], widthM: number): BNGPolygon | null {
-        if (centerline.length < 2) return null;
-        const [a, b] = centerline;
-        const dx = b[0] - a[0];
-        const dy = b[1] - a[1];
-        const len = Math.hypot(dx, dy);
-        if (len < 1e-6) return null;
-        const nx = (-dy / len) * (widthM / 2);
-        const ny = (dx / len) * (widthM / 2);
-        return [
-          [a[0] + nx, a[1] + ny],
-          [b[0] + nx, b[1] + ny],
-          [b[0] - nx, b[1] - ny],
-          [a[0] - nx, a[1] - ny],
-        ];
-      }
 
       function redraw() {
         source.clear();

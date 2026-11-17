@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { buildOsTileUrlTemplate, ensureBngProjectionRegistered, OS_TILE_SOURCE_EPSG } from "./osTiles";
 
 // OS Data Hub's "OS Maps API" ZXY raster tile basemap.
 //
@@ -32,14 +33,11 @@ import { useEffect, useRef, useState } from "react";
 // capability — so this sidesteps needing those unverified BNG tile-grid
 // numbers at all. Revisit with the _27700 layer + a fetched
 // GetCapabilities document once docs.os.uk is reachable.
-const OS_LAYER = "Light_3857";
-const OS_TILE_SOURCE_EPSG = "EPSG:3857";
-
-// Standard EPSG:27700 (OSGB36 British National Grid) proj4 definition —
-// a fixed, decades-old, publicly published transform (not something
-// specific to OS's API that needed verifying this session).
-const EPSG_27700_PROJ4 =
-  "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs";
+//
+// The key/URL/layer values themselves now live in ./osTiles.ts, shared
+// with the 3D ground-texture capture (scene3d/captureGroundTexture.ts)
+// so both consumers are guaranteed to use the exact same key and tile
+// source — never a second, drifted copy of this config.
 
 export interface OsMapBasemapProps {
   /** BNG [easting, northing] to center the map on. Only used on first mount — the map's own pan/zoom interactions own the view after that, same as any normal interactive map. */
@@ -92,32 +90,23 @@ export function OsMapBasemap({ centerBng, resolution = 2, className, dark = fals
     const initialResolution = resolution;
 
     (async () => {
-      const [{ default: Map }, { default: View }, { default: TileLayer }, { default: XYZ }, proj4Module, { register }] =
-        await Promise.all([
-          import("ol/Map"),
-          import("ol/View"),
-          import("ol/layer/Tile"),
-          import("ol/source/XYZ"),
-          import("proj4"),
-          import("ol/proj/proj4"),
-        ]);
-      const { get: getProjection } = await import("ol/proj");
+      const [{ default: Map }, { default: View }, { default: TileLayer }, { default: XYZ }] = await Promise.all([
+        import("ol/Map"),
+        import("ol/View"),
+        import("ol/layer/Tile"),
+        import("ol/source/XYZ"),
+      ]);
+      await ensureBngProjectionRegistered();
       if (destroyed) return;
 
-      const proj4lib = proj4Module.default;
-      if (!getProjection("EPSG:27700")) {
-        proj4lib.defs("EPSG:27700", EPSG_27700_PROJ4);
-        register(proj4lib);
-      }
-
-      const apiKey = process.env.NEXT_PUBLIC_OS_API_KEY;
-      if (!apiKey) {
+      const tileUrlTemplate = buildOsTileUrlTemplate();
+      if (!tileUrlTemplate) {
         setStatus("error");
         return;
       }
 
       const tileSource = new XYZ({
-        url: `https://api.os.uk/maps/raster/v1/zxy/${OS_LAYER}/{z}/{x}/{y}.png?key=${apiKey}`,
+        url: tileUrlTemplate,
         projection: OS_TILE_SOURCE_EPSG,
         crossOrigin: "anonymous",
       });
