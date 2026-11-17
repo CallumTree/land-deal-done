@@ -28,6 +28,8 @@ export interface Scene3DProps {
   entrance: BNGPoint | null;
   layout: LayoutResult | null;
   tightPlotIds: ReadonlySet<string>;
+  /** Mirrors the 2D map's Dark/Light toggle — see mapFilter.ts. */
+  dark: boolean;
 }
 
 interface CameraFrame {
@@ -129,7 +131,7 @@ function Controls({ frame, resetSignal }: { frame: CameraFrame; resetSignal: num
   return null;
 }
 
-function GroundPlane({ boundary }: { boundary: BNGPolygon }) {
+function GroundPlane({ boundary, dark }: { boundary: BNGPolygon; dark: boolean }) {
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
   const [halfExtent, setHalfExtent] = useState<number>(50);
 
@@ -140,7 +142,7 @@ function GroundPlane({ boundary }: { boundary: BNGPolygon }) {
     // re-drawing the boundary never flashes back to the untextured
     // fallback. The cleanup effect below disposes it at the exact
     // moment setTexture below swaps it out, not eagerly here.
-    captureGroundTexture(boundary).then((result) => {
+    captureGroundTexture(boundary, dark).then((result) => {
       if (cancelled || !result) return;
       setHalfExtent(result.halfWidth);
       if (result.canvas) {
@@ -153,12 +155,12 @@ function GroundPlane({ boundary }: { boundary: BNGPolygon }) {
     return () => {
       cancelled = true;
     };
-    // Re-captures only when the drawn site's shape actually changes
-    // (length + first point as a cheap, good-enough change signal), not
-    // on every live-layout recompute while dragging/tweaking the mix —
-    // the ground photo doesn't need to refetch for those.
+    // Re-captures when the drawn site's shape changes (length + first
+    // point as a cheap, good-enough signal — not on every live-layout
+    // recompute while dragging/tweaking the mix) OR when the Dark/Light
+    // toggle flips, since the baked-in filter needs redoing either way.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundary.length, boundary[0]?.[0], boundary[0]?.[1]]);
+  }, [boundary.length, boundary[0]?.[0], boundary[0]?.[1], dark]);
 
   // Disposes exactly the texture that was current for the PREVIOUS
   // render, right as it's replaced — ordinary effect-cleanup-on-change,
@@ -171,18 +173,18 @@ function GroundPlane({ boundary }: { boundary: BNGPolygon }) {
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
       <planeGeometry args={[size, size]} />
       {texture ? (
-        <meshBasicMaterial map={texture} color={"#9fb3c8"} />
+        <meshBasicMaterial map={texture} color={dark ? "#9fb3c8" : "#ffffff"} />
       ) : (
         // No real key available locally (this session always runs with
-        // a dummy key) or every tile failed to load — a plain dark-neon
-        // tinted slab rather than a blank/broken-looking floor.
-        <meshBasicMaterial color={"#0c1130"} />
+        // a dummy key) or every tile failed to load — a plain theme-
+        // matched slab rather than a blank/broken-looking floor.
+        <meshBasicMaterial color={dark ? "#0c1130" : "#e9ecf2"} />
       )}
     </mesh>
   );
 }
 
-function SceneContents({ boundary, entrance, layout, tightPlotIds, origin }: Scene3DProps & { origin: SceneOrigin }) {
+function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark }: Scene3DProps & { origin: SceneOrigin }) {
   const sceneGeo = useMemo(
     () => buildSceneGeometry(layout, boundary, entrance, tightPlotIds, origin),
     [layout, boundary, entrance, tightPlotIds, origin]
@@ -224,7 +226,7 @@ function SceneContents({ boundary, entrance, layout, tightPlotIds, origin }: Sce
 
   return (
     <>
-      <GroundPlane boundary={boundary} />
+      <GroundPlane boundary={boundary} dark={dark} />
       {sceneGeo.roads && <mesh geometry={sceneGeo.roads} material={roadsMaterial} />}
       {sceneGeo.gardens && <mesh geometry={sceneGeo.gardens} material={gardensMaterial} />}
       {sceneGeo.homes && <mesh geometry={sceneGeo.homes} material={homesMaterial} />}
@@ -239,7 +241,7 @@ function SceneContents({ boundary, entrance, layout, tightPlotIds, origin }: Sce
   );
 }
 
-export function Scene3D({ boundary, entrance, layout, tightPlotIds }: Scene3DProps) {
+export function Scene3D({ boundary, entrance, layout, tightPlotIds, dark }: Scene3DProps) {
   const [resetSignal, setResetSignal] = useState(0);
   const hasSite = boundary.length >= 3;
 
@@ -258,14 +260,16 @@ export function Scene3D({ boundary, entrance, layout, tightPlotIds }: Scene3DPro
 
   if (!hasSite) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-ink px-6 text-center text-sm text-grid-muted">
+      <div
+        className={`flex h-full w-full items-center justify-center px-6 text-center text-sm ${dark ? "bg-ink text-grid-muted" : "bg-[#e9ecf2] text-zinc-600"}`}
+      >
         Draw a site boundary in 2D first, then switch back to 3D.
       </div>
     );
   }
 
   return (
-    <div className="relative h-full w-full touch-none bg-ink">
+    <div className={`relative h-full w-full touch-none ${dark ? "bg-ink" : "bg-[#e9ecf2]"}`}>
       {/*
         Mobile-first perf levers, applied up front rather than only as a
         reaction to a bad measurement: dpr capped at 1.5 (not the
@@ -277,7 +281,7 @@ export function Scene3D({ boundary, entrance, layout, tightPlotIds }: Scene3DPro
       */}
       <Canvas camera={{ fov: 50, near: 0.5, far: 5000 }} dpr={[1, 1.5]} gl={{ antialias: false }}>
         <Controls frame={initialFrame} resetSignal={resetSignal} />
-        <SceneContents boundary={boundary} entrance={entrance} layout={layout} tightPlotIds={tightPlotIds} origin={origin} />
+        <SceneContents boundary={boundary} entrance={entrance} layout={layout} tightPlotIds={tightPlotIds} origin={origin} dark={dark} />
       </Canvas>
       <button
         type="button"

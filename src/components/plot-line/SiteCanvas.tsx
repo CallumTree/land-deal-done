@@ -88,6 +88,8 @@ interface SiteCanvasProps {
   tightPlotIds?: ReadonlySet<string>;
   /** true: fill the parent container exactly (for a full-bleed layout) instead of the default square card with its own rounded border — the parent decides sizing/chrome in that case. */
   fill?: boolean;
+  /** Mirrors the Dark/Light map toggle — forwarded straight to OsMapBasemap's own `dark` prop (see mapFilter.ts). Defaults to true (dark) to match this app's default. */
+  dark?: boolean;
 }
 
 const EMPTY_TIGHT_IDS: ReadonlySet<string> = new Set();
@@ -105,6 +107,7 @@ export function SiteCanvas({
   flyTo,
   tightPlotIds = EMPTY_TIGHT_IDS,
   fill = false,
+  dark = true,
 }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
   const redrawRef = useRef<(() => void) | null>(null);
@@ -478,7 +481,7 @@ export function SiteCanvas({
         centerBng={DEFAULT_CENTER_BNG}
         resolution={DEFAULT_RESOLUTION_M_PER_PX}
         className="h-full w-full"
-        dark
+        dark={dark}
         onMapChange={handleMapChange}
       />
 

@@ -15,6 +15,7 @@
 
 import type { BNGPolygon } from "@/engine/types";
 import { buildOsTileUrlTemplate, ensureBngProjectionRegistered, OS_TILE_SOURCE_EPSG } from "../osTiles";
+import { bakeFilterToCanvas, MAP_DARK_FILTER } from "../mapFilter";
 import { polygonExtent } from "./coords";
 
 export interface GroundTextureResult {
@@ -39,7 +40,7 @@ const RENDER_TIMEOUT_MS = 6000; // If tiles never finish loading (bad network/ke
  * the returned canvas's real-world centre always coincides with scene
  * (0,0,0). That equivalence is relied on rather than re-derived here.
  */
-export async function captureGroundTexture(boundary: BNGPolygon): Promise<GroundTextureResult | null> {
+export async function captureGroundTexture(boundary: BNGPolygon, dark: boolean): Promise<GroundTextureResult | null> {
   const tileUrlTemplate = buildOsTileUrlTemplate();
   if (!tileUrlTemplate || boundary.length < 3) return null;
 
@@ -103,7 +104,16 @@ export async function captureGroundTexture(boundary: BNGPolygon): Promise<Ground
     // tries to upload it as a texture (a tainted canvas). Scene3D.tsx
     // falls back to a flat tinted ground plane when canvas is null.
     const rawCanvas = map.getViewport()?.querySelector("canvas");
-    const usableCanvas = rawCanvas && tileSuccessCount > 0 && tileErrorCount === 0 ? rawCanvas : null;
+    let usableCanvas = rawCanvas && tileSuccessCount > 0 && tileErrorCount === 0 ? rawCanvas : null;
+
+    // Bake the exact same filter the 2D basemap applies live — a WebGL
+    // texture has no CSS box to filter, so the equivalent has to be
+    // rendered into the pixels themselves (see mapFilter.ts). Done here,
+    // on the throwaway capture canvas, before the real `<canvas>` is torn
+    // down — never touches the live map.
+    if (usableCanvas && dark) {
+      usableCanvas = bakeFilterToCanvas(usableCanvas, MAP_DARK_FILTER);
+    }
 
     map.setTarget(undefined);
     document.body.removeChild(container);

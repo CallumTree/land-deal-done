@@ -99,16 +99,13 @@ body {
 }
 
 /*
- * Dark basemap treatment (see OsMapBasemap.tsx's `dark` prop doc
- * comment for why this is a CSS filter on the real "Light" OS raster
- * layer, not an OS vector night style). `className` on an ol/layer/Tile
- * gives that layer its own canvas, separate from the vector overlay's
- * canvas, so this filter never touches the boundary/homes/road drawing.
- * Standard invert+hue-rotate "fake dark map" recipe.
+ * Dark basemap treatment: the filter itself lives as a single JS
+ * constant, MAP_DARK_FILTER in src/components/plot-line/mapFilter.ts,
+ * applied as a live DOM style.filter by OsMapBasemap.tsx (not a static
+ * CSS class here) so the exact same string can also be baked into the
+ * 3D ground texture's pixels. See that file's header comment for the
+ * filter's values and why they're what they are.
  */
-.grid-dark-tiles {
-  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.18) saturate(0.55);
-}
 
 .grid-live-dot {
   background: var(--color-grid-green);

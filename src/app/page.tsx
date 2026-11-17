@@ -23,6 +23,7 @@ import { useLiveLayout } from "@/hooks/useLiveLayout";
 import { useMixState } from "@/hooks/useMixState";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { SIZE_TIERS } from "@/engine/sizeTiers";
+import { readStoredMapTheme, storeMapTheme } from "@/components/plot-line/mapFilter";
 import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY } from "@/copy/labels";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
@@ -63,6 +64,27 @@ export default function Home() {
   const [mode, setMode] = useState<DrawMode>("boundary");
   const [isDragging, setIsDragging] = useState(false);
   const [view3D, setView3D] = useState(false);
+
+  // Must start "dark" (matching SSR, which has no window/localStorage)
+  // rather than reading the stored preference in a lazy initializer —
+  // same hydration-mismatch reasoning as BottomSheet's isDesktop state:
+  // a returning user whose stored preference is "light" would make the
+  // CLIENT's first render disagree with the server-rendered HTML. The
+  // synchronous setState below runs post-hydration (a later commit), so
+  // it corrects to the real preference without that risk — one frame of
+  // "dark" before it flips, not an error.
+  const [mapDark, setMapDark] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMapDark(readStoredMapTheme() === "dark");
+  }, []);
+  const handleToggleMapTheme = useCallback(() => {
+    setMapDark((prev) => {
+      const next = !prev;
+      storeMapTheme(next ? "dark" : "light");
+      return next;
+    });
+  }, []);
 
   const [marketBand] = useState<MarketBand>(2);
   const [sideGapTier, setSideGapTier] = useState<(typeof SIDE_GAP_TIERS)[number]>("tighter");
@@ -177,7 +199,13 @@ export default function Home() {
         remounting on re-entry.
       */}
       {view3D ? (
-        <Scene3D boundary={boundary} entrance={entrance} layout={output?.layout ?? null} tightPlotIds={tightPlotIds} />
+        <Scene3D
+          boundary={boundary}
+          entrance={entrance}
+          layout={output?.layout ?? null}
+          tightPlotIds={tightPlotIds}
+          dark={mapDark}
+        />
       ) : (
         <SiteCanvas
           boundary={boundary}
@@ -194,6 +222,7 @@ export default function Home() {
           onDragStateChange={handleDragStateChange}
           flyTo={flyTo}
           tightPlotIds={tightPlotIds}
+          dark={mapDark}
           fill
         />
       )}
@@ -235,6 +264,14 @@ export default function Home() {
             }`}
           >
             {view3D ? "2D" : "3D"}
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleMapTheme}
+            aria-pressed={mapDark}
+            className="rounded-full border border-grid-border bg-sheet px-3 py-1.5 text-xs font-medium text-grid-text"
+          >
+            Map: {mapDark ? "Dark" : "Light"}
           </button>
           {canFinishBoundary && (
             <button

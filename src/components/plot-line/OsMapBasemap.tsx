@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { buildOsTileUrlTemplate, ensureBngProjectionRegistered, OS_TILE_SOURCE_EPSG } from "./osTiles";
+import { MAP_DARK_FILTER } from "./mapFilter";
+
+const TILE_CANVAS_CLASS = "os-tile-canvas";
 
 // OS Data Hub's "OS Maps API" ZXY raster tile basemap.
 //
@@ -53,10 +56,12 @@ export interface OsMapBasemapProps {
    * unconfirmed secondary source (see the layer-sourcing comment
    * above); rather than ship an unverified raster layer name that might
    * 404 or might not even be this exact ZXY raster product, this
-   * applies a standard invert+hue-rotate CSS filter to the already-
-   * proven-working "Light" layer's own canvas (via its `className`, so
-   * it never touches the vector overlay's separate canvas). Revisit
-   * with the real vector night style once the real key can be tested.
+   * applies MAP_DARK_FILTER (see ./mapFilter.ts) directly to the
+   * already-proven-working "Light" layer's own canvas, found via a
+   * fixed marker class so it never touches the vector overlay's
+   * separate canvas. Reactive to changes (the Dark/Light toggle), not
+   * just read at mount — toggling never refetches tiles or recreates
+   * the map, it only adds/removes the filter style.
    */
   dark?: boolean;
   /**
@@ -71,10 +76,32 @@ export interface OsMapBasemapProps {
 
 type MapStatus = "loading" | "ready" | "error";
 
+/** Finds the tile layer's own canvas (marked with TILE_CANVAS_CLASS, set once at layer creation) inside `container` and sets or clears its filter directly — a live DOM style, not a CSS class, so both this and the 3D ground texture's baked-pixel version can be driven off the exact same MAP_DARK_FILTER string. */
+function applyFilter(container: HTMLDivElement, dark: boolean) {
+  const canvas = container.querySelector<HTMLElement>(`.${TILE_CANVAS_CLASS} canvas, canvas.${TILE_CANVAS_CLASS}`);
+  if (canvas) canvas.style.filter = dark ? MAP_DARK_FILTER : "";
+}
+
 export function OsMapBasemap({ centerBng, resolution = 2, className, dark = false, onMapChange }: OsMapBasemapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapStatus>("loading");
   const [tileErrorCount, setTileErrorCount] = useState(0);
+  // Read by the map's own 'rendercomplete' listener (registered once,
+  // below) — NOT a one-off "apply now" value. OL creates the tile
+  // layer's actual <canvas> asynchronously (on its own first render
+  // pass, after `new Map()` returns), so a single apply-the-filter-now
+  // call right after construction races OL and silently finds no
+  // canvas yet. Hooking 'rendercomplete' instead means the filter gets
+  // (re)applied every time OL actually finishes painting — self-
+  // correcting regardless of that timing, and it's what makes toggling
+  // instant without waiting for another tile fetch. Caught via a real
+  // browser check: getComputedStyle on the tile canvas reported `none`
+  // under the old one-off approach even though React's `dark` prop and
+  // the toggle button's own label were both correctly "Dark".
+  const darkRef = useRef(dark);
+  useEffect(() => {
+    darkRef.current = dark;
+  });
 
   useEffect(() => {
     let destroyed = false;
@@ -127,13 +154,23 @@ export function OsMapBasemap({ centerBng, resolution = 2, className, dark = fals
       if (!containerRef.current) return;
       map = new Map({
         target: containerRef.current,
-        layers: [new TileLayer({ source: tileSource, className: dark ? "grid-dark-tiles" : undefined })],
+        layers: [new TileLayer({ source: tileSource, className: TILE_CANVAS_CLASS })],
         view: new View({
           projection: "EPSG:27700",
           center: initialCenterBng,
           resolution: initialResolution,
         }),
       });
+      // The real fix for the mount-timing race (see darkRef's own
+      // comment above): re-applies on every OL render, so it's correct
+      // the first time the tile canvas genuinely exists, and stays
+      // correct through any later redraw regardless of what triggered
+      // it. The immediate call right after is just a harmless, non-
+      // load-bearing best-effort first try.
+      map.on("rendercomplete", () => {
+        if (containerRef.current) applyFilter(containerRef.current, darkRef.current);
+      });
+      applyFilter(containerRef.current, dark);
       onMapChange?.(map);
     })();
 
@@ -146,6 +183,13 @@ export function OsMapBasemap({ centerBng, resolution = 2, className, dark = fals
     // mount — see the comment above initialCenterBng/initialResolution.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reactive to the Dark/Light toggle, independent of the mount effect
+  // above — flips the filter on the existing tile canvas directly,
+  // never recreating the map or refetching tiles.
+  useEffect(() => {
+    if (containerRef.current) applyFilter(containerRef.current, dark);
+  }, [dark]);
 
   return (
     <div className={`relative ${className ?? ""}`}>
