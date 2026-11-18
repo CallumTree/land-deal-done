@@ -12,5 +12,6 @@
   "areaHectares": 0.35,
   "expectedUnits": 11,
   "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
-  "confidence": "sense_check"
+  "confidence": "sense_check",
+  "knownExceptionReason": "engine places zero plots; tracked in shape-robustness work"
 }

@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test:fixtures": "tsx scripts/run-fixtures.ts",
-    "test:scorecard": "tsx scripts/scorecard.ts --check"
+    "test:scorecard": "tsx scripts/scorecard.ts --check",
+    "report:draft-mode": "tsx scripts/draft-mode-report.ts",
+    "report:optimizer": "tsx scripts/optimizer-report.ts",
+    "report:perf": "tsx scripts/perf-stability.ts"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.2",

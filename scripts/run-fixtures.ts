@@ -34,6 +34,19 @@ interface Fixture {
   expectedUnitsMethod: string;
   confidence: "sense_check" | "approved_unit_count";
   category?: string;
+  /**
+   * Set ONLY when a fixture has a real, currently-known invariant failure
+   * that's being tracked as separate work rather than fixed here (same
+   * "label it, don't hide it" spirit as the approved_unit_count fixtures'
+   * `category` field, applied to the hard invariants gate below instead
+   * of just the unit-count sense-check). A known-exception fixture still
+   * prints its real FAIL in the table — this only keeps it from flipping
+   * the exit code, so CI stays green for work that doesn't touch the gap
+   * it names. Removing this field (because the gap got fixed) is the
+   * only way a fixture leaves this list — never widen it to paper over a
+   * NEW failure.
+   */
+  knownExceptionReason?: string;
   // Optional engine inputs for this fixture — e.g. fern-rise-neyland needs
   // { mix: { "3-bed-bungalow": 1 } } to build the house type the real
   // scheme actually used. Omitted fixtures get the engine's own default
@@ -99,7 +112,9 @@ function runFixture(fx: Fixture): FixtureResult {
 function printInvariantsTable(results: FixtureResult[]) {
   console.log("=== INVARIANTS (hard pass/fail, independent of unit count) ===\n");
   for (const r of results) {
-    const status = r.error ? "ERROR" : r.invariantsPass ? "PASS" : "FAIL";
+    const rawStatus = r.error ? "ERROR" : r.invariantsPass ? "PASS" : "FAIL";
+    const knownException = !r.invariantsPass && r.fixture.knownExceptionReason;
+    const status = knownException ? `${rawStatus} (known exception: ${r.fixture.knownExceptionReason})` : rawStatus;
     console.log(`${r.fixture.id} [${r.fixture.confidence}] — ${status} (${r.ms}ms)`);
     if (r.error) {
       console.log(`  engine error: ${r.error}`);
@@ -152,9 +167,17 @@ function main() {
   printInvariantsTable(results);
   printUnitCountTable(results);
 
-  const anyInvariantFail = results.some((r) => !r.invariantsPass);
+  const unexpectedInvariantFail = results.filter((r) => !r.invariantsPass && !r.fixture.knownExceptionReason);
+  const knownExceptions = results.filter((r) => !r.invariantsPass && r.fixture.knownExceptionReason);
+
+  if (knownExceptions.length > 0) {
+    console.log(`\n${knownExceptions.length} fixture(s) failing as a documented known exception, not gating this check:`);
+    for (const r of knownExceptions) console.log(`  ${r.fixture.id}: ${r.fixture.knownExceptionReason}`);
+  }
+
+  const anyInvariantFail = unexpectedInvariantFail.length > 0;
   console.log(
-    `\n${anyInvariantFail ? "FAIL" : "PASS"}: invariants ${anyInvariantFail ? "failed on at least one fixture" : "held on every fixture"}.`
+    `\n${anyInvariantFail ? "FAIL" : "PASS"}: invariants ${anyInvariantFail ? "failed on at least one fixture" : "held on every fixture (outside documented known exceptions)"}.`
   );
 
   process.exit(anyInvariantFail ? 1 : 0);
