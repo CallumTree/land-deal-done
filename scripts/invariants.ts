@@ -38,11 +38,21 @@ export function checkInvariants(
   const { plots, roads } = output.layout;
 
   if (plots.length === 0) {
+    // A zero-plot result is only a genuine invariant failure if the
+    // engine gave no reason — per generateLayout.ts's "never a silent
+    // zero" rule, every zero-unit EngineOutput carries
+    // metrics.zeroHomesReason. A reasoned zero (e.g. "Frontage is 9m: a
+    // road and one plot need about 14m.") is the engine correctly
+    // recognising an infeasible site, not a bug — PASS. An unreasoned
+    // zero would mean that rule broke somewhere, which IS a bug — FAIL.
+    const hasReason = !!output.metrics.zeroHomesReason;
     results.push({
       id: "has-plots",
-      label: "Layout produced at least one plot",
-      pass: false,
-      detail: "Zero plots generated — nothing further to check against.",
+      label: "Layout produced at least one plot, or a plain-English reason for zero",
+      pass: hasReason,
+      detail: hasReason
+        ? `Zero plots, with a reason given: "${output.metrics.zeroHomesReason}"`
+        : "Zero plots generated and NO reason was given — this breaks the 'never a silent zero' rule.",
     });
     return results;
   }

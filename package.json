@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test:fixtures": "tsx scripts/run-fixtures.ts",
     "test:scorecard": "tsx scripts/scorecard.ts --check",
+    "test:fuzz-shapes": "tsx scripts/fuzz-shapes.ts --ci",
+    "report:fuzz-shapes": "tsx scripts/fuzz-shapes.ts",
     "report:draft-mode": "tsx scripts/draft-mode-report.ts",
     "report:optimizer": "tsx scripts/optimizer-report.ts",
     "report:perf": "tsx scripts/perf-stability.ts"

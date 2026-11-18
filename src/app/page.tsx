@@ -418,6 +418,10 @@ export default function Home() {
             />
           </div>
 
+          {metrics?.totalUnits === 0 && metrics.zeroHomesReason && (
+            <p className="mt-1.5 text-[11px] leading-snug text-grid-amber">{metrics.zeroHomesReason}</p>
+          )}
+
           <div className="mt-4">
             <div className="mb-1.5 text-xs font-medium text-grid-text">Home sizes</div>
             <div className="flex gap-2">

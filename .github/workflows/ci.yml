@@ -19,3 +19,8 @@ jobs:
       - run: npm run build
       - run: npm run test:fixtures
       - run: npm run test:scorecard
+      # Always prints the full % with homes / cause breakdown (an
+      # informational report, never gates CI on its own) — exits non-
+      # zero ONLY if a returned layout breaks an independently-checked
+      # invariant, which is the one thing here that's a real bug.
+      - run: npm run test:fuzz-shapes

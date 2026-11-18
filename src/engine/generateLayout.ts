@@ -123,11 +123,19 @@ export function generateLayout(
   });
 
   if (!erosionValid) {
-    return finalize({
-      plots: [],
-      roads: [],
-      parkingSpacesBng: [],
-    }, compliance, boundaryAreaM2, inputs, jurisdiction, t0);
+    return finalize(
+      { plots: [], roads: [], parkingSpacesBng: [] },
+      compliance,
+      boundaryAreaM2,
+      inputs,
+      jurisdiction,
+      t0,
+      "none",
+      {
+        cause: "boundary-too-complex",
+        reason: "This boundary shape is too narrow or complex for a buildable area to be worked out.",
+      }
+    );
   }
 
   // Probe step for searching forward past a pinch point (e.g. a cul-de-sac's
@@ -142,16 +150,42 @@ export function generateLayout(
   const roadHalfWidth = rules.ROAD_WIDTH_M / 2;
   const turningHeadSide = rules.TURNING_HEAD_DIAMETER_M;
 
-  /** Does a turningHeadSide × turningHeadSide square, starting at local Y `y`, fit fully inside the ORIGINAL (non-eroded) boundary? Same check the final "Turning head at road end" compliance result uses — defined once, used both to size the placement ceiling below and for that compliance check later, so they can never disagree. */
+  /**
+   * Does a turningHeadSide × turningHeadSide square, starting at local Y
+   * `y`, fit fully inside the ORIGINAL (non-eroded) boundary? Same check
+   * the final "Turning head at road end" compliance result uses —
+   * defined once, used both to size the placement ceiling below and for
+   * that compliance check later, so they can never disagree.
+   *
+   * Tries every X-offset that still keeps the square touching the road's
+   * own centreline (X=0), not just the dead-centre placement — a
+   * turning head is a widened area at a dead-end road's end, and Manual
+   * for Streets doesn't require it to be symmetric about the straight
+   * road behind it; real turning heads commonly bulge into whichever
+   * side the site allows. Checking ONLY the centred placement was a real
+   * bug, not a deliberate simplification: found via scripts/fuzz-
+   * shapes.ts — a site with an entrance placed near one end of its edge
+   * (not a hard requirement that's ever stated anywhere, just a common
+   * real layout) puts the road's X=0 near one edge of the site's actual
+   * width, so the centred 16m window always poked out the narrow side
+   * even when the site had 50+m of width available, just not
+   * symmetrically either side of X=0. This explained 84 of 300 (28%) of
+   * the fuzz harness's zero-home results, by far the largest single
+   * cause — see audit report.
+   */
   function turningHeadFitsAt(y: number): boolean {
     const half = turningHeadSide / 2;
-    const square: BNGPolygon = [
-      [-half, y],
-      [half, y],
-      [half, y + turningHeadSide],
-      [-half, y + turningHeadSide],
-    ];
-    return geo.convexPolygonFullyInside(square, localBoundary);
+    const offsetStep = 2; // coarser than PROBE_STEP_M — exact mm-level positioning doesn't matter here, only whether SOME placement fits
+    for (let offset = -half; offset <= half; offset += offsetStep) {
+      const square: BNGPolygon = [
+        [offset - half, y],
+        [offset + half, y],
+        [offset + half, y + turningHeadSide],
+        [offset - half, y + turningHeadSide],
+      ];
+      if (geo.convexPolygonFullyInside(square, localBoundary)) return true;
+    }
+    return false;
   }
 
   // Reserve room for the turning head up front, rather than placing plots
@@ -497,8 +531,24 @@ export function generateLayout(
 
   const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
 
+  // The road is fixed at local X=0 (it starts exactly at the entrance,
+  // by construction — see toLocal above), so the question a single-sided
+  // fit actually depends on is "how much room is there from X=0 to the
+  // eroded boundary's edge, on whichever side has MORE of it" — not the
+  // boundary's raw left-to-right width. The two can differ hugely when
+  // the entrance sits off-centre along its own edge (common: an entrance
+  // doesn't have to be at an edge's midpoint), which skews most of a
+  // genuinely wide site's width to one side of X=0. Comparing against
+  // raw width here was a real bug, not just an approximation: found via
+  // scripts/fuzz-shapes.ts reporting sites with 200+m of eroded width
+  // still as "frontage too narrow" — the width existed, just not
+  // reachable from the fixed road position without crossing to a side
+  // that had almost none.
   const erodedXs = erodedLocal.map((p) => p[0]);
-  const erodedWidthM = Math.max(...erodedXs) - Math.min(...erodedXs);
+  const erodedLeftExtentM = -Math.min(...erodedXs); // room from X=0 going left (more negative)
+  const erodedRightExtentM = Math.max(...erodedXs); // room from X=0 going right
+  const bestSideExtentM = Math.max(erodedLeftExtentM, erodedRightExtentM);
+  const requiredSideDepthM = roadHalfWidth + smallestTotalDepthM;
   compliance.push({
     id: "topology",
     label: "Road/plot topology used",
@@ -511,8 +561,33 @@ export function generateLayout(
           ? "Double-loading fit nothing; fell back to a single-sided ribbon (left side only)."
           : topology === "single-right"
             ? "Double-loading fit nothing; fell back to a single-sided ribbon (right side only)."
-            : `No topology fits any house type. Eroded buildable width here is ${erodedWidthM.toFixed(1)}m. Even the smallest unit needs road (${rules.ROAD_WIDTH_M}m) + driveway/footprint/garden (${smallestTotalDepthM.toFixed(1)}m) = ${(rules.ROAD_WIDTH_M + smallestTotalDepthM).toFixed(1)}m for a single row — short by ${(rules.ROAD_WIDTH_M + smallestTotalDepthM - erodedWidthM).toFixed(1)}m. Two flanking rows would need ${(rules.ROAD_WIDTH_M + 2 * smallestTotalDepthM).toFixed(1)}m.`,
+            : `No topology fits any house type. The best side has ${bestSideExtentM.toFixed(1)}m of room from the road's centreline. Even the smallest unit needs half the road (${roadHalfWidth.toFixed(1)}m) + driveway/footprint/garden (${smallestTotalDepthM.toFixed(1)}m) = ${requiredSideDepthM.toFixed(1)}m — short by ${(requiredSideDepthM - bestSideExtentM).toFixed(1)}m.`,
   });
+
+  // --- Zero-homes classification: ONLY meaningful when topology === "none"
+  // (every other path places at least one plot). Checked in the order a
+  // fix would actually need to address them — a site with nowhere for a
+  // turning head can't be helped by more frontage width, so that's
+  // checked first, not folded into the width message below it. ---
+  let zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null;
+  if (topology === "none") {
+    if (maxPlotFrontageY <= 0) {
+      zeroHomesInfo = {
+        cause: "turning-head-no-fit",
+        reason: `No room for the ${rules.TURNING_HEAD_DIAMETER_M}m turning circle a dead-end road needs — it doesn't fit anywhere along this boundary.`,
+      };
+    } else if (bestSideExtentM < requiredSideDepthM) {
+      zeroHomesInfo = {
+        cause: "frontage-too-narrow",
+        reason: `Frontage is ${bestSideExtentM.toFixed(0)}m: a road and one plot need about ${requiredSideDepthM.toFixed(0)}m.`,
+      };
+    } else {
+      zeroHomesInfo = {
+        cause: "area-too-small",
+        reason: `Only ${maxPlotFrontageY.toFixed(0)}m of road frontage fits before the turning circle — the smallest home needs about ${smallestFrontageWidthM.toFixed(0)}m.`,
+      };
+    }
+  }
 
   const roadEndY = Math.max(cursorLeft, cursorRight, 0);
   const roadLengthWithHead = roadEndY + turningHeadSide;
@@ -856,7 +931,7 @@ export function generateLayout(
     parkingSpacesBng: parkingSpacesLocal.map(toWorld),
   };
 
-  return finalize(layout, compliance, boundaryAreaM2, inputs, jurisdiction, t0, topology);
+  return finalize(layout, compliance, boundaryAreaM2, inputs, jurisdiction, t0, topology, zeroHomesInfo);
 }
 
 const DEFAULT_HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
@@ -902,7 +977,8 @@ function finalize(
   inputs: EngineInputs,
   jurisdiction: ResolvedJurisdiction,
   t0: number,
-  topologyUsed: "double" | "single-left" | "single-right" | "none" = "none"
+  topologyUsed: "double" | "single-left" | "single-right" | "none" = "none",
+  zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null
 ): EngineOutput {
   const mix: Record<HouseTypeId, number> = {
     "2-bed-terrace": 0,
@@ -1066,6 +1142,8 @@ function finalize(
     affordableValueOverstated,
     residualLandValueIndicative: true,
     topologyUsed,
+    zeroHomesReason: totalUnits === 0 ? (zeroHomesInfo?.reason ?? "No buildable layout could be found for this boundary and entrance.") : null,
+    zeroHomesCause: totalUnits === 0 ? (zeroHomesInfo?.cause ?? null) : null,
   };
 
   compliance.push({

@@ -163,6 +163,23 @@ export interface Metrics {
   residualLandValueIndicative: true;
   /** Which road/plot topology this call actually used. Feed back as the NEXT call's EngineInputs.previousTopologyHint during interactive dragging, to reduce flip-flopping between single-left/single-right when the site is near the double-loaded/single-sided boundary. */
   topologyUsed: "double" | "single-left" | "single-right" | "none";
+  /**
+   * Set WHENEVER totalUnits === 0 — a plain-English, one-line reason this
+   * boundary/entrance placed nothing, in the exact style "Frontage is 9m:
+   * a road and one plot need about 14m." Null whenever totalUnits > 0.
+   * The engine never returns a silent zero: every zero-unit result comes
+   * with this filled in, computed from the same numbers the "topology"
+   * and "boundary-offset" ComplianceCheck entries already report in more
+   * technical detail — this is the plain-English summary of the same
+   * finding, not a separate guess.
+   */
+  zeroHomesReason: string | null;
+  /**
+   * Machine-readable version of zeroHomesReason, for grouping/reporting
+   * (see scripts/fuzz-shapes.ts) rather than string-matching the prose.
+   * Null whenever zeroHomesReason is null.
+   */
+  zeroHomesCause: "boundary-too-complex" | "turning-head-no-fit" | "frontage-too-narrow" | "area-too-small" | null;
 }
 
 export interface ComplianceCheck {
