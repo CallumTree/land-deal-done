@@ -23,8 +23,8 @@ function loadFixtures(): Fixture[] {
     .map((f) => JSON.parse(readFileSync(join(FIXTURES_DIR, f), "utf8")) as Fixture);
 }
 
-function summarizeWinner(r: ReturnType<typeof optimizeMix>, key: "mostHomes" | "mostValue" | "balanced"): string {
-  const w = r[key];
+function summarizeWinner(r: ReturnType<typeof optimizeMix>): string {
+  const w = r.best;
   if (!w) return "—";
   return `${w.candidate.label} (${w.output.metrics.totalUnits}u, RLV £${Math.round(w.output.metrics.residualLandValue).toLocaleString()})`;
 }
@@ -36,11 +36,7 @@ function main() {
     const run1 = optimizeMix(fx.boundaryBng, fx.entranceBng, fx.inputs ?? {}, { timeBudgetMs: 1000 });
     const run2 = optimizeMix(fx.boundaryBng, fx.entranceBng, fx.inputs ?? {}, { timeBudgetMs: 1000 });
 
-    const deterministic =
-      run1.compliantCount === run2.compliantCount &&
-      run1.mostHomes?.candidate.label === run2.mostHomes?.candidate.label &&
-      run1.mostValue?.candidate.label === run2.mostValue?.candidate.label &&
-      run1.balanced?.candidate.label === run2.balanced?.candidate.label;
+    const deterministic = run1.compliantCount === run2.compliantCount && run1.best?.candidate.label === run2.best?.candidate.label;
 
     console.log(`\n=== ${fx.id} ===`);
     console.log(
@@ -49,14 +45,12 @@ function main() {
     if (run1.failureExplanation) {
       console.log(`Nothing compliant: ${run1.failureExplanation}`);
     } else {
-      console.log(`Most homes:  ${summarizeWinner(run1, "mostHomes")}`);
-      console.log(`Most value:  ${summarizeWinner(run1, "mostValue")}`);
-      console.log(`Balanced:    ${summarizeWinner(run1, "balanced")}`);
+      console.log(`Best (within council policy): ${summarizeWinner(run1)}`);
     }
     console.log(`Deterministic across two runs: ${deterministic ? "YES" : "NO — see below"}`);
     if (!deterministic) {
-      console.log(`  run1: homes=${run1.mostHomes?.candidate.label} value=${run1.mostValue?.candidate.label} balanced=${run1.balanced?.candidate.label}`);
-      console.log(`  run2: homes=${run2.mostHomes?.candidate.label} value=${run2.mostValue?.candidate.label} balanced=${run2.balanced?.candidate.label}`);
+      console.log(`  run1: best=${run1.best?.candidate.label}`);
+      console.log(`  run2: best=${run2.best?.candidate.label}`);
     }
   }
 }

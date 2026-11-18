@@ -389,31 +389,24 @@ export default function Home() {
               {optimizer.result?.failureExplanation && (
                 <p className="text-[11px] text-grid-amber">{optimizer.result.failureExplanation}</p>
               )}
-              {optimizer.result &&
-                (["mostHomes", "mostValue", "balanced"] as const).map((key) => {
-                  const ranked = optimizer.result![key];
-                  if (!ranked) return null;
-                  const copy = MIX_CARD_COPY[key];
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => mix.applyMixCandidate(ranked.candidate)}
-                      className="flex w-full items-center justify-between rounded-xl border border-grid-border bg-panel/60 px-3 py-2 text-left hover:border-grid-violet"
-                    >
-                      <span>
-                        <span className="block text-xs font-semibold text-grid-text">{copy.title}</span>
-                        <span className="block text-[11px] text-grid-muted">
-                          {describeSizeMix(ranked.candidate.sizeMix, ranked.candidate.includeBungalows)}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <span className="block text-sm font-bold text-grid-cyan">{ranked.output.metrics.totalUnits} homes</span>
-                        <span className="block text-[11px] text-grid-lime">{gbp(ranked.output.metrics.residualLandValue)}</span>
-                      </span>
-                    </button>
-                  );
-                })}
+              {optimizer.result?.best && (
+                <button
+                  type="button"
+                  onClick={() => mix.applyMixCandidate(optimizer.result!.best!.candidate)}
+                  className="flex w-full items-center justify-between rounded-xl border border-grid-border bg-panel/60 px-3 py-2 text-left hover:border-grid-violet"
+                >
+                  <span>
+                    <span className="block text-xs font-semibold text-grid-text">{MIX_CARD_COPY.best.title}</span>
+                    <span className="block text-[11px] text-grid-muted">
+                      {describeSizeMix(optimizer.result.best.candidate.sizeMix, optimizer.result.best.candidate.includeBungalows)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="block text-sm font-bold text-grid-cyan">{optimizer.result.best.output.metrics.totalUnits} homes</span>
+                    <span className="block text-[11px] text-grid-lime">{gbp(optimizer.result.best.output.metrics.residualLandValue)}</span>
+                  </span>
+                </button>
+              )}
             </div>
           )}
 

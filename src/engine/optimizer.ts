@@ -1,10 +1,30 @@
-// Auto mix optimiser: searches candidate size-tier mixes within a time
-// budget, discards anything that breaks a hard rule (any `fail` in the
-// engine's own compliance output), and ranks what's left three ways —
-// "Most homes" (totalUnits), "Most value" (residualLandValue) and
-// "Balanced" (see BALANCED_WEIGHT below). Pure, deterministic, no DOM —
-// lives beside generateLayout.ts for the same reason: it's meant to run
-// inside the same Web Worker, not on the main thread.
+// Auto mix optimiser: searches a small set of size-tier mixes ANCHORED ON
+// the council's own sourced dwelling-mix policy (a jurisdiction's
+// `defaultAutoSizeMixPercent` — the exact evidence-based split
+// generateLayout.ts itself falls back to as "Auto", see its own
+// resolveEffectiveHouseMix), discards anything that breaks a hard rule
+// (any `fail` in the engine's own compliance output), and picks the one
+// surviving candidate with the highest residualLandValue. Pure,
+// deterministic, no DOM — lives beside generateLayout.ts for the same
+// reason: it's meant to run inside the same Web Worker, not on the main
+// thread.
+//
+// Single objective, by design (first-principles audit, see CLAUDE.md
+// "challenge every screen and every click"): a prior version searched the
+// mix space UNCONSTRAINED — every pure single-tier mix, all 24
+// permutations of a [3,2,1,0] weight sweep, and 40 extra seeded-random
+// mixes — and ranked the survivors three ways ("Most homes" / "Most
+// value" / "Balanced"), handing the user three philosophies to choose
+// between with no steer on which is actually sound planning. Almost none
+// of that unconstrained space reflects what a real LPA's dwelling-mix
+// policy would accept; offering "All XL" or a random skew as a selectable
+// "winner" was offering non-starters. Collapsing to "maximise residual
+// land value among mixes within the council's own policy band" removes
+// that false choice: there's one defensible objective (RLV is what a
+// seller/developer actually cares about), and the search only ever
+// considers mixes a real planning officer would recognise as close to
+// the adopted evidence base, not a wide search of mixes nobody would
+// approve.
 //
 // "Layout parameters such as road side/orientation" (mentioned in the
 // brief) aren't independently searchable in this v0 engine: topology
@@ -16,6 +36,7 @@
 // dimension that doesn't exist yet.
 
 import { generateLayout } from "./generateLayout";
+import { resolveJurisdiction } from "../rules/jurisdictions";
 import type { BNGPoint, BNGPolygon, EngineInputs, EngineOutput } from "./types";
 import { SIZE_TIERS, type SizeTier } from "./sizeTiers";
 
@@ -38,74 +59,63 @@ export interface OptimizerResult {
   timedOut: boolean;
   /** How many of candidatesTried were evaluated at draft quality instead of full, because the projected cost of finishing the list at full quality exceeded the remaining time budget. 0 on a fast site — the adaptive switch-over never triggers there. */
   draftFallbackCount: number;
-  mostHomes: RankedCandidate | null;
-  mostValue: RankedCandidate | null;
-  balanced: RankedCandidate | null;
-  /** Plain-English explanation, set ONLY when every candidate tried was non-compliant (mostHomes/mostValue/balanced are all null). */
+  /** The compliant, policy-anchored candidate with the highest residualLandValue — the optimiser's one objective. Null only when every candidate tried was non-compliant (see failureExplanation). */
+  best: RankedCandidate | null;
+  /** Plain-English explanation, set ONLY when every candidate tried was non-compliant (best is null). */
   failureExplanation: string | null;
 }
 
-/** Weight given to normalized totalUnits vs normalized residualLandValue in the "Balanced" ranking. 0.5/0.5 — a modelling choice, not a sourced figure. */
-const BALANCED_UNITS_WEIGHT = 0.5;
-
-function mulberry32(seed: number): () => number {
-  let a = seed | 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/**
+ * How far a candidate may stray from the council's policy mix, in
+ * percentage points moved from one tier to an adjacent one. Small enough
+ * that every candidate stays recognisably close to the adopted evidence
+ * base — this is a local search around policy, not a free search of the
+ * mix space (see the module comment above for why that distinction
+ * matters). Not a sourced figure itself — a modelling choice for how wide
+ * a "still within policy" band is read as.
+ */
+const POLICY_SHIFT_PERCENT = 10;
 
 /**
- * A fixed, deterministic candidate list — no Math.random, a seeded PRNG
- * only for the "extra coverage" tail — so the SAME inputs always produce
- * the SAME candidate order and (modulo the time budget cutting the list
- * short at a different point under CPU load) the same winners.
+ * Builds the policy-anchored search list: the council's own Auto mix
+ * (percent weights — see resolveEffectiveHouseMix's identical fallback in
+ * generateLayout.ts, kept in lockstep with it here rather than
+ * re-deriving a second notion of "the default mix"), plus one shift of
+ * POLICY_SHIFT_PERCENT between each pair of ADJACENT size tiers in both
+ * directions (Small<->Medium, Medium<->Large, Large<->XL) — covering
+ * "a bit more of the next tier up/down" without wandering into a mix no
+ * real LPA mix policy resembles. Each mix is also tried with bungalows
+ * included when it carries any Medium weight, since that's a free (non-
+ * mix-changing) toggle, not a different policy position. A fixed,
+ * deterministic list — no randomness, no unconstrained sweep — so the
+ * same inputs always produce the same candidates in the same order.
  */
-function buildCandidateList(includeBungalowOption: boolean): MixCandidate[] {
+function buildCandidateList(policyMixPercent: Record<SizeTier, number>): MixCandidate[] {
   const candidates: MixCandidate[] = [];
   const push = (label: string, sizeMix: Partial<Record<SizeTier, number>>, includeBungalows: boolean) =>
     candidates.push({ label, sizeMix, includeBungalows });
 
-  // 1. Auto (equal weight here — the real jurisdiction-sourced Auto
-  //    default is already what generateLayout falls back to when no
-  //    mix/sizeMix is given at all; included explicitly so it's always
-  //    one of the candidates compared against, not just an implicit default).
-  push("Auto (equal tiers)", { Small: 1, Medium: 1, Large: 1, XL: 1 }, false);
-  if (includeBungalowOption) push("Auto (equal tiers, with bungalows)", { Small: 1, Medium: 1, Large: 1, XL: 1 }, true);
-
-  // 2. Pure single-tier candidates.
-  for (const tier of SIZE_TIERS) {
-    push(`All ${tier}`, { [tier]: 1 }, false);
-  }
-  if (includeBungalowOption) push("All Medium, with bungalows", { Medium: 1 }, true);
-
-  // 3. A fixed set of skewed combinations — every permutation of weights
-  //    [3,2,1,0] across the 4 tiers (24 permutations), covering "mostly
-  //    Small", "mostly XL", etc. without an unbounded combinatorial blow-up.
-  const weights = [3, 2, 1, 0];
-  const permute = (arr: number[]): number[][] => {
-    if (arr.length <= 1) return [arr];
-    const out: number[][] = [];
-    for (let i = 0; i < arr.length; i++) {
-      const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
-      for (const p of permute(rest)) out.push([arr[i], ...p]);
-    }
-    return out;
+  const tryBothBungalowOptions = (label: string, sizeMix: Partial<Record<SizeTier, number>>) => {
+    push(label, sizeMix, false);
+    if ((sizeMix.Medium ?? 0) > 0) push(`${label}, with bungalows`, sizeMix, true);
   };
-  for (const perm of permute(weights)) {
-    const sizeMix = Object.fromEntries(SIZE_TIERS.map((t, i) => [t, perm[i]])) as Partial<Record<SizeTier, number>>;
-    push(`Skewed ${perm.join("/")} (S/M/L/XL)`, sizeMix, false);
-  }
 
-  // 4. Deterministic (seeded) extra coverage, in case the time budget
-  //    allows more than the ~30 fixed candidates above.
-  const rand = mulberry32(1337);
-  for (let i = 0; i < 40; i++) {
-    const sizeMix = Object.fromEntries(SIZE_TIERS.map((t) => [t, Math.round(rand() * 3)])) as Partial<Record<SizeTier, number>>;
-    push(`Random seed-1337 #${i}`, sizeMix, includeBungalowOption && rand() > 0.5);
+  tryBothBungalowOptions("Council policy mix", { ...policyMixPercent });
+
+  for (let i = 0; i < SIZE_TIERS.length - 1; i++) {
+    const from = SIZE_TIERS[i];
+    const to = SIZE_TIERS[i + 1];
+    for (const [giver, taker] of [
+      [from, to],
+      [to, from],
+    ] as const) {
+      if (policyMixPercent[giver] <= 0) continue; // nothing to shift from an already-zero tier
+      const shift = Math.min(POLICY_SHIFT_PERCENT, policyMixPercent[giver]);
+      const sizeMix: Partial<Record<SizeTier, number>> = { ...policyMixPercent };
+      sizeMix[giver] = policyMixPercent[giver] - shift;
+      sizeMix[taker] = (policyMixPercent[taker] ?? 0) + shift;
+      tryBothBungalowOptions(`Policy mix, +${shift}% ${taker} / -${shift}% ${giver}`, sizeMix);
+    }
   }
 
   return candidates;
@@ -137,7 +147,16 @@ export function optimizeMix(
   const timeBudgetMs = opts.timeBudgetMs ?? 1000;
   const start = performance.now();
 
-  const candidates = buildCandidateList(true);
+  // Same fallback generateLayout.ts's resolveEffectiveHouseMix uses for
+  // "Auto": the jurisdiction's own sourced dwelling-mix evidence, or an
+  // equal Small/Medium/Large split (XL excluded) if no local pack
+  // resolved at all.
+  const jurisdiction = resolveJurisdiction(baseInputs.localAuthority);
+  const policyMixPercent: Record<SizeTier, number> = jurisdiction.localAppraisal
+    ? (Object.fromEntries(SIZE_TIERS.map((t) => [t, jurisdiction.localAppraisal!.defaultAutoSizeMixPercent[t].value])) as Record<SizeTier, number>)
+    : { Small: 1, Medium: 1, Large: 1, XL: 0 };
+
+  const candidates = buildCandidateList(policyMixPercent);
   const compliant: RankedCandidate[] = [];
   const failureCounts = new Map<string, number>();
   let candidatesTried = 0;
@@ -198,26 +217,10 @@ export function optimizeMix(
     const failureExplanation = top
       ? `No compliant layout found among ${candidatesTried} mix${candidatesTried === 1 ? "" : "es"} tried${timedOut ? " (time budget ran out)" : ""}. The most common reason: "${top[0]}" (${top[1]}/${candidatesTried} candidates). Try a different entrance point or a less ambitious mix.`
       : `No compliant layout found among ${candidatesTried} mixes tried — every candidate produced zero buildable units. This site/entrance combination may be too small or too awkwardly shaped for any mix v0 can place.`;
-    return { candidatesTried, compliantCount: 0, elapsedMs, timedOut, draftFallbackCount, mostHomes: null, mostValue: null, balanced: null, failureExplanation };
+    return { candidatesTried, compliantCount: 0, elapsedMs, timedOut, draftFallbackCount, best: null, failureExplanation };
   }
 
-  const mostHomes = compliant.reduce((best, c) => (c.output.metrics.totalUnits > best.output.metrics.totalUnits ? c : best));
-  const mostValue = compliant.reduce((best, c) => (c.output.metrics.residualLandValue > best.output.metrics.residualLandValue ? c : best));
-
-  const maxUnits = Math.max(...compliant.map((c) => c.output.metrics.totalUnits));
-  const minUnits = Math.min(...compliant.map((c) => c.output.metrics.totalUnits));
-  const maxRlv = Math.max(...compliant.map((c) => c.output.metrics.residualLandValue));
-  const minRlv = Math.min(...compliant.map((c) => c.output.metrics.residualLandValue));
-  const norm = (v: number, lo: number, hi: number) => (hi > lo ? (v - lo) / (hi - lo) : 1);
-  const balanced = compliant.reduce((best, c) => {
-    const score =
-      BALANCED_UNITS_WEIGHT * norm(c.output.metrics.totalUnits, minUnits, maxUnits) +
-      (1 - BALANCED_UNITS_WEIGHT) * norm(c.output.metrics.residualLandValue, minRlv, maxRlv);
-    const bestScore =
-      BALANCED_UNITS_WEIGHT * norm(best.output.metrics.totalUnits, minUnits, maxUnits) +
-      (1 - BALANCED_UNITS_WEIGHT) * norm(best.output.metrics.residualLandValue, minRlv, maxRlv);
-    return score > bestScore ? c : best;
-  });
+  const best = compliant.reduce((b, c) => (c.output.metrics.residualLandValue > b.output.metrics.residualLandValue ? c : b));
 
   return {
     candidatesTried,
@@ -225,9 +228,7 @@ export function optimizeMix(
     elapsedMs,
     timedOut,
     draftFallbackCount,
-    mostHomes,
-    mostValue,
-    balanced,
+    best,
     failureExplanation: null,
   };
 }

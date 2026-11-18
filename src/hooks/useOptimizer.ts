@@ -2,8 +2,8 @@
 
 // Runs the auto mix optimiser (src/engine/optimizer.ts) on demand via the
 // engine worker — a one-shot "Run" action, not something driven live off
-// every input change like useLiveLayout. Exposes the three ranked cards
-// (mostHomes/mostValue/balanced) plus the plain-English failure case.
+// every input change like useLiveLayout. Exposes the single best-mix
+// result plus the plain-English failure case.
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { BNGPoint, BNGPolygon, EngineInputs } from "@/engine/types";

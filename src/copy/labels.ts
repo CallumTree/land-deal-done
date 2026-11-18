@@ -218,11 +218,9 @@ export function describeSizeMix(sizeMix: Partial<Record<SizeTier, number>>, incl
   return `${parts.join(", ")}${bungalowSuffix}`;
 }
 
-/** Plain-English title + one-line explanation for each of the optimiser's three ranked cards — the card KIND, not any specific candidate within it. */
-export const MIX_CARD_COPY: Record<"mostHomes" | "mostValue" | "balanced", { title: string; explain: string }> = {
-  mostHomes: { title: "Most homes", explain: "The compliant mix that fits the greatest number of homes on this site." },
-  mostValue: { title: "Most value", explain: "The compliant mix with the highest residual land value." },
-  balanced: { title: "Balanced", explain: "A compliant mix balancing homes and value roughly evenly." },
+/** Plain-English title + one-line explanation for the optimiser's single result card. */
+export const MIX_CARD_COPY = {
+  best: { title: "Best mix within council policy", explain: "The compliant mix, close to the council's own evidence-based dwelling mix, with the highest residual land value." },
 };
 
 /** Bungalow tier note, for wherever the "Include bungalows" toggle is shown — explains in one line why it only ever affects the Medium (3-bed) tier. */
