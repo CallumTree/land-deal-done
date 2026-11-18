@@ -166,6 +166,13 @@ export const COMPLIANCE_COPY: Record<string, ComplianceCopyEntry> = {
       warn: "Affordable-housing value is approximated and likely overstated — treat the £ figures with caution.",
     },
   },
+  "density-minimum": {
+    title: "Minimum density",
+    copy: {
+      pass: "Meets (or is exempt from) this council's minimum-density policy.",
+      warn: "Below the council's minimum density, or the policy couldn't be checked — see the detail below.",
+    },
+  },
 };
 
 /** Looks up the plain-English copy for a check, falling back to the engine's own label/detail if this dictionary hasn't caught up with a new id — never silently blank. */

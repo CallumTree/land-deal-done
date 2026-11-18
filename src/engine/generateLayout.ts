@@ -1543,6 +1543,54 @@ function finalize(
       : `No local pack found for "${jurisdiction.localAuthority}" — GDV £${jurisdiction.nationalAppraisal.salesPricePerSqmPlaceholder.value}/m² and build cost £${jurisdiction.nationalAppraisal.buildCostPerSqmPlaceholder.value}/m² are UNSOURCED national placeholders, not real figures for this site.`,
   });
 
+  if (jurisdiction.localPlanning) {
+    const localPlanning = jurisdiction.localPlanning;
+    const boundaryAreaHa = boundaryAreaM2 / 10000;
+    const appliesAboveHa = localPlanning.densityAppliesAboveHectares.value;
+    if (boundaryAreaHa < appliesAboveHa) {
+      compliance.push({
+        id: "density-minimum",
+        label: "Minimum gross density",
+        status: "pass",
+        ruleRef: localPlanning.densityAppliesAboveHectares.source,
+        detail: `Site is ${boundaryAreaHa.toFixed(2)}ha — below ${localPlanning.councilName}'s ${appliesAboveHa}ha threshold for its minimum-density policy to apply.`,
+      });
+    } else if (!inputs.settlementTier) {
+      const tiers = Object.entries(localPlanning.minGrossDensityDphByTier)
+        .map(([tier, d]) => `${d.value} dph in ${tier}`)
+        .join(", ");
+      compliance.push({
+        id: "density-minimum",
+        label: "Minimum gross density",
+        status: "warn",
+        ruleRef: `${localPlanning.councilName} minimum-density policy — settlement tier not set`,
+        detail: `Settlement tier not specified, so ${localPlanning.councilName}'s minimum gross density policy (${tiers}) couldn't be checked against this layout's ${grossDensityDph.toFixed(1)} dwellings/hectare.`,
+      });
+    } else {
+      const tierRule = localPlanning.minGrossDensityDphByTier[inputs.settlementTier];
+      if (!tierRule) {
+        compliance.push({
+          id: "density-minimum",
+          label: "Minimum gross density",
+          status: "warn",
+          ruleRef: `${localPlanning.councilName} minimum-density policy`,
+          detail: `Settlement tier "${inputs.settlementTier}" isn't one ${localPlanning.councilName} has a minimum-density figure for (known tiers: ${Object.keys(localPlanning.minGrossDensityDphByTier).join(", ")}) — density policy not checked.`,
+        });
+      } else {
+        const meetsMinimum = grossDensityDph >= tierRule.value;
+        compliance.push({
+          id: "density-minimum",
+          label: "Minimum gross density",
+          status: meetsMinimum ? "pass" : "warn",
+          ruleRef: tierRule.source,
+          detail: meetsMinimum
+            ? `This layout is ${grossDensityDph.toFixed(1)} dwellings/hectare gross — meets ${localPlanning.councilName}'s minimum of ${tierRule.value} dwellings/hectare for "${inputs.settlementTier}".`
+            : `This layout is ${grossDensityDph.toFixed(1)} dwellings/hectare gross — below ${localPlanning.councilName}'s minimum of ${tierRule.value} dwellings/hectare for "${inputs.settlementTier}".`,
+        });
+      }
+    }
+  }
+
   if (affordableUnits > 0) {
     compliance.push({
       id: "acg-approximation",

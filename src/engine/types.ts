@@ -64,6 +64,16 @@ export interface EngineInputs {
   localAuthority?: string;
   /** Local market value band (1=lowest..4=highest), a council-specific concept (see src/rules/jurisdictions/types.ts). Defaults to the resolved local pack's own defaultMarketBand. */
   marketBand?: MarketBand;
+  /**
+   * Settlement tier for the resolved jurisdiction's minimum-density policy
+   * (LocalPlanningRules.minGrossDensityDphByTier — e.g. "town",
+   * "service centre", "service village" for Pembrokeshire). NOT the same
+   * concept as a house-size tier (see sizeTiers.ts). Left unset by
+   * default: the engine has no settlement-tier lookup of its own, so an
+   * unset tier produces a plain-English "couldn't check" compliance
+   * warning rather than silently skipping the rule or guessing a tier.
+   */
+  settlementTier?: string;
   /** £ per m² used to estimate open-market GDV, overriding the resolved jurisdiction's own sourced default for this market band. */
   gdvPerSqm?: number;
   /** £ per m² used to estimate build cost, overriding the resolved jurisdiction's own sourced default for this scheme-size band. */

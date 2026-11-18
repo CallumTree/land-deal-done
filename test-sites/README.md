@@ -5,19 +5,21 @@ run via `npm run test:fixtures`).
 
 ## Honesty flag — read this first
 
-Two fixtures are real, LPA-approved schemes: **pond-bridge-johnston** and
-**fern-rise-neyland**, `confidence: "approved_unit_count"`. Their
-`expectedUnits` come from the planning decision documents themselves, not
-a guess — see "Real benchmark fixtures" below for exactly where each
-number comes from and the tracing method/error margin for each boundary.
+Three fixtures are real, LPA-approved schemes: **pond-bridge-johnston**,
+**fern-rise-neyland** and **meads-priory-road-milford-haven**,
+`confidence: "approved_unit_count"`. Their `expectedUnits` come from the
+planning decision documents themselves, not a guess — see "Real benchmark
+fixtures" below for exactly where each number comes from and the tracing
+method/error margin for each boundary.
 
-The other 5 are synthetic BNG polygons covering 5 shape categories (clean
-rectangle, cul-de-sac neck, L-shaped/notched, narrow-frontage ribbon,
-larger greenfield), with `expectedUnits` derived from a single flat
-density assumption (30 dwellings/hectare net), not from an approved
-scheme. `confidence` is `"sense_check"` on every one of these — a "pass"
-only means "the engine's output is in the same ballpark as a flat density
-guess for this shape," not validation that the engine is right.
+The other fixtures are synthetic BNG polygons covering several shape
+categories (clean rectangle, cul-de-sac neck, L-shaped/notched,
+narrow-frontage ribbon, larger greenfield, frontage-ribbon infill), with
+`expectedUnits` derived from a single flat density assumption (30
+dwellings/hectare net), not from an approved scheme. `confidence` is
+`"sense_check"` on every one of these — a "pass" only means "the engine's
+output is in the same ballpark as a flat density guess for this shape,"
+not validation that the engine is right.
 
 In both cases: don't read more into a pass than the confidence level
 supports, and never tune the engine or a fixture's boundary/inputs to
@@ -167,6 +169,105 @@ Neyland, Pembrokeshire. Ref 04/0235/PA, decided 17/08/2004.
   detached/bungalow plots) belongs in a future stage as a general
   capability improvement, justified on its own terms — not as a reaction
   to this one result.
+
+### meads-priory-road-milford-haven
+
+89 dwellings, Land south of the Meads, Priory Road, Milford Haven, SA73
+2BS. Reserved matters approval 25/0074/PA (decided 02/07/2026), under
+outline permission 12/0685/PA (granted 08/11/2013, varied twice since:
+16/0409/PA 2018, 24/0665/PA 2026). Applicant ateb (a registered social
+landlord, 100% affordable scheme). Source documents are in
+`/test-sites/source/meads-priory-road/` — the delegated decision report
+and scanned decision notice in full, plus the two drawings used for
+boundary tracing, saved as rendered images rather than their original
+PDFs to keep this repo's size down (the other ~7 consultation-response/
+amendment/superseded-document PDFs reviewed for this fixture were not
+committed — none of them added boundary or unit-count information beyond
+what's in the two documents that are).
+
+- **Unit count (89 total; 59 is what this fixture tests against):**
+  read directly off the 25/0074/PA delegated decision report's own §8.2
+  mix breakdown: 30 one-bed flats (2-3 storey blocks) + 4 one-bed
+  bungalows + 6 two-bed bungalows + 27 two-bed houses + 18 three-bed
+  houses + 2 four-bed houses + 2 five-bed houses = 89. `expectedUnits` is
+  set to **59** (the houses/bungalows only), not 89 — v0's engine has no
+  flat-block topology at all, so scoring it against the full 89 would
+  misreport a structural scope gap ("this engine can't do flats yet") as
+  an accuracy failure. The scorecard/fixture harness's "ERROR%" for this
+  fixture should always be read as "engine houses-only vs approved
+  houses-only," never against the scheme's real total.
+- **Entrance (north-east, off Priory Road):** confirmed in the delegated
+  report's Highways section — "access is proposed from the C3107 known
+  as Priory Road... to the north east of the site" and "both [estate
+  roads] link with 'road 1' which provides access directly from Priory
+  Road to the north east of the site." Placed at the midpoint of the
+  traced boundary's two north-easternmost vertices.
+- **Boundary tracing method:** no standalone dimensioned site-location
+  plan was available among the documents reviewed (the decision notice's
+  approved-plans list names "S-01 — Topo site plan & OS map location
+  plan" and "P02A — Proposed Site Plan," but neither was present in what
+  was reviewed for this fixture). The *shape* was instead traced from
+  the red boundary line on a geotechnical "Exploratory Hole Location
+  Plan" (Listers Geo, drawn against a real OS base map but marked "NTS —
+  Not To Scale," i.e. no usable scale bar) — see
+  `boundary-tracing-source_ListersGeo_exploratory-hole-plan.png`. The
+  red line was isolated programmatically (colour-threshold + connected-
+  component filtering to separate it from the trial-pit markers
+  overlaid on it) and its vertices read off by eye from the isolated
+  trace, cross-checked for overall shape and access-road position
+  against the Hydrock drainage strategy plan (P02, the version actually
+  approved per the decision notice — `approved_P02_Hydrock_drainage-
+  strategy-plan.png`) and an earlier Roger Casey Associates drainage
+  plan, both of which show the same elongated shape with a zigzag
+  notch where the site boundary runs along Priory Lodge Close. Because
+  nothing in the reviewed documents gave a verifiable scale, the traced
+  shape was scaled uniformly (preserving all angles and proportions) so
+  its area matches the delegated report's own stated **2.93ha** exactly
+  — the *shape* is a real trace, the *absolute size* is pinned to a
+  sourced figure, not to a ruler read against an unscaled drawing.
+  Orientation is assumed north-up (standard UK drawing convention); no
+  legible compass symbol was confirmed on the geotechnical plan at the
+  resolution available.
+- **Grid reference anchor:** postcodes.io's own BNG easting/northing for
+  the (terminated, 2016) postcode SA73 2BS — E190251, N206514 — applied
+  as the traced polygon's centroid. This is the postcode's own area
+  centroid, not a surveyed site corner; a cross-check against a live
+  nearby postcode (SA73 2AA, admin ward "Milford: Central") landed
+  about 520m away, consistent with both being in the same small part of
+  Milford Haven.
+- **Error margin: large on absolute position and area, better on
+  relative shape.** The same honesty applied to pond-bridge-johnston's
+  tracing applies here, probably more so (no scale bar at all, vs a
+  stated-but-unverifiable ratio there): treat vertex positions as
+  indicative, each potentially off by tens of metres, and the whole
+  site's real-world position as approximate (anchored to a postcode
+  centroid, not a survey point). The *shape* — elongated, narrow access
+  neck at the north-east, the zigzag southern notch against Priory
+  Lodge Close — is corroborated across three independent source
+  drawings and is the most confident part of this trace.
+- **Current engine result: 102 units built vs 59 approved houses/
+  bungalows (72.9% OVER, not under).** Not a tracing-error artifact in
+  the direction that would matter here — v0's Auto mix defaults to the
+  cheapest-to-pack type (2-bed-terrace) and places every one of its 102
+  units as that single type, wall-to-wall along a double-loaded estate
+  road, with no bungalows, no larger house types and no flats at all.
+  The real scheme's mix (bungalows, varied house sizes, 30 flats this
+  engine can't model) uses the site far less densely per net
+  developable m² than a maximum-pack terrace run does. Same root cause
+  already documented for fern-rise-neyland (`SIDE_GAP_M`/packing
+  tighter than a real varied-mix scheme), now showing up at a much
+  larger scale. Left unfixed here for the same reason: tuning packing
+  rules to chase one fixture's number isn't in scope for this check.
+- **Gross density vs Pembrokeshire's GN.26/GN13 minimum:** the approved
+  scheme is 2.93ha at 89 dwellings = 30.3 dph gross, just above the
+  council's stated 30 dph minimum for Towns. The engine's own output
+  here (102 houses-only, no flats, same 2.93ha) comes out at 34.8 dph
+  gross — also above the minimum, so this specific fixture's own result
+  doesn't exercise the WARN path of the new density-minimum compliance
+  check (see the main report for how that was verified separately,
+  since it wasn't exercised by this fixture's own numbers). `inputs`
+  sets `settlementTier: "town"`, sourced from the delegated report's own
+  description of the site as being subject to the "Towns" density rate.
 
 ## Pass/fail tolerance
 
