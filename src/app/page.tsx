@@ -51,12 +51,19 @@ function unionAffectedPlotIds(compliance: ComplianceCheck[]): Set<string> {
   return ids;
 }
 
-const SIDE_GAP_TIERS = ["tighter", "typical", "roomier"] as const;
-const SIDE_GAP_LABEL: Record<(typeof SIDE_GAP_TIERS)[number], string> = {
-  tighter: "Tighter",
-  typical: "Typical",
-  roomier: "Roomier",
-};
+// Audit: was a user-facing "Plot spacing" control (Tighter/Typical/
+// Roomier, see EngineInputs.sideGapTier). Hidden per CLAUDE.md's "default
+// view dead simple... challenge every screen and every click" — a
+// first-time developer has no way to judge between three spacing
+// presets, two of which (typical/roomier) are this engine's own unsourced
+// modelling choices rather than a planning standard (see rules.ts's
+// SIDE_GAP_TIER_M comment). Fixed at "tighter" — the ONE sourced value
+// (the documented ~1m fire/visual-separation convention) and the same
+// default this already was, so hiding the control changes no behaviour.
+// The engine still accepts all three tiers via EngineInputs.sideGapTier
+// for a future "advanced" surface — only the front-and-centre control is
+// removed.
+const FIXED_SIDE_GAP_TIER = "tighter" as const;
 
 export default function Home() {
   const [boundary, setBoundary] = useState<BNGPolygon>([]);
@@ -87,8 +94,7 @@ export default function Home() {
   }, []);
 
   const [marketBand] = useState<MarketBand>(2);
-  const [sideGapTier, setSideGapTier] = useState<(typeof SIDE_GAP_TIERS)[number]>("tighter");
-  // Defaults to "peek" (not "half") so the map stays at least ~60% of
+// Defaults to "peek" (not "half") so the map stays at least ~60% of
   // the screen height at rest, per the brief's "always the hero" — the
   // user can drag/tap it up to half or full themselves.
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("peek");
@@ -107,9 +113,9 @@ export default function Home() {
       includeBungalows: mix.engineMixFields.includeBungalows,
       localAuthority: "pembrokeshire",
       marketBand,
-      sideGapTier,
+      sideGapTier: FIXED_SIDE_GAP_TIER,
     }),
-    [mix.engineMixFields, marketBand, sideGapTier]
+    [mix.engineMixFields, marketBand]
   );
   const liveLayout = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs, isDragging });
 
@@ -190,9 +196,9 @@ export default function Home() {
 
   const handleRunOptimizer = useCallback(() => {
     if (!entrance || boundary.length < 3) return;
-    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier, quality: "full" };
+    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full" };
     optimizer.run(boundary, entrance, inputs);
-  }, [boundary, entrance, marketBand, sideGapTier, optimizer]);
+  }, [boundary, entrance, marketBand, optimizer]);
 
   const handleToggleAuto = useCallback(() => {
     const turningOn = mix.mode !== "auto";
@@ -409,25 +415,6 @@ export default function Home() {
               )}
             </div>
           )}
-
-          <div className="mt-4">
-            <div className="mb-1.5 text-xs font-medium text-grid-text">Plot spacing</div>
-            <div className="flex gap-1.5">
-              {SIDE_GAP_TIERS.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  aria-pressed={sideGapTier === t}
-                  onClick={() => setSideGapTier(t)}
-                  className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] transition-colors ${
-                    sideGapTier === t ? "border-grid-cyan bg-grid-cyan/15 font-bold text-grid-cyan" : "border-grid-border text-grid-muted"
-                  }`}
-                >
-                  {SIDE_GAP_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <div className="mt-4 flex items-center gap-2 text-xs">
             <Dot kind={complianceStatus.dot} />
