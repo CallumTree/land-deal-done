@@ -12,6 +12,7 @@
 
 import { generateLayout } from "./generateLayout";
 import { optimizeMix } from "./optimizer";
+import { suggestEntrance } from "./autoEntrance";
 import type { WorkerRequestMessage, WorkerResponseMessage } from "./workerProtocol";
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -27,13 +28,22 @@ ctx.onmessage = (e: MessageEvent<WorkerRequestMessage>) => {
       response = { kind: "layout", requestId: msg.requestId, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
     ctx.postMessage(response);
-  } else {
+  } else if (msg.kind === "optimize") {
     let response: WorkerResponseMessage;
     try {
       const result = optimizeMix(msg.boundary, msg.entrance, msg.inputs, { timeBudgetMs: msg.timeBudgetMs });
       response = { kind: "optimize", requestId: msg.requestId, ok: true, result };
     } catch (err) {
       response = { kind: "optimize", requestId: msg.requestId, ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    ctx.postMessage(response);
+  } else {
+    let response: WorkerResponseMessage;
+    try {
+      const result = suggestEntrance(msg.boundary, msg.inputs, { maxCandidates: msg.maxCandidates });
+      response = { kind: "suggestEntrance", requestId: msg.requestId, ok: true, result };
+    } catch (err) {
+      response = { kind: "suggestEntrance", requestId: msg.requestId, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
     ctx.postMessage(response);
   }

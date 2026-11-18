@@ -20,6 +20,7 @@ import { ComplianceList } from "@/components/plot-line/ComplianceList";
 import { ProvenanceSummary } from "@/components/plot-line/ProvenanceDisclosure";
 import { useEngineWorker } from "@/hooks/useEngineWorker";
 import { useLiveLayout } from "@/hooks/useLiveLayout";
+import { useAutoEntrance } from "@/hooks/useAutoEntrance";
 import { useMixState } from "@/hooks/useMixState";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { SIZE_TIERS } from "@/engine/sizeTiers";
@@ -139,7 +140,10 @@ export default function Home() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setBoundary(state.boundary);
       setEntrance(state.entrance);
-      setMode(state.entrance ? "done" : state.boundary.length >= 3 ? "entrance" : "boundary");
+      // "done" whenever there's a real boundary, even with no entrance
+      // of its own — auto-entrance (see below) suggests one immediately,
+      // and the suggested marker only renders/drags in "done" mode.
+      setMode(state.boundary.length >= 3 ? "done" : "boundary");
       mix.setMode(state.mixMode);
       for (const tier of SIZE_TIERS) mix.setTierWeight(tier, state.sizeMix[tier] ?? 0);
       mix.setIncludeBungalows(state.includeBungalows);
@@ -171,7 +175,20 @@ export default function Home() {
     }),
     [mix.engineMixFields, marketBand]
   );
-  const liveLayout = useLiveLayout(worker, { boundary, entrance, inputs: liveInputs, isDragging });
+
+  // Auto-entrance: only searches once a real boundary exists AND the
+  // user hasn't set their own entrance — a user drag/tap always wins
+  // outright (see handleEntranceChange below), at which point this stops
+  // searching entirely (entrance is no longer null, so `enabled` goes
+  // false) rather than racing the user's own choice.
+  const autoEntrance = useAutoEntrance(worker, boundary, liveInputs, {
+    enabled: boundary.length >= 3 && entrance === null,
+    isDragging,
+  });
+  const effectiveEntrance = entrance ?? autoEntrance.suggestion?.entrance ?? null;
+  const entranceIsSuggested = entrance === null && autoEntrance.suggestion !== null;
+
+  const liveLayout = useLiveLayout(worker, { boundary, entrance: effectiveEntrance, inputs: liveInputs, isDragging });
 
   // "Refining" glow: a one-shot 2s ring (see globals.css's .grid-refining,
   // already a one-shot per the motion hard limits) around the map while a
@@ -215,7 +232,7 @@ export default function Home() {
   const tightPlotIds = useMemo(() => (output ? unionAffectedPlotIds(output.compliance) : new Set<string>()), [output]);
 
   const complianceStatus = useMemo((): { dot: "green" | "amber" | "red" | "none"; text: string } => {
-    if (!output) return { dot: "none", text: "Draw a boundary and set an entrance to check compliance." };
+    if (!output) return { dot: "none", text: "Draw a boundary to see compliance — the entrance is suggested for you." };
     const structuralFail = output.compliance.find((c) => !PER_PLOT_CHECK_IDS.has(c.id) && c.status === "fail");
     if (structuralFail) return { dot: "red", text: getComplianceCopy(structuralFail).detail };
     if (tightPlotIds.size > 0) {
@@ -267,10 +284,10 @@ export default function Home() {
   );
 
   const handleRunOptimizer = useCallback(() => {
-    if (!entrance || boundary.length < 3) return;
+    if (!effectiveEntrance || boundary.length < 3) return;
     const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full" };
-    optimizer.run(boundary, entrance, inputs);
-  }, [boundary, entrance, marketBand, optimizer]);
+    optimizer.run(boundary, effectiveEntrance, inputs);
+  }, [boundary, effectiveEntrance, marketBand, optimizer]);
 
   const handleToggleAuto = useCallback(() => {
     const turningOn = mix.mode !== "auto";
@@ -294,7 +311,7 @@ export default function Home() {
       {view3D ? (
         <Scene3D
           boundary={boundary}
-          entrance={entrance}
+          entrance={effectiveEntrance}
           layout={output?.layout ?? null}
           tightPlotIds={tightPlotIds}
           dark={mapDark}
@@ -302,7 +319,7 @@ export default function Home() {
       ) : (
         <SiteCanvas
           boundary={boundary}
-          entrance={entrance}
+          entrance={effectiveEntrance}
           layout={output?.layout ?? null}
           mode={mode}
           onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
@@ -370,7 +387,7 @@ export default function Home() {
           {canFinishBoundary && (
             <button
               type="button"
-              onClick={() => setMode("entrance")}
+              onClick={() => setMode("done")}
               className="rounded-full bg-grid-cyan px-3 py-1.5 text-xs font-semibold text-ink shadow-[0_0_16px_rgba(25,246,255,0.5)]"
             >
               Finish boundary
@@ -420,6 +437,12 @@ export default function Home() {
 
           {metrics?.totalUnits === 0 && metrics.zeroHomesReason && (
             <p className="mt-1.5 text-[11px] leading-snug text-grid-amber">{metrics.zeroHomesReason}</p>
+          )}
+
+          {entranceIsSuggested && (
+            <p className="mt-1.5 text-[11px] leading-snug text-grid-muted">
+              Entrance suggested — drag it on the map if the real access point is somewhere else.
+            </p>
           )}
 
           <div className="mt-4">

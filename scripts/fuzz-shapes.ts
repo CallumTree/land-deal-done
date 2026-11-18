@@ -12,6 +12,7 @@
 // for the non-blocking wrapper this feeds).
 
 import { generateLayout } from "../src/engine";
+import { suggestEntrance } from "../src/engine/autoEntrance";
 import { checkInvariants } from "./invariants";
 import type { BNGPoint, BNGPolygon, EngineOutput, Metrics } from "../src/engine/types";
 
@@ -206,12 +207,23 @@ interface ShapeResult {
   zeroHomesReason: string | null;
 }
 
-function runShape(shape: GeneratedShape): ShapeResult {
+/**
+ * `useAutoEntrance: false` (default) — the historical mode, kept so CI
+ * keeps measuring the same thing release over release: each shape's own
+ * single generated entrance, regardless of whether a better one exists.
+ * `useAutoEntrance: true` — uses suggestEntrance() instead (full
+ * quality), i.e. exactly what a first-time user now gets by default per
+ * the auto-entrance feature, for a before/after comparison of that
+ * feature's effect on coverage. The solve-time measured in this mode
+ * includes the whole candidate search, not just one generateLayout call.
+ */
+function runShape(shape: GeneratedShape, useAutoEntrance: boolean): ShapeResult {
   const t0 = performance.now();
   try {
-    const output = generateLayout(shape.boundaryBng, shape.entranceBng, {});
+    const entrance = useAutoEntrance ? suggestEntrance(shape.boundaryBng, { quality: "full" }).entrance : shape.entranceBng;
+    const output = generateLayout(shape.boundaryBng, entrance, {});
     const ms = performance.now() - t0;
-    const invariants = checkInvariants(output, shape.boundaryBng, shape.entranceBng, {});
+    const invariants = checkInvariants(output, shape.boundaryBng, entrance, {});
     const failing = invariants.filter((inv) => !inv.pass);
     return {
       shape,
@@ -256,11 +268,12 @@ function main() {
   const seedArg = args.indexOf("--seed");
   const countArg = args.indexOf("--count");
   const ciMode = args.includes("--ci");
+  const useAutoEntrance = args.includes("--auto-entrance");
   const seed = seedArg >= 0 ? Number(args[seedArg + 1]) : 42;
   const count = countArg >= 0 ? Number(args[countArg + 1]) : 300;
 
   const shapes = generateShapes(seed, count);
-  const results = shapes.map(runShape);
+  const results = shapes.map((s) => runShape(s, useAutoEntrance));
   const probeRand = mulberry32(seed + 1); // separate stream from shape generation
 
   const withHomes = results.filter((r) => (r.output?.metrics.totalUnits ?? 0) > 0);
@@ -289,7 +302,7 @@ function main() {
   const pctInvariantFail = ((invariantFails.length / results.length) * 100).toFixed(1);
 
   if (ciMode) {
-    console.log(`FUZZ-SHAPES seed=${seed} n=${results.length} pctWithHomes=${pctHomes}% pctInvariantFail=${pctInvariantFail}% zeroHome=${zeroHome.length}`);
+    console.log(`FUZZ-SHAPES seed=${seed} n=${results.length} autoEntrance=${useAutoEntrance} pctWithHomes=${pctHomes}% pctInvariantFail=${pctInvariantFail}% zeroHome=${zeroHome.length}`);
     for (const [cause, n] of [...causeCounts.entries()].sort((a, b) => b[1] - a[1])) {
       console.log(`  cause ${cause}: ${n} (${((n / results.length) * 100).toFixed(1)}%)`);
     }
@@ -303,7 +316,7 @@ function main() {
     process.exit(invariantFails.length > 0 ? 1 : 0);
   }
 
-  console.log(`\n=== FUZZ-SHAPES: ${results.length} shapes, seed=${seed} ===\n`);
+  console.log(`\n=== FUZZ-SHAPES: ${results.length} shapes, seed=${seed}, auto-entrance=${useAutoEntrance} ===\n`);
   console.log(`Shapes with >=1 home: ${withHomes.length}/${results.length} (${pctHomes}%)`);
   console.log(`Shapes with an invariant failure: ${invariantFails.length}/${results.length} (${pctInvariantFail}%) — must be 0`);
   console.log(`\nZero-home causes (${zeroHome.length} shapes):`);

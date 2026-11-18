@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { BNGPoint, BNGPolygon, EngineInputs, EngineOutput } from "@/engine/types";
 import type { OptimizerResult } from "@/engine/optimizer";
+import type { EntranceSuggestion } from "@/engine/autoEntrance";
 import type { WorkerRequestMessage, WorkerResponseMessage } from "@/engine/workerProtocol";
 
 let requestCounter = 0;
@@ -18,7 +19,7 @@ function nextRequestId(): string {
 }
 
 interface PendingEntry {
-  resolve: (value: EngineOutput | OptimizerResult) => void;
+  resolve: (value: EngineOutput | OptimizerResult | EntranceSuggestion) => void;
   reject: (reason: Error) => void;
 }
 
@@ -27,6 +28,8 @@ export interface UseEngineWorkerResult {
   requestLayout(boundary: BNGPolygon, entrance: BNGPoint, inputs: EngineInputs): Promise<EngineOutput>;
   /** Runs the mix optimiser on the worker. Rejects only on an unexpected engine throw — "no compliant mix found" is a normal OptimizerResult, not a rejection. */
   requestOptimize(boundary: BNGPolygon, entrance: BNGPoint, inputs: EngineInputs, timeBudgetMs?: number): Promise<OptimizerResult>;
+  /** Suggests an entrance point on the worker — see autoEntrance.ts. Rejects only on an unexpected engine throw. */
+  requestSuggestEntrance(boundary: BNGPolygon, inputs: EngineInputs, maxCandidates?: number): Promise<EntranceSuggestion>;
 }
 
 export function useEngineWorker(): UseEngineWorkerResult {
@@ -48,6 +51,7 @@ export function useEngineWorker(): UseEngineWorkerResult {
         if (msg.ok) entry.resolve(msg.result);
         else entry.reject(new Error(msg.error));
       }
+      // (optimize and suggestEntrance both carry `result` + `ok`, so the branch above handles both — kept as one `else` rather than a third branch for exactly that reason.)
     };
     worker.onerror = (e) => {
       // A worker-level error (e.g. a syntax/load failure) has no requestId
@@ -99,13 +103,33 @@ export function useEngineWorker(): UseEngineWorkerResult {
     []
   );
 
-  // Memoized: requestLayout/requestOptimize are individually stable
-  // (useCallback, empty deps), but without this the WRAPPING object
-  // would still be a fresh literal every render — and useLiveLayout's
-  // effect takes this whole object as a dependency, so an unstable
-  // reference here would retrigger it on every render of whatever
-  // consumes this hook, with no real input change behind it. Found via
-  // the same infinite-recompute-loop browser test that caught
+  const requestSuggestEntrance = useCallback(
+    (boundary: BNGPolygon, inputs: EngineInputs, maxCandidates?: number): Promise<EntranceSuggestion> => {
+      return new Promise((resolve, reject) => {
+        const worker = workerRef.current;
+        if (!worker) {
+          reject(new Error("Engine worker not ready"));
+          return;
+        }
+        const requestId = nextRequestId();
+        pendingRef.current.set(requestId, { resolve: resolve as PendingEntry["resolve"], reject });
+        const msg: WorkerRequestMessage = { kind: "suggestEntrance", requestId, boundary, inputs, maxCandidates };
+        worker.postMessage(msg);
+      });
+    },
+    []
+  );
+
+  // Memoized: requestLayout/requestOptimize/requestSuggestEntrance are
+  // individually stable (useCallback, empty deps), but without this the
+  // WRAPPING object would still be a fresh literal every render — and
+  // useLiveLayout's effect takes this whole object as a dependency, so
+  // an unstable reference here would retrigger it on every render of
+  // whatever consumes this hook, with no real input change behind it.
+  // Found via the same infinite-recompute-loop browser test that caught
   // useMixState's identical issue — this was the OTHER half of it.
-  return useMemo(() => ({ requestLayout, requestOptimize }), [requestLayout, requestOptimize]);
+  return useMemo(
+    () => ({ requestLayout, requestOptimize, requestSuggestEntrance }),
+    [requestLayout, requestOptimize, requestSuggestEntrance]
+  );
 }
