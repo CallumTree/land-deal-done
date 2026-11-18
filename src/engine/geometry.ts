@@ -152,9 +152,31 @@ export function distancePointToSegment(p: BNGPoint, a: BNGPoint, b: BNGPoint): n
   return length(sub(p, closest));
 }
 
+/**
+ * Sign of the cross product (b-a) x (c-b) — "which way does the path
+ * a->b->c turn." The collinearity tolerance scales with the magnitude of
+ * the terms being subtracted, not a fixed absolute number: BNG
+ * coordinates run ~1e5-1e6, and a rect that's been rotated into an
+ * engine-local frame then rotated back (every plot vs. an eroded
+ * boundary, which is what this function is mostly used for via
+ * properCrossing) accumulates floating-point noise on the order of
+ * 1e-9-1e-8 in absolute coordinate terms — comfortably BELOW a scale-
+ * aware tolerance here, but a bare `1e-9` absolute threshold sits right
+ * in the middle of that noise band and flips sign unpredictably. Found
+ * via scripts/fuzz-shapes.ts: a plot snug against (genuinely touching,
+ * not crossing) the eroded boundary was flagged as "outside" on ~11% of
+ * 300 random shapes, because properCrossing's four orientation() calls
+ * landed just past the old fixed threshold (e.g. 7.5e-9) on what was
+ * really a collinear touch, not a real crossing — never at a magnitude
+ * that corresponds to an actual geometric error of more than a few
+ * nanometres.
+ */
 function orientation(a: BNGPoint, b: BNGPoint, c: BNGPoint): number {
-  const val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
-  if (Math.abs(val) < 1e-9) return 0;
+  const t1 = (b[1] - a[1]) * (c[0] - b[0]);
+  const t2 = (b[0] - a[0]) * (c[1] - b[1]);
+  const val = t1 - t2;
+  const scale = Math.abs(t1) + Math.abs(t2);
+  if (Math.abs(val) < 1e-9 * Math.max(scale, 1)) return 0;
   return val > 0 ? 1 : 2;
 }
 
