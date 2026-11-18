@@ -10,23 +10,8 @@
 //
 // Pure data/logic, no React/DOM — importable from any UI component.
 
-import type { ComplianceCheck, HouseTypeId } from "@/engine/types";
+import type { ComplianceCheck } from "@/engine/types";
 import { SIZE_TIERS, SIZE_TIER_DEFINITIONS, BUNGALOW_TIER, type SizeTier } from "@/engine/sizeTiers";
-
-/** Plain-English per-HouseTypeId label for the "pro view" (one level deeper than size tiers). */
-export const HOUSE_TYPE_LABEL: Record<HouseTypeId, string> = {
-  "2-bed-terrace": "2-bed terrace",
-  "2-bed-semi": "2-bed semi",
-  "2-bed-detached": "2-bed detached",
-  "3-bed-terrace": "3-bed terrace",
-  "3-bed-semi": "3-bed semi",
-  "3-bed-detached": "3-bed detached",
-  "3-bed-bungalow": "3-bed bungalow",
-  "4-bed-terrace": "4-bed terrace",
-  "4-bed-semi": "4-bed semi",
-  "4-bed-detached": "4-bed detached",
-  "5-bed-detached": "5-bed detached",
-};
 
 /**
  * Plain-English label for each size tier — "Small/Medium/Large/XL" on its

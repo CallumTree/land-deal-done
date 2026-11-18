@@ -24,7 +24,7 @@ import { useMixState } from "@/hooks/useMixState";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { SIZE_TIERS } from "@/engine/sizeTiers";
 import { readStoredMapTheme, storeMapTheme } from "@/components/plot-line/mapFilter";
-import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY } from "@/copy/labels";
+import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY, BUNGALOW_TOGGLE_HELP } from "@/copy/labels";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
 import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/types";
@@ -359,13 +359,16 @@ export default function Home() {
               })}
             </div>
             {(mix.sizeMix.Medium ?? 0) > 0 && mix.mode !== "auto" && (
-              <button
-                type="button"
-                onClick={() => mix.setIncludeBungalows(!mix.includeBungalows)}
-                className="mt-1.5 text-[11px] text-grid-muted underline"
-              >
-                {mix.includeBungalows ? "✓ " : ""}Include bungalows
-              </button>
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => mix.setIncludeBungalows(!mix.includeBungalows)}
+                  className="text-[11px] text-grid-muted underline"
+                >
+                  {mix.includeBungalows ? "✓ " : ""}Include bungalows
+                </button>
+                <p className="mt-0.5 text-[10px] leading-snug text-grid-muted/70">{BUNGALOW_TOGGLE_HELP}</p>
+              </div>
             )}
           </div>
 
