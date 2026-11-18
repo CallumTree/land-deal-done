@@ -17,7 +17,7 @@ import { BottomSheet, type SheetSnap } from "@/components/plot-line/BottomSheet"
 import { PostcodeSearch } from "@/components/plot-line/PostcodeSearch";
 import { MetricsPanel } from "@/components/plot-line/MetricsPanel";
 import { ComplianceList } from "@/components/plot-line/ComplianceList";
-import { ProvenanceRow } from "@/components/plot-line/ProvenanceDisclosure";
+import { ProvenanceSummary } from "@/components/plot-line/ProvenanceDisclosure";
 import { useEngineWorker } from "@/hooks/useEngineWorker";
 import { useLiveLayout } from "@/hooks/useLiveLayout";
 import { useMixState } from "@/hooks/useMixState";
@@ -447,18 +447,8 @@ export default function Home() {
                     Compliance (technical)
                   </h3>
                   <ComplianceList checks={output.compliance} proView />
-                  <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Planning rule sources
-                  </h3>
-                  {planningEntries.map((e) => (
-                    <ProvenanceRow key={e.id} entry={e} />
-                  ))}
-                  <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Appraisal input sources
-                  </h3>
-                  {appraisalEntries.map((e) => (
-                    <ProvenanceRow key={e.id} entry={e} />
-                  ))}
+                  <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">Figure sources</h3>
+                  <ProvenanceSummary entries={[...planningEntries, ...appraisalEntries]} />
                 </div>
               )}
             </div>
