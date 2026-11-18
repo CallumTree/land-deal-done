@@ -24,6 +24,7 @@ import { useMixState } from "@/hooks/useMixState";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { SIZE_TIERS } from "@/engine/sizeTiers";
 import { readStoredMapTheme, storeMapTheme } from "@/components/plot-line/mapFilter";
+import { readHashSiteState, readStoredSiteState, storeSiteState, writeHashSiteState, buildShareUrl, type SiteState } from "@/components/plot-line/siteState";
 import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY, BUNGALOW_TOGGLE_HELP } from "@/copy/labels";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
@@ -107,6 +108,59 @@ export default function Home() {
   const mix = useMixState();
   const optimizer = useOptimizer(worker);
 
+  // Save/share (Audit Part 5): restore once on mount, from the URL hash
+  // if a shared link brought the user here, else from the one
+  // localStorage auto-save slot — hash always wins, since a shared link
+  // should show what was shared, not the viewer's own last site. Runs
+  // post-hydration like mapDark's own restore effect above; boundary/
+  // entrance/mode already start at values identical on server and
+  // client, so there's no hydration-mismatch risk in overwriting them
+  // here.
+  //
+  // `restored` (real state, not a ref) is the guard that makes this safe
+  // under React's dev-only Strict Mode double-invoke of effects: a ref
+  // set synchronously inside this effect would already read "true" by
+  // the time the auto-save effect below runs IN THE SAME commit — but
+  // auto-save's closure would still be holding render 1's blank
+  // boundary/mix values, so it would write blank state to localStorage
+  // regardless of the ref, right before Strict Mode's second invocation
+  // of THIS effect reads that now-corrupted localStorage back. A real
+  // setState doesn't apply until the next commit, so the auto-save
+  // effect below never observes `restored === true` until the SAME
+  // commit that also carries the final restored boundary/entrance/mix
+  // values — there's no window where it can fire with stale data. Found
+  // via a real Playwright test (seed localStorage, reload, assert the
+  // site is still there) that failed without this guard.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    const hashState = readHashSiteState();
+    const state = hashState ?? readStoredSiteState();
+    if (state) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBoundary(state.boundary);
+      setEntrance(state.entrance);
+      setMode(state.entrance ? "done" : state.boundary.length >= 3 ? "entrance" : "boundary");
+      mix.setMode(state.mixMode);
+      for (const tier of SIZE_TIERS) mix.setTierWeight(tier, state.sizeMix[tier] ?? 0);
+      mix.setIncludeBungalows(state.includeBungalows);
+      if (hashState) storeSiteState(state); // a shared link becomes the new auto-save going forward
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save: write the one localStorage slot on every real change to
+  // the site's own state, once restoration has had its chance to run
+  // first (see `restored` above). Skipped while isDragging — a drag
+  // fires onBoundaryChange on every pointer move, and the drag's own
+  // release already leaves boundary/entrance at their final value a
+  // moment later, which this effect then catches via the isDragging
+  // transition itself re-running it.
+  useEffect(() => {
+    if (!restored || isDragging) return;
+    storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows });
+  }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, isDragging]);
+
   const liveInputs = useMemo(
     () => ({
       sizeMix: mix.engineMixFields.sizeMix,
@@ -185,6 +239,24 @@ export default function Home() {
     setEntrance(null);
     setMode("boundary");
   }, []);
+
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleShare = useCallback(() => {
+    const state: SiteState = { boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows };
+    // Always sync the address bar to the current state — a visible,
+    // copy-able fallback if the clipboard write below fails (no
+    // permission, insecure context) or isn't available at all.
+    writeHashSiteState(state);
+    navigator.clipboard
+      ?.writeText(buildShareUrl(state))
+      .then(() => {
+        setShareCopied(true);
+        if (shareCopiedTimeoutRef.current) clearTimeout(shareCopiedTimeoutRef.current);
+        shareCopiedTimeoutRef.current = setTimeout(() => setShareCopied(false), 1500);
+      })
+      .catch(() => {});
+  }, [boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows]);
 
   const handlePostcodeFound = useCallback(
     (center: BNGPoint) => {
@@ -302,6 +374,15 @@ export default function Home() {
               className="rounded-full bg-grid-cyan px-3 py-1.5 text-xs font-semibold text-ink shadow-[0_0_16px_rgba(25,246,255,0.5)]"
             >
               Finish boundary
+            </button>
+          )}
+          {boundary.length > 0 && (
+            <button
+              type="button"
+              onClick={handleShare}
+              className="rounded-full border border-grid-border bg-sheet px-3 py-1.5 text-xs font-medium text-grid-text"
+            >
+              {shareCopied ? "Copied!" : "Share"}
             </button>
           )}
           {boundary.length > 0 && (
