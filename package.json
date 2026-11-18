@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:fixtures": "tsx scripts/run-fixtures.ts"
+    "test:fixtures": "tsx scripts/run-fixtures.ts",
+    "test:scorecard": "tsx scripts/scorecard.ts --check"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.2",
