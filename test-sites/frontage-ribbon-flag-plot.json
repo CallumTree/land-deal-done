@@ -1,0 +1,17 @@
+{
+  "id": "frontage-ribbon-flag-plot",
+  "description": "Trapezoid 'flag plot' — a common UK backland infill shape: a 35m frontage onto the access edge, widening to 55m at the rear over a 30m depth. Narrow frontage rules out an estate road; the frontage itself is wide enough for several ribbon plots.",
+  "category": "frontage-ribbon",
+  "boundaryBng": [
+    [308000, 220000],
+    [308035, 220000],
+    [308055, 220030],
+    [307990, 220030],
+    [308000, 220000]
+  ],
+  "entranceBng": [308017.5, 220000],
+  "areaHectares": 0.135,
+  "expectedUnits": 4,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

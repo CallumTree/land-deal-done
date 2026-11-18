@@ -84,7 +84,11 @@ export function useLiveLayout(worker: UseEngineWorkerResult, opts: UseLiveLayout
       .requestLayout(boundary, entrance, fullInputs)
       .then((result) => {
         if (seq !== latestSeqRef.current) return; // superseded by a newer request — discard
-        topologyHintRef.current = result.metrics.topologyUsed === "none" ? undefined : result.metrics.topologyUsed;
+        // The hint only ever steers the estate-road left/right tie-break
+        // (see generateLayout.ts) — "none" and "frontage-ribbon" are both
+        // not a side to remember.
+        const used = result.metrics.topologyUsed;
+        topologyHintRef.current = used === "double" || used === "single-left" || used === "single-right" ? used : undefined;
         setOutput(result);
         setIsComputing(false);
         setError(null);

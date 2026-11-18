@@ -161,8 +161,18 @@ export interface Metrics {
   affordableValueOverstated: boolean;
   /** residualLandValue is always a simplified, single-point calculation (no real cash-flow model) — present so the UI doesn't need to hardcode that fact; always true in v0. */
   residualLandValueIndicative: true;
-  /** Which road/plot topology this call actually used. Feed back as the NEXT call's EngineInputs.previousTopologyHint during interactive dragging, to reduce flip-flopping between single-left/single-right when the site is near the double-loaded/single-sided boundary. */
-  topologyUsed: "double" | "single-left" | "single-right" | "none";
+  /**
+   * Which road/plot topology this call actually used. Feed back as the
+   * NEXT call's EngineInputs.previousTopologyHint during interactive
+   * dragging, to reduce flip-flopping between single-left/single-right
+   * when the site is near the double-loaded/single-sided boundary.
+   * "frontage-ribbon": no NEW estate road at all — plots front directly
+   * onto the existing boundary edge the entrance sits on, tried as a
+   * fallback whenever the estate-road topologies (double/single-left/
+   * single-right) place zero homes. See generateLayout.ts's
+   * tryFrontageRibbon for when this applies and why.
+   */
+  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none";
   /**
    * Set WHENEVER totalUnits === 0 — a plain-English, one-line reason this
    * boundary/entrance placed nothing, in the exact style "Frontage is 9m:

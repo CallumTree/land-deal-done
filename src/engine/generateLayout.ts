@@ -505,7 +505,7 @@ export function generateLayout(
   // dragging — it never overrides a side that's clearly better by more
   // than the margin, and it never turns an infeasible side feasible.
   const TOPOLOGY_TIE_MARGIN_UNITS = 1;
-  let topology: "double" | "single-left" | "single-right" | "none" = "double";
+  let topology: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none" = "double";
   let state = runPlacement(["left", "right"]);
   if (state.plots.length === 0) {
     const singleLeft = runPlacement(["left"]);
@@ -527,6 +527,391 @@ export function generateLayout(
       topology = "single-right";
       state = singleRight;
     }
+  }
+
+  // --- Frontage ribbon: fallback tried ONLY when the estate-road
+  // topologies (double/single-left/single-right) place nothing. Instead
+  // of a NEW road running into the site with plots flanking it, plots
+  // front directly onto the EXISTING boundary edge the entrance sits
+  // on — no new carriageway, no turning head (nothing dead-ends; access
+  // is along the whole frontage, same as any infill plot on an existing
+  // street). This is for sites too narrow/shallow for a new road PLUS a
+  // row of plots behind it, but wide enough along the entrance edge
+  // itself to hold a row of plots fronting it directly.
+  //
+  // Deliberately self-contained rather than reusing tryPlaceOnSide/
+  // fitsBlockAt above: those assume a ROAD at local X=0 with plots
+  // stacking along Y and depth along X. Frontage ribbon has no road at
+  // all — plots stack along X (the entrance edge's own direction) with
+  // depth along Y — a 90-degree swap of which axis is which, not a
+  // variation the existing left/right placement functions can express
+  // without their own road-centred assumptions leaking through (e.g.
+  // plotSideLocal's left/right split below is an X-sign test that only
+  // means "which side of the road" when a road actually runs along
+  // X=0). Builds its own compliance list and returns directly via
+  // finalize() rather than falling through to the estate-road compliance
+  // block further down, which checks things that don't apply here
+  // (turning head, road width, a road for frontage/entrance-connection
+  // checks) the same way the erosion-invalid early return above does.
+  if (topology === "none") {
+    const ribbon = tryFrontageRibbon();
+    if (ribbon && ribbon.plots.length > 0) {
+      return finalize(
+        { plots: ribbon.plots, roads: [], parkingSpacesBng: ribbon.parkingSpacesLocal.map(toWorld) },
+        ribbon.compliance,
+        boundaryAreaM2,
+        inputs,
+        jurisdiction,
+        t0,
+        "frontage-ribbon"
+      );
+    }
+  }
+
+  interface FrontageRibbonResult {
+    plots: PlacedPlot[];
+    parkingSpacesLocal: BNGPoint[];
+    compliance: ComplianceCheck[];
+  }
+
+  /**
+   * Finds the entrance edge's own extent in LOCAL coordinates. The
+   * entrance edge lies exactly along local Y=0 by construction (toLocal
+   * rotates the whole boundary so the entrance's own edge tangent maps
+   * to the X axis) — so the edge containing (0,0) within the same
+   * tolerance entranceEdgeFrame uses is the one to find, and both its
+   * endpoints are already at y≈0.
+   */
+  function findEntranceEdgeLocalXRange(): { minX: number; maxX: number } | null {
+    const n = localBoundary.length;
+    for (let i = 0; i < n; i++) {
+      const a = localBoundary[i];
+      const b = localBoundary[(i + 1) % n];
+      if (geo.distancePointToSegment([0, 0], a, b) <= 0.5) {
+        return { minX: Math.min(a[0], b[0]), maxX: Math.max(a[0], b[0]) };
+      }
+    }
+    return null;
+  }
+
+  function tryFrontageRibbon(): FrontageRibbonResult | null {
+    const edgeRange = findEntranceEdgeLocalXRange();
+    if (!edgeRange) return null;
+
+    // Plots front at yFront, BOUNDARY_OFFSET_M in from the existing
+    // edge — the same no-build setback every other part of the site
+    // boundary already requires. There's no "road is allowed to meet
+    // the boundary" exception here (see the erosion comment near the
+    // top of this function): nothing new crosses the boundary: the
+    // plots themselves simply front onto it, same as any plot on any
+    // other edge respects the offset from ITS nearest boundary.
+    const yFront = rules.BOUNDARY_OFFSET_M;
+    const maxX = edgeRange.maxX - rules.BOUNDARY_OFFSET_M;
+    let cursorX = edgeRange.minX + rules.BOUNDARY_OFFSET_M;
+    let cycleIndex = 0;
+    let plotCounter = 0;
+    let blockCounter = 0;
+    const plots: PlacedPlot[] = [];
+    const parkingSpacesLocal: BNGPoint[] = [];
+
+    function buildFrontageRect(xStart: number, xEnd: number, yStart: number, yEnd: number): BNGPolygon {
+      return [
+        [xStart, yStart],
+        [xEnd, yStart],
+        [xEnd, yEnd],
+        [xStart, yEnd],
+      ];
+    }
+
+    function fitsFrontageBlockAt(houseType: HouseTypeId, blockSize: number, xStart: number): { fits: boolean; spec: PlotSpec } {
+      const spec = computePlotSpec(houseType);
+      const blockWidth = spec.frontageWidthM * blockSize;
+      if (xStart + blockWidth > maxX) return { fits: false, spec };
+      for (let u = 0; u < blockSize; u++) {
+        const uStart = xStart + u * spec.frontageWidthM;
+        const uEnd = uStart + spec.frontageWidthM;
+        if (!geo.convexPolygonFullyInside(buildFrontageRect(uStart, uEnd, yFront, yFront + spec.totalDepthM), erodedLocal)) {
+          return { fits: false, spec };
+        }
+      }
+      return { fits: true, spec };
+    }
+
+    function placeFrontageUnit(xStart: number, xEnd: number, spec: PlotSpec, blockId: string, blockPosition: number, blockSize: number) {
+      const driveY = yFront + spec.drivewayDepthM;
+      const houseY = driveY + spec.footprintDepthM;
+      const rearY = yFront + spec.totalDepthM;
+
+      plotCounter += 1;
+      plots.push({
+        id: `plot-${plotCounter}`,
+        houseType: spec.houseType,
+        plotBng: buildFrontageRect(xStart, xEnd, yFront, rearY).map(toWorld),
+        footprintBng: buildFrontageRect(xStart, xEnd, driveY, houseY).map(toWorld),
+        gardenBng: buildFrontageRect(xStart, xEnd, houseY, rearY).map(toWorld),
+        giaM2: spec.giaM2,
+        blockId,
+        blockPosition,
+        blockSize,
+      });
+
+      const spacesNeeded = Math.max(1, Math.round(parkingRatio));
+      const spaceWidth = (xEnd - xStart) / spacesNeeded;
+      for (let s = 0; s < spacesNeeded; s++) {
+        parkingSpacesLocal.push([xStart + spaceWidth * (s + 0.5), yFront + spec.drivewayDepthM / 2]);
+      }
+    }
+
+    // Same probe-forward structure as tryPlaceOnSide above: try every
+    // type/block-size at the current position before stepping forward,
+    // so a gap a smaller type would fill is never skipped over.
+    function tryPlaceFrontageUnit(): boolean {
+      const preferredType = mixCycle[cycleIndex % mixCycle.length];
+      const typeOrder = draftMode ? [preferredType] : [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+      for (let xStart = cursorX; xStart < maxX; xStart += PROBE_STEP_M) {
+        for (const houseType of typeOrder) {
+          for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
+            const check = fitsFrontageBlockAt(houseType, blockSize, xStart);
+            if (check.fits) {
+              blockCounter += 1;
+              const blockId = `block-${blockCounter}`;
+              for (let u = 0; u < blockSize; u++) {
+                const uStart = xStart + u * check.spec.frontageWidthM;
+                const uEnd = uStart + check.spec.frontageWidthM;
+                placeFrontageUnit(uStart, uEnd, check.spec, blockId, u, blockSize);
+              }
+              cursorX = xStart + check.spec.frontageWidthM * blockSize + sideGapM;
+              cycleIndex += 1;
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    let progress = true;
+    while (progress) progress = tryPlaceFrontageUnit();
+
+    if (plots.length === 0) return null;
+
+    // --- Frontage ribbon's own compliance list — simpler than the
+    // estate-road one above (no turning head, no road width, no
+    // left/right split to check back-to-back against — a single row
+    // facing one direction can never face itself), but genuinely
+    // independent, not assumed from placement succeeding. Same check
+    // ids as the estate-road block where the concept is identical
+    // (ndss-gia, garden-depth, parking, block-length,
+    // attached-share-wall, no-wasted-gaps, plots-inside-boundary,
+    // no-overlaps), so downstream consumers (the UI's plain-English
+    // labels, the "no compliance green on a violation" cross-check in
+    // scripts/invariants.ts) don't need a second code path to read
+    // them. ---
+    const fbCompliance: ComplianceCheck[] = [];
+
+    fbCompliance.push({
+      id: "topology",
+      label: "Road/plot topology used",
+      status: "pass",
+      ruleRef: "v0 fallback: no new estate road — plots front the existing boundary edge directly",
+      detail: `Frontage ribbon: ${plots.length} plot(s) front directly onto the existing edge at the entrance, no new estate road built.`,
+    });
+
+    const frontageEdgeSegLocal: [BNGPoint, BNGPoint] = [
+      [edgeRange.minX, 0],
+      [edgeRange.maxX, 0],
+    ];
+    const frontageOk = plots.every((p) => {
+      const localRect = p.plotBng.map(toLocal);
+      const frontMidLocal: BNGPoint = [
+        (Math.min(...localRect.map((pt) => pt[0])) + Math.max(...localRect.map((pt) => pt[0]))) / 2,
+        Math.min(...localRect.map((pt) => pt[1])),
+      ];
+      return Math.abs(geo.distancePointToSegment(frontMidLocal, frontageEdgeSegLocal[0], frontageEdgeSegLocal[1]) - rules.BOUNDARY_OFFSET_M) <= 1e-2;
+    });
+    fbCompliance.push({
+      id: "plot-frontage",
+      label: "Every plot has road frontage",
+      status: frontageOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — every plot must front the access road (here, the existing street at the entrance edge)",
+      detail: frontageOk
+        ? `${plots.length} plot(s) all front the existing edge, ${rules.BOUNDARY_OFFSET_M}m in from the boundary.`
+        : "At least one plot does not front the existing edge correctly.",
+    });
+
+    fbCompliance.push({
+      id: "road-connects-entrance",
+      label: "Road connects to entrance",
+      status: "pass",
+      ruleRef: "Brief requirement — road-to-entrance connector",
+      detail: "No new road is built — the entrance sits directly on the frontage edge every plot fronts.",
+    });
+
+    const allInsideErosion = plots.every((p) => geo.convexPolygonFullyInside(p.plotBng.map(toLocal), erodedLocal));
+    fbCompliance.push({
+      id: "plots-inside-boundary",
+      label: "All plots inside boundary, clear of setbacks",
+      status: allInsideErosion ? "pass" : "fail",
+      ruleRef: `Boundary + ${rules.BOUNDARY_OFFSET_M}m offset`,
+      detail: allInsideErosion
+        ? `${plots.length} plot(s) all confirmed within the eroded boundary.`
+        : "At least one plot's footprint/garden falls outside the eroded boundary.",
+    });
+
+    let overlapFound = false;
+    outerFb: for (let i = 0; i < plots.length; i++) {
+      for (let j = i + 1; j < plots.length; j++) {
+        if (geo.convexPolygonsOverlap(plots[i].plotBng.map(toLocal), plots[j].plotBng.map(toLocal))) {
+          overlapFound = true;
+          break outerFb;
+        }
+      }
+    }
+    fbCompliance.push({
+      id: "no-overlaps",
+      label: "No overlaps between plots, road and parking",
+      status: overlapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — geometric non-overlap",
+      detail: overlapFound ? "At least one pair of plots overlap." : `${plots.length} plot(s) checked pairwise — no overlaps.`,
+    });
+
+    const fbBlockGroups = new Map<string, PlacedPlot[]>();
+    for (const p of plots) {
+      const group = fbBlockGroups.get(p.blockId) ?? [];
+      group.push(p);
+      fbBlockGroups.set(p.blockId, group);
+    }
+    let fbBlockLengthOk = true;
+    let fbBlockLengthDetail = "";
+    for (const [blockId, group] of fbBlockGroups) {
+      const houseType = group[0].houseType;
+      const maxAllowed = rules.MAX_BLOCK_UNITS[houseType];
+      const sameType = group.every((p) => p.houseType === houseType);
+      if (!sameType || group.length > maxAllowed || group.length !== group[0].blockSize) {
+        fbBlockLengthOk = false;
+        fbBlockLengthDetail = `Block ${blockId}: ${group.length} unit(s) of ${houseType} (max ${maxAllowed}).`;
+        break;
+      }
+    }
+    fbCompliance.push({
+      id: "block-length",
+      label: "Attached block length cap",
+      status: fbBlockLengthOk ? "pass" : "fail",
+      ruleRef: "rules.ts MAX_BLOCK_UNITS (terrace configurable; semi=2 and detached=1 by definition)",
+      detail: fbBlockLengthOk ? `${fbBlockGroups.size} block(s), all within their house type's cap.` : fbBlockLengthDetail,
+    });
+
+    let fbAttachedOk = true;
+    let fbAttachedDetail = "";
+    outerFbBlocks: for (const [blockId, group] of fbBlockGroups) {
+      if (group.length < 2) continue;
+      const sorted = [...group].sort((a, b) => a.blockPosition - b.blockPosition);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = geo.minDistanceBetweenPolygons(sorted[i].footprintBng, sorted[i + 1].footprintBng);
+        if (gap > 1e-3) {
+          fbAttachedOk = false;
+          fbAttachedDetail = `Block ${blockId}: units ${sorted[i].id} and ${sorted[i + 1].id} are ${gap.toFixed(2)}m apart, not sharing a wall.`;
+          break outerFbBlocks;
+        }
+      }
+    }
+    fbCompliance.push({
+      id: "attached-share-wall",
+      label: "Attached units genuinely share a wall",
+      status: fbAttachedOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — terrace/semi units must be structurally adjacent, not just nearby",
+      detail: fbAttachedOk ? "Every multi-unit block's consecutive footprints touch with zero gap." : fbAttachedDetail,
+    });
+
+    const fbSortedBlocks = [...fbBlockGroups.values()]
+      .map((group) => {
+        const xs = group.flatMap((p) => p.plotBng.map(toLocal).map((pt) => pt[0]));
+        return { blockId: group[0].blockId, xStart: Math.min(...xs), xEnd: Math.max(...xs) };
+      })
+      .sort((a, b) => a.xStart - b.xStart);
+    let fbWastedGapFound = false;
+    let fbWastedGapDetail = "";
+    for (let i = 0; i < fbSortedBlocks.length - 1; i++) {
+      const gap = fbSortedBlocks[i + 1].xStart - fbSortedBlocks[i].xEnd;
+      const maxReasonableGap = sideGapM + smallestFrontageWidthM + PROBE_STEP_M;
+      if (gap > maxReasonableGap) {
+        fbWastedGapFound = true;
+        fbWastedGapDetail = `Between ${fbSortedBlocks[i].blockId} and ${fbSortedBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap — room for another ${smallestFrontageWidthM.toFixed(1)}m-wide unit plus its side gap.`;
+      }
+    }
+    fbCompliance.push({
+      id: "no-wasted-gaps",
+      label: "No gap large enough for a smaller unit to fit",
+      status: fbWastedGapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — backtrack to a smaller type before leaving a gap empty",
+      detail: fbWastedGapFound ? fbWastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
+    });
+
+    const fbNdssFailingIds = plots.filter((p) => p.giaM2 < ndssMinGia[p.houseType] - 1e-6).map((p) => p.id);
+    fbCompliance.push({
+      id: "ndss-gia",
+      label: "NDSS minimum GIA",
+      status: fbNdssFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: "DCLG, NDSS, March 2015, Table 1",
+      detail:
+        fbNdssFailingIds.length === 0
+          ? "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+          : `${fbNdssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
+      affectedPlotIds: fbNdssFailingIds,
+    });
+
+    const fbGardenFailingIds = plots.filter((p) => {
+      const localGarden = p.gardenBng!.map(toLocal);
+      const ys = localGarden.map((pt) => pt[1]);
+      return Math.max(...ys) - Math.min(...ys) < gardenDepthM - 1e-6;
+    }).map((p) => p.id);
+    fbCompliance.push({
+      id: "garden-depth",
+      label: "Minimum garden depth",
+      status: fbGardenFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `Brief default ${gardenDepthM}m`,
+      detail:
+        fbGardenFailingIds.length === 0
+          ? `Every plot's garden is at least ${gardenDepthM}m deep.`
+          : `${fbGardenFailingIds.length} plot(s) have a garden shallower than the minimum.`,
+      affectedPlotIds: fbGardenFailingIds,
+    });
+
+    // Back-to-back: a single row, all facing the same direction (away
+    // from the shared frontage edge, toward the site's interior) can
+    // never face another row — there isn't one. Same honest "nothing to
+    // violate" framing the estate-road single-sided case already uses,
+    // not a validated guarantee for a layout with two rows.
+    fbCompliance.push({
+      id: "back-to-back",
+      label: `${backToBackM}m back-to-back distance`,
+      status: "pass",
+      ruleRef: `Brief default ${backToBackM}m (Essex Design Guide, 1973, convention)`,
+      detail: "Frontage ribbon is a single row facing one direction — no second row exists for it to face, nothing to violate.",
+    });
+
+    const fbParkingFailingIds = plots.filter((p) => computePlotSpec(p.houseType).frontageWidthM < parkingRatio * rules.PARKING_SPACE_WIDTH_M - 1e-6).map((p) => p.id);
+    fbCompliance.push({
+      id: "parking",
+      label: `Parking (${parkingRatio}/unit)`,
+      status: fbParkingFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `v0 default ${rules.PARKING_SPACES_PER_UNIT}/unit (common UK local parking SPD figure, editable)`,
+      detail:
+        fbParkingFailingIds.length === 0
+          ? "Every plot's frontage is sized to fit its required parking."
+          : `${fbParkingFailingIds.length} plot(s) are narrower than their required parking allocation.`,
+      affectedPlotIds: fbParkingFailingIds,
+    });
+
+    fbCompliance.push({
+      id: "fire-access",
+      label: "Fire/refuse appliance access",
+      status: "pass",
+      ruleRef: `Approved Document B / common ${rules.MAX_FIRE_ACCESS_DISTANCE_M}m hose-run convention`,
+      detail: "Every plot fronts directly onto the existing edge, so frontage-to-access distance is 0m for all plots.",
+    });
+
+    return { plots, parkingSpacesLocal, compliance: fbCompliance };
   }
 
   const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
@@ -977,7 +1362,7 @@ function finalize(
   inputs: EngineInputs,
   jurisdiction: ResolvedJurisdiction,
   t0: number,
-  topologyUsed: "double" | "single-left" | "single-right" | "none" = "none",
+  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none" = "none",
   zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null
 ): EngineOutput {
   const mix: Record<HouseTypeId, number> = {

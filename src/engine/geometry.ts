@@ -327,8 +327,23 @@ function polygonBBox(polygon: BNGPolygon): BBox {
  */
 export function convexPolygonFullyInside(rect: BNGPolygon, polygon: BNGPolygon): boolean {
   const box = polygonBBox(polygon);
+  // BBOX_EPSILON_M: a cheap, fast-path pre-filter — exact equality here
+  // is too strict at BNG coordinate scale (~1e5-1e6). A vertex computed
+  // via one path (e.g. rotated into the engine's local frame and back)
+  // and the SAME true position computed independently (e.g. this
+  // function's own `polygon` argument, built a different way) can land
+  // a few tens of nanometres apart — genuinely the same point, not a
+  // real boundary violation. Found via scripts/fuzz-shapes.ts: a plot
+  // vertex sitting exactly ON the eroded boundary's bbox edge was
+  // rejected here, below bbox.minX by ~6e-8m, well before
+  // properCrossing's own (already-fixed) tolerance ever got a chance to
+  // run. 1e-4m (0.1mm) is nanometre-noise-sized relative to any real
+  // geometric violation this check needs to catch.
+  const BBOX_EPSILON_M = 1e-4;
   for (const [x, y] of rect) {
-    if (x < box.minX || x > box.maxX || y < box.minY || y > box.maxY) return false;
+    if (x < box.minX - BBOX_EPSILON_M || x > box.maxX + BBOX_EPSILON_M || y < box.minY - BBOX_EPSILON_M || y > box.maxY + BBOX_EPSILON_M) {
+      return false;
+    }
   }
   for (const corner of rect) {
     if (!pointInPolygon(corner, polygon)) return false;

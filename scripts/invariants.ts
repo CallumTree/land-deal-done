@@ -59,6 +59,14 @@ export function checkInvariants(
 
   const road = roads[0];
   const roadPoly = road ? roadRect(road.centerlineBng, road.widthM) : null;
+  const isFrontageRibbon = output.metrics.topologyUsed === "frontage-ribbon";
+  // Frontage ribbon (generateLayout.ts's tryFrontageRibbon) builds no
+  // road at all — plots front directly onto the EXISTING boundary edge
+  // the entrance sits on. Independently find that edge the same way the
+  // engine itself does (entranceEdgeFrame), rather than trusting the
+  // engine's own placement — this is still a from-geometry recheck, just
+  // against the boundary edge instead of a road polygon.
+  const entranceFrame = isFrontageRibbon ? geo.entranceEdgeFrame(boundary, entrance) : null;
 
   // 1. All plots fully inside the boundary and clear of the boundary offset.
   const erodedBoundary = geo.offsetPolygonInward(boundary, rules.BOUNDARY_OFFSET_M);
@@ -106,21 +114,54 @@ export function checkInvariants(
   });
 
   // 3. Every plot has road frontage; road connects to the entrance.
-  const frontageOk =
-    roadPoly != null && plots.every((p) => geo.minDistanceBetweenPolygons(fullPlotRect(p), roadPoly) <= 1e-2);
+  // Frontage ribbon has no road to check against — independently find
+  // the entrance's own boundary edge (same tolerance the engine's
+  // entranceEdgeFrame uses) and check plots front THAT instead.
+  let entranceEdge: { a: BNGPoint; b: BNGPoint } | null = null;
+  if (isFrontageRibbon) {
+    for (let i = 0; i < boundary.length; i++) {
+      const a = boundary[i];
+      const b = boundary[(i + 1) % boundary.length];
+      if (geo.distancePointToSegment(entrance, a, b) <= 0.5) {
+        entranceEdge = { a, b };
+        break;
+      }
+    }
+  }
+  const frontageOk = isFrontageRibbon
+    ? entranceEdge != null &&
+      plots.every((p) => {
+        const d = geo.minDistanceBetweenPolygons(fullPlotRect(p), [entranceEdge!.a, entranceEdge!.b, entranceEdge!.b, entranceEdge!.a]);
+        return Math.abs(d - rules.BOUNDARY_OFFSET_M) <= 1e-1;
+      })
+    : roadPoly != null && plots.every((p) => geo.minDistanceBetweenPolygons(fullPlotRect(p), roadPoly) <= 1e-2);
   results.push({
     id: "frontage",
     label: "Every plot has road frontage",
     pass: frontageOk,
-    detail: frontageOk ? "All plots touch the road." : "At least one plot does not touch the road.",
+    detail: frontageOk
+      ? isFrontageRibbon
+        ? "All plots front the existing boundary edge, offset by the standard boundary setback."
+        : "All plots touch the road."
+      : isFrontageRibbon
+        ? "At least one plot does not correctly front the existing boundary edge."
+        : "At least one plot does not touch the road.",
   });
 
-  const roadConnectsEntrance = roadPoly != null && geo.pointInPolygon(entrance, roadPoly);
+  const roadConnectsEntrance = isFrontageRibbon
+    ? entranceEdge != null
+    : roadPoly != null && geo.pointInPolygon(entrance, roadPoly);
   results.push({
     id: "road-entrance",
     label: "Road connects to the entrance point",
     pass: roadConnectsEntrance,
-    detail: roadConnectsEntrance ? "Entrance point lies on the road." : "Entrance point is not on the road.",
+    detail: isFrontageRibbon
+      ? roadConnectsEntrance
+        ? "No new road is built — the entrance sits directly on the frontage edge every plot fronts."
+        : "Could not independently find the entrance's own boundary edge."
+      : roadConnectsEntrance
+        ? "Entrance point lies on the road."
+        : "Entrance point is not on the road.",
   });
 
   // 4. NDSS GIA, garden depth, back-to-back — recomputed from geometry, not the engine's claimed metrics.
@@ -140,8 +181,20 @@ export function checkInvariants(
   });
 
   const gardenDepthRequired = inputs.minGardenDepthM ?? rules.MIN_GARDEN_DEPTH_M;
-  const roadDir = road ? geo.normalize(geo.sub(road.centerlineBng[road.centerlineBng.length - 1], road.centerlineBng[0])) : [1, 0];
-  const depthAxis: BNGPoint = [roadDir[1], -roadDir[0]];
+  // "Tangent" = the direction frontage width stacks along (the road, for
+  // the estate-road topologies; the existing boundary edge itself, for
+  // frontage ribbon). "Depth" is perpendicular to it, into the site.
+  // Frontage ribbon has no road to derive this from, so it uses the same
+  // entranceEdgeFrame the engine itself resolves the edge from —
+  // normal/tangent there are already exact perpendiculars (see
+  // geometry.ts), so this never disagrees with how the engine reasons
+  // about its own local frame.
+  const roadDir: BNGPoint = road
+    ? geo.normalize(geo.sub(road.centerlineBng[road.centerlineBng.length - 1], road.centerlineBng[0]))
+    : entranceFrame
+      ? entranceFrame.tangent
+      : [1, 0];
+  const depthAxis: BNGPoint = entranceFrame ? entranceFrame.normal : [roadDir[1], -roadDir[0]];
   const gardenOk = plots.every((p) => {
     if (!p.gardenBng) return false;
     const projections = p.gardenBng.map((pt) => geo.dot(pt, depthAxis));
