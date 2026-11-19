@@ -269,6 +269,73 @@ what's in the two documents that are).
   sets `settlementTier: "town"`, sourced from the delegated report's own
   description of the site as being subject to the "Towns" density rate.
 
+### gibbas-way-pembroke
+
+A phase of 50 houses/bungalows (no flats) on Land North of Gibbas Way,
+Upper Lamphey Road, Pembroke SA71 5JA — an infill phase of the Lords
+Meadow Farm development, applicant South Meadow Homes. Source documents
+are in `/test-sites/source/gibbas-way/`.
+
+- **Unit count (50): applicant's proposed total, NOT a confirmed
+  approval.** Read from the submitted Green Infrastructure Statement
+  (October 2026): "A phase of 50 homes with a public open space." No
+  decision notice was found among the documents reviewed this session —
+  `confidence` is `"sense_check"`, not `"approved_unit_count"`, for
+  exactly that reason. Treat this fixture's engine-vs-50 comparison as a
+  second data point alongside Meads, not a validated benchmark.
+- **Boundary tracing method — materially better than Meads or Pond
+  Bridge: a real topographical survey with printed BNG grid references,
+  not an eyeballed trace.** Two station markers (9011, 9012) give exact
+  `E`/`N` coordinates directly on both the topo survey and the "Existing
+  Site Plan 1:500" (Pembroke Design Ltd). Their pixel positions (read
+  from a high-resolution render) and known BNG coordinates were used to
+  derive an exact similarity transform (scale + rotation) between pixel
+  space and BNG, cross-checked: the transform's implied scale (0.0873
+  m/px at 150dpi) matches the drawing's own stated 1:500 scale almost
+  exactly. The boundary itself was then traced by eye against that
+  transform — still a manual trace, but position/scale error here is
+  genuinely small (centimetres from the transform itself; a few metres
+  from where-exactly-is-the-fence-line eyeballing), not the "could be
+  off by tens of metres" caveat the other fixtures carry. Sanity check:
+  the traced 2.704ha for a stated "50 homes" phase implies 18.5 dph
+  gross — plausible for a bungalow-heavy, "informal and traditional"
+  low-density scheme (the Green Infrastructure Statement's own words),
+  not a red flag.
+- **Entrance:** placed at the midpoint of the southern boundary edge,
+  facing Gibbas Way — matches where the drainage strategy and existing
+  site plan both show the development's spine road meeting the existing
+  road.
+- **Drainage easement (6m each side, per the user's instruction) —
+  recorded as data, NOT enforced by the engine.** The planning
+  statement's paragraph 5.15 (the source the easement width was given
+  from) was not located among the documents reviewed this session. The
+  corridor's position was instead built from the survey's own manhole
+  coordinates (the user's own fallback instruction), spanning only the
+  two manholes actually identified on the drawings (~99m) — not
+  extrapolated further, since nothing reviewed confirms the pipe's path
+  beyond those two points. Stored on the fixture as
+  `noBuildCorridorBng_notEnforcedByEngine`. v0's engine has no internal
+  no-build-zone / multi-polygon-boundary support (see the keep-clear-
+  zones design note from the Meads request) — the fixture's
+  `boundaryBng` is the full site, un-clipped. A boundary-clipping hack
+  was deliberately NOT used: the corridor only crosses the middle ~99m
+  of a ~235m-wide site, so clipping would either leave both edges
+  unprotected or require extrapolating the pipe's route far beyond what
+  was actually surveyed — neither is honest. This is a real, open gap,
+  not a silently-accepted one.
+- **Real house sizes, printed directly on the submitted drawings — used
+  in the yield-honesty home-size comparison below.** TYPE F / TYPE FS: 3
+  bed detached bungalow, 85.4m². TYPE E1A.2: 3 bed detached bungalow,
+  106.3m² (Plot 5). TYPE E2.1: 3 bed detached bungalow, 116.3m² (Plots
+  2, 45, 48). TYPE D: 3 bed detached dormer house, 136.3m².
+- **Current engine result: 36 houses vs 50 proposed (28% UNDER, not
+  over) — the opposite direction from Meads/Fern Rise.** `turning-head`
+  compliance genuinely fails partway up the site (the 16m turning circle
+  doesn't fit before the road runs out of usable frontage) — a real,
+  honestly-reported structural shortfall of v0's single-ribbon topology
+  on this elongated, irregular shape, not a tracing artifact. Invariants:
+  0 failures.
+
 ## Pass/fail tolerance
 
 The harness treats a fixture's unit count as a pass if the engine's

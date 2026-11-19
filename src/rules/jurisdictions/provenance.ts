@@ -49,6 +49,12 @@ export function appraisalProvenance(
       local.marketingPercentUnder20Units.source
     );
     push("land-fees", "Land acquisition fees", `${local.landAcquisitionFeesPercent.value}% + LTT`, local.landAcquisitionFeesPercent.source);
+    push(
+      "market-size-uplift",
+      "Typical market size above NDSS minimum",
+      `+${local.typicalMarketSizeUpliftPercent.value}%`,
+      local.typicalMarketSizeUpliftPercent.source
+    );
     push("bungalow-premium", "Bungalow sales premium", `+${local.bungalowSalesPremiumPercent.value}%`, local.bungalowSalesPremiumPercent.source);
     push("small-site-premium", "Small-site sales premium (≤10 units)", `+${local.smallSitePremiumPercent.value}%`, local.smallSitePremiumPercent.source);
     push(

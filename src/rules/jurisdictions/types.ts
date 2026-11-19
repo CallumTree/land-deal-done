@@ -125,6 +125,26 @@ export interface LocalAppraisalDefaults {
   tenureSplitIntermediatePercent: Sourced<number>;
   defaultMarketBand: MarketBand;
   /**
+   * How far ABOVE its NDSS minimum GIA a real dwelling of this type
+   * typically gets built, as a flat % uplift applied to every house
+   * type's NDSS_MIN_GIA_M2 figure (see generateLayout.ts). The engine's
+   * baseline behaviour is to build every unit at EXACTLY its NDSS
+   * minimum GIA ("at the floor, not above it") — a deliberate v0
+   * simplification, not a claim that real schemes are built that way.
+   * Confirmed as a real, material cause of the engine over-building unit
+   * counts vs approved schemes (see test-sites/README.md's yield-
+   * honesty notes): real dwellings use more floor area per unit than the
+   * bare minimum, so a smaller NDSS-at-floor footprint lets MORE units
+   * physically fit in the same net area than a real scheme achieves.
+   * 0 (with `source` UNSOURCED) is honest when no evidence exists for
+   * this jurisdiction — never a fabricated default. A single flat %
+   * across all house types is a simplification (real uplift varies by
+   * type — see the sourcing comment on whichever pack sets this) kept
+   * deliberately simple rather than inventing a false per-type precision
+   * from a small sample.
+   */
+  typicalMarketSizeUpliftPercent: Sourced<number>;
+  /**
    * "Auto" size-tier mix default when the user hasn't specified a mix at
    * all — the engine's own evidence-based starting point, not an
    * arbitrary equal split. Sourced from the council's own dwelling-type/

@@ -330,6 +330,31 @@ export const PEMBROKESHIRE_APPRAISAL_DEFAULTS: LocalAppraisalDefaults = {
     Large: s(22.2, "FVR §4.19 (p.13) dwelling-mix table, 4-bed row (20% of the 90% this engine's house types cover), renormalized"),
     XL: s(0, "No 5-bed/XL row exists in FVR §4.19's dwelling-mix table — 0% reflects the evidence gap, not a policy position"),
   },
+  /**
+   * [GIBBAS WAY] Sourced from a single real scheme's own submitted house-
+   * type drawings (Land North of Gibbas Way, Pembroke — Pembroke Design
+   * Ltd, "FOR PLANNING PURPOSES ONLY"), not a council-wide viability or
+   * evidence document like the rest of this pack's figures — flagged as
+   * a smaller, more specific evidence base than FVR-sourced fields.
+   * Actual GIA vs this engine's NDSS minimum for the matching house
+   * type: TYPE F/FS (3-bed detached bungalow) 85.4m² vs 86m² min (0.7%
+   * BELOW — effectively at the floor); TYPE E1A.2 (3-bed detached
+   * bungalow) 106.3m² vs 86m² min (+23.6%); TYPE E2.1 (3-bed detached
+   * bungalow) 116.3m² vs 86m² min (+35.2%); TYPE D (3-bed detached
+   * dormer house) 136.3m² vs the 3-bed-detached 93m² min (+46.6%).
+   * Range 0.7%-46.6%, bungalow-only average ~19.4%. 20% is a round,
+   * conservative figure near the bungalow average, well under the
+   * dormer house's uplift — a deliberately simple flat % across every
+   * house type (see this field's own doc comment in types.ts for why),
+   * not a precise fit to 4 data points. See test-sites/README.md
+   * (gibbas-way-pembroke fixture) for the full sourcing and the
+   * Meads sensitivity test this was checked against (20% uplift closes
+   * most, not all, of that fixture's remaining unit-count overshoot).
+   */
+  typicalMarketSizeUpliftPercent: s(
+    20,
+    "[GIBBAS WAY] Land North of Gibbas Way, Pembroke — submitted house-type drawings (Pembroke Design Ltd), Oct/Nov 2026. Range across 4 real house types vs this engine's matching NDSS minimum: 0.7%-46.6% (bungalows 0.7%-35.2%, avg ~19.4%; one dormer house +46.6%). 20% is a round, conservative single-scheme figure, not a council-wide evidence table — the weakest-sourced figure in this pack for that reason."
+  ),
   acgApproximatedAsOmv: true,
   acgApproximationNote: s(
     "Actively researched, not just unchecked: Welsh Government's own current public ACG guidance (the 2023-07 'Costs included in Social Housing Grant' document) defines ACG as Works Cost/m² plus on-costs and explicitly EXCLUDES site acquisition/land cost — confirming the 'including land' 2021 series FVR §5.11 refers to was a separate, since-discontinued publication, not something WG still publishes. Three Welsh councils' own supplementary guidance (Blaenau Gwent, Bro Morgannwg, and an earlier Monmouthshire document) each derive their social-rent transfer values as a stated % of '2021 Band 1 ACG figures' (42%, 42%, 58% respectively) uplifted annually by the WG social-rent-cap inflation factor — none of them publish the underlying raw 2021 ACG-including-land table itself, only their own already-discounted result, and in a different council's own regional band at that. No FOI/ATISN route was pursued. Conclusion: the 2021 ACG-including-land table was circulated directly to local authorities/RSLs, not published, so there is nothing to cite for Pembrokeshire specifically — ACG is therefore approximated as equal to the market band's OMV sales price for the social-rent transfer-value calculation. Real ACG-including-land rates are materially below OMV, so this OVERSTATES social-rent transfer value and every metric derived from it (affordable-housing revenue, GDV, residual land value) whenever affordableUnits > 0. Flagged via Metrics.affordableValueOverstated — not silently assumed.",

@@ -1,0 +1,25 @@
+{
+  "id": "gibbas-way-pembroke",
+  "description": "Land North of Gibbas Way, Upper Lamphey Road, Pembroke SA71 5JA. Proposed phase of 50 houses/bungalows (no flats) with public open space, applicant South Meadow Homes, infill phase of the surrounding Lords Meadow Farm development. Decision status not confirmed from the documents reviewed (no decision notice found among them) — 50 is the APPLICANT'S proposed unit count per the submitted Green Infrastructure Statement, not a confirmed LPA approval. Included for the house-size comparison (real dwelling GIAs are printed directly on the submitted house-type drawings) and as a second yield-honesty data point alongside Meads.",
+  "category": "proposed_not_confirmed_approved",
+  "boundaryBng": [
+    [199826.0, 201402.4],
+    [200014.9, 201398.3],
+    [199982.0, 201260.9],
+    [199811.8, 201268.6],
+    [199794.5, 201277.4],
+    [199780.0, 201304.4]
+  ],
+  "entranceBng": [199896.9, 201264.8],
+  "areaHectares": 2.704,
+  "expectedUnits": 50,
+  "expectedUnitsMethod": "Applicant's proposed total, read directly from the submitted Green Infrastructure Statement (October 2026): 'A phase of 50 homes with a public open space.' NOT a confirmed LPA-approved count (no decision notice was found among the documents reviewed) — confidence is sense_check, not approved_unit_count, for that reason. All 50 are houses/bungalows; no flats in this scheme.",
+  "confidence": "sense_check",
+  "notes": "A foul/surface-water drain crosses the northern-middle part of the site (manholes/pipe traced from the topographical survey and existing site plan — see test-sites/source/gibbas-way/). The planning statement's own paragraph 5.15 (a 6m-each-side building exclusion zone) was not located among the documents reviewed this session — the 6m-each-side figure was applied directly per the user's instruction, with the corridor's position and extent taken from the survey's own manhole coordinates instead (per the user's own fallback: use the survey for accurate coordinates). The corridor below spans only the two manholes actually identified in the drawings (a measured ~99m run) — it is NOT extrapolated further across the site, since nothing in the reviewed documents confirms the pipe's path beyond those two points. NOT enforced by the engine: v0 has no internal no-build-zone/multi-polygon support (see the keep-clear-zones design note from the Meads request) — boundaryBng above is the FULL site, not clipped around this corridor. The corridor is recorded here as data only.",
+  "noBuildCorridorBng_notEnforcedByEngine": [
+    [199878.1, 201404.9],
+    [199973.4, 201376.8],
+    [199970.1, 201365.3],
+    [199874.7, 201393.4]
+  ]
+}

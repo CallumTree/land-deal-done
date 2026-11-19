@@ -87,11 +87,22 @@ export function generateLayout(
   const gardenDepthM = inputs.minGardenDepthM ?? rules.MIN_GARDEN_DEPTH_M;
   const backToBackM = inputs.backToBackM ?? rules.BACK_TO_BACK_M;
   const sideGapM = rules.SIDE_GAP_TIER_M[inputs.sideGapTier ?? "tighter"];
-  const ndssMinGia: Record<HouseTypeId, number> = {
-    ...rules.NDSS_MIN_GIA_M2,
-    ...inputs.ndssMinGiaM2,
-  };
   const jurisdiction = resolveJurisdiction(inputs.localAuthority);
+  // v0's baseline behaviour is to build every unit at EXACTLY its NDSS
+  // minimum GIA — confirmed as a material, real cause of over-building
+  // unit counts vs approved schemes (see LocalAppraisalDefaults.
+  // typicalMarketSizeUpliftPercent's own doc comment and
+  // pembrokeshire.ts's sourcing). Applied here, before any explicit
+  // per-type override, so inputs.ndssMinGiaM2 always wins completely for
+  // whichever types it sets — the uplift only fills in types the caller
+  // didn't explicitly size.
+  const marketSizeUpliftPercent = jurisdiction.localAppraisal?.typicalMarketSizeUpliftPercent.value ?? 0;
+  const ndssMinGia: Record<HouseTypeId, number> = {
+    ...Object.fromEntries(
+      Object.entries(rules.NDSS_MIN_GIA_M2).map(([t, v]) => [t, Math.round(v * (1 + marketSizeUpliftPercent / 100))])
+    ),
+    ...inputs.ndssMinGiaM2,
+  } as Record<HouseTypeId, number>;
 
   // --- Local frame: entrance at origin, inward normal of its edge = +Y ---
   const { normal } = geo.entranceEdgeFrame(boundary, entrance);
@@ -1023,7 +1034,9 @@ export function generateLayout(
       ruleRef: "DCLG, NDSS, March 2015, Table 1",
       detail:
         fbNdssFailingIds.length === 0
-          ? "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+          ? marketSizeUpliftPercent > 0
+            ? `Every plot's GIA is set to its NDSS minimum plus ${jurisdiction.localAuthority}'s sourced typical-market-size uplift (+${marketSizeUpliftPercent}%) — still built at a fixed target per type, not a range.`
+            : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
           : `${fbNdssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
       affectedPlotIds: fbNdssFailingIds,
     });
@@ -1374,7 +1387,9 @@ export function generateLayout(
     status: ndssOk ? "pass" : "fail",
     ruleRef: "DCLG, NDSS, March 2015, Table 1",
     detail: ndssOk
-      ? "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+      ? marketSizeUpliftPercent > 0
+        ? `Every plot's GIA is set to its NDSS minimum plus ${jurisdiction.localAuthority}'s sourced typical-market-size uplift (+${marketSizeUpliftPercent}%) — still built at a fixed target per type, not a range.`
+        : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
       : `${ndssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
     affectedPlotIds: ndssFailingIds,
   });
