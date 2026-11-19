@@ -109,8 +109,104 @@ export function generateLayout(
   const compliance: ComplianceCheck[] = [];
 
   // --- Erode for buildings (road is allowed to meet the boundary at the entrance) ---
-  const erodedLocal = geo.offsetPolygonInward(localBoundary, rules.BOUNDARY_OFFSET_M);
-  const erosionValid = geo.isValidOffsetResult(localBoundary, erodedLocal);
+  let erodedLocal = geo.offsetPolygonInward(localBoundary, rules.BOUNDARY_OFFSET_M);
+  let erosionValid = geo.isValidOffsetResult(localBoundary, erodedLocal);
+
+  // --- Non-housing reserve: open space, drainage/SuDS, landscape buffers
+  // taken OUT of the developable area before any plot is placed, sized
+  // from the resolved jurisdiction's own net-to-gross evidence by scheme
+  // size (LocalAppraisalDefaults.bySchemeSize[band].netToGrossRatio —
+  // see pembrokeshire.ts; this field existed before this change but was
+  // only ever shown as a "yield sense-check," never actually applied to
+  // a layout). Why this matters: v0 previously eroded ONLY the fixed
+  // BOUNDARY_OFFSET_M margin and then packed plots across the entire
+  // remaining area — a real scheme's gross site also carries its SuDS
+  // pond/open space/ecology buffers/wider verges, none of which v0
+  // modelled at all, so it had strictly more land to build on than any
+  // real approved scheme did. Confirmed directly: on the Milford Haven
+  // fixture (test-sites/meads-priory-road-milford-haven.json), this was
+  // the single largest cause of the engine's ~73% unit-count overshoot
+  // (ahead of the mix-collapse fix just above).
+  //
+  // The right scheme-size band can't be known yet (it depends on the
+  // unit count, which is what we're about to compute) — a provisional
+  // density estimate stands in just to pick a band: the resolved
+  // jurisdiction's own lowest sourced minimum-density tier (the same
+  // conservative figure the density-minimum compliance check below
+  // falls back to when settlement tier is unknown), or a generic 25 dph
+  // if no local planning pack is resolved at all. Scheme-size bands are
+  // wide and netToGrossRatio only moves in ~0.05 steps between adjacent
+  // ones, so landing one band off changes the reserve by a few
+  // percentage points at most — not material to the final unit count.
+  let nonHousingReservePercent = 0;
+  let nonHousingReserveSource: string | null = null;
+  if (jurisdiction.localAppraisal) {
+    const localDensityTiers = jurisdiction.localPlanning
+      ? Object.values(jurisdiction.localPlanning.minGrossDensityDphByTier).map((d) => d.value)
+      : [];
+    const provisionalDph = localDensityTiers.length > 0 ? Math.min(...localDensityTiers) : 25;
+    const provisionalUnits = Math.max(1, Math.round((boundaryAreaM2 / 10000) * provisionalDph));
+    const provisionalBand = schemeSizeBandForUnits(provisionalUnits);
+    const row = jurisdiction.localAppraisal.bySchemeSize[provisionalBand];
+    const netToGrossRatio = row.netToGrossRatio.value;
+    nonHousingReservePercent = Math.round((1 - netToGrossRatio) * 100);
+    nonHousingReserveSource = row.netToGrossRatio.source;
+
+    if (erosionValid && netToGrossRatio < 1) {
+      const targetAreaM2 = boundaryAreaM2 * netToGrossRatio;
+      // Bisect the EXTRA inward-offset distance (beyond the standard
+      // BOUNDARY_OFFSET_M already applied above) until the eroded area
+      // lands at/below the target net area — reusing the same offset
+      // function and the same collapse check every other erosion in
+      // this engine already relies on, rather than a new geometry
+      // algorithm. offsetPolygonInward is a known-simplistic straight-
+      // line offset (see its own doc comment in geometry.ts) that CAN
+      // self-intersect on a narrow/irregular shape at a large enough
+      // distance — isValidOffsetResult only catches a collapsed-to-zero
+      // or inverted result, not every possible self-intersection, so
+      // this is a best-effort reserve on a very irregular boundary, not
+      // a geometrically bulletproof one. Verified against the fuzz
+      // harness's independent invariant checker (0 failures) before
+      // relying on it — see the shape-robustness report.
+      let lo = 0;
+      let hi = Math.sqrt(boundaryAreaM2);
+      let best = erodedLocal;
+      let bestArea = geo.area(erodedLocal);
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        const candidate = geo.offsetPolygonInward(localBoundary, rules.BOUNDARY_OFFSET_M + mid);
+        // isValidOffsetResult alone isn't enough at this scale: a
+        // self-intersecting ("bowtie") result from too large an offset
+        // can still shoelace-compute to a plausible smaller positive
+        // area and pass that check. isSimplePolygon catches a bowtie,
+        // but a degenerate offset can ALSO come out simple yet wrong —
+        // e.g. a thin quadrilateral eroded past its own width can flip
+        // its far corners' intersection order into a valid-looking but
+        // wrongly-shaped simple polygon that isn't really "the eroded
+        // original" anymore. The strongest cheap check: every vertex of
+        // the candidate must genuinely lie inside the ORIGINAL boundary
+        // — confirmed via direct fuzz-harness reproduction that
+        // isSimplePolygon alone still let two real invariant failures
+        // through; this containment check is what actually closed them.
+        const valid =
+          geo.isValidOffsetResult(localBoundary, candidate) &&
+          geo.isSimplePolygon(candidate) &&
+          candidate.every((p) => geo.pointInPolygon(p, localBoundary));
+        const candidateArea = valid ? geo.area(candidate) : 0;
+        if (!valid || candidateArea < targetAreaM2) {
+          hi = mid;
+        } else {
+          lo = mid;
+          best = candidate;
+          bestArea = candidateArea;
+        }
+      }
+      if (bestArea < geo.area(erodedLocal)) {
+        erodedLocal = best;
+        erosionValid = geo.isValidOffsetResult(localBoundary, erodedLocal);
+      }
+    }
+  }
 
   compliance.push({
     id: "boundary-offset",
@@ -118,7 +214,11 @@ export function generateLayout(
     status: erosionValid ? "pass" : "fail",
     ruleRef: `Boundary offset default ${rules.BOUNDARY_OFFSET_M}m (v0 nominal, editable)`,
     detail: erosionValid
-      ? `Eroded buildable area ${(geo.area(erodedLocal) / 10000).toFixed(3)}ha from ${(boundaryAreaM2 / 10000).toFixed(3)}ha gross.`
+      ? `Eroded buildable area ${(geo.area(erodedLocal) / 10000).toFixed(3)}ha from ${(boundaryAreaM2 / 10000).toFixed(3)}ha gross${
+          nonHousingReservePercent > 0
+            ? ` (includes a ${nonHousingReservePercent}% non-housing reserve for open space/drainage/landscape — ${nonHousingReserveSource})`
+            : ""
+        }.`
       : "Inward offset produced an invalid polygon (site too narrow/complex for v0's offset method) — treating buildable area as empty.",
   });
 
@@ -134,7 +234,8 @@ export function generateLayout(
       {
         cause: "boundary-too-complex",
         reason: "This boundary shape is too narrow or complex for a buildable area to be worked out.",
-      }
+      },
+      { percent: nonHousingReservePercent, source: nonHousingReserveSource }
     );
   }
 
@@ -225,7 +326,8 @@ export function generateLayout(
   // --- Mix cycle at the TYPE level: each "turn" attempts a whole attached
   // block (terrace run / semi pair / lone detached), not just one unit —
   // see rules.MAX_BLOCK_UNITS. ---
-  const mixCycle = buildMixCycle(resolveEffectiveHouseMix(inputs, jurisdiction));
+  const mixPlan = buildMixPlan(resolveEffectiveHouseMix(inputs, jurisdiction));
+  const mixCycle = mixPlan.cycle;
 
   interface PlotSpec {
     houseType: HouseTypeId;
@@ -280,6 +382,70 @@ export function generateLayout(
   );
   const smallestFrontageWidthM = Math.min(...HOUSE_TYPES.map((t) => computePlotSpec(t).frontageWidthM));
   const smallestTotalDepthM = Math.min(...HOUSE_TYPES.map((t) => computePlotSpec(t).totalDepthM));
+
+  /**
+   * How far a type's running share may run ahead of its target share
+   * (from the active mix's own weights) before the placement search
+   * stops preferring it over an under-represented type that also
+   * physically fits. 0.10 = 10 percentage points — a deliberate BAND,
+   * not an exact match requirement: small positions-vs-geometry noise
+   * (e.g. a run of terraces that happens to fit three in a row) is
+   * expected and fine; what this stops is the mix collapsing entirely
+   * onto whichever single type is easiest to pack (see the comment on
+   * orderTypesForMixTolerance below for the failure mode this fixes).
+   */
+  const MIX_TOLERANCE_BAND = 0.1;
+
+  /**
+   * The placement loops below try a list of house types at each
+   * candidate position, in order, and build the first one that fits.
+   * Before this existed, that order was always [preferred-by-cycle,
+   * ...everything else by ascending frontage] — and because the
+   * smallest-frontage type (2-bed-terrace) fits in almost any gap a
+   * larger preferred type doesn't, every position where the cycle's
+   * current "turn" didn't physically fit fell through to 2-bed-terrace
+   * as the universal filler. Over a whole site that starves the larger
+   * types the mix evidence actually calls for — confirmed directly on
+   * the Milford Haven fixture (102/102 placed units were 2-bed-terrace,
+   * despite an Auto mix targeting roughly a third Small/under half
+   * Medium/a fifth Large).
+   *
+   * Fix: reorder the *in-mix* types (weight > 0) by how far UNDER their
+   * own target share they currently are, each time a position is
+   * probed — the cycle's nominal preferred type still goes first as
+   * long as it isn't running more than MIX_TOLERANCE_BAND ahead of its
+   * target, but once a type has run that far ahead, a still-behind type
+   * gets first refusal instead, even if the cycle "says" otherwise.
+   * Out-of-mix types (weight 0) are untouched — they stay in the
+   * trailing full-fallback list, exactly as before, so a gap nothing
+   * in-mix can fill still gets something rather than being wasted (see
+   * the no-wasted-gaps invariant). This can only make the built mix
+   * MORE faithful to the target shares; it never excludes a type that
+   * physically fits and never produces fewer homes than before — a
+   * type that doesn't fit here still falls through to the next
+   * candidate in the list, same as always.
+   */
+  function orderTypesForMixTolerance(preferredType: HouseTypeId, placedSoFar: PlacedPlot[]): HouseTypeId[] {
+    const { weights, totalWeight } = mixPlan;
+    if (totalWeight <= 0) return [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+
+    const totalPlaced = placedSoFar.length;
+    const deficit = (t: HouseTypeId): number => {
+      const target = (weights[t] ?? 0) / totalWeight;
+      const current = totalPlaced > 0 ? placedSoFar.filter((p) => p.houseType === t).length / totalPlaced : 0;
+      return target - current; // positive = under-represented vs its target share
+    };
+
+    const inMixTypes = HOUSE_TYPES.filter((t) => (weights[t] ?? 0) > 0);
+    const rankedByDeficit = [...inMixTypes].sort((a, b) => deficit(b) - deficit(a));
+
+    const order =
+      (weights[preferredType] ?? 0) > 0 && deficit(preferredType) >= -MIX_TOLERANCE_BAND
+        ? [preferredType, ...rankedByDeficit.filter((t) => t !== preferredType)]
+        : rankedByDeficit;
+
+    return [...order, ...typesByFrontageAsc.filter((t) => !order.includes(t))];
+  }
 
   function depthToX(side: Side, frontageX: number, depth: number): number {
     return side === "left" ? frontageX - depth : frontageX + depth;
@@ -459,7 +625,7 @@ export function generateLayout(
     // that type's normal block-size fallback, 6..1, still in play). This
     // is strictly less search than full mode does, never more — draft
     // can only place a subset of what full would place.
-    const typeOrder = draftMode ? [preferredType] : [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+    const typeOrder = draftMode ? [preferredType] : orderTypesForMixTolerance(preferredType, state.plots);
 
     for (let yStart = startCursor; yStart < maxPlotFrontageY; yStart += PROBE_STEP_M) {
       for (const houseType of typeOrder) {
@@ -563,7 +729,9 @@ export function generateLayout(
         inputs,
         jurisdiction,
         t0,
-        "frontage-ribbon"
+        "frontage-ribbon",
+        null,
+        { percent: nonHousingReservePercent, source: nonHousingReserveSource }
       );
     }
   }
@@ -667,7 +835,7 @@ export function generateLayout(
     // so a gap a smaller type would fill is never skipped over.
     function tryPlaceFrontageUnit(): boolean {
       const preferredType = mixCycle[cycleIndex % mixCycle.length];
-      const typeOrder = draftMode ? [preferredType] : [preferredType, ...typesByFrontageAsc.filter((t) => t !== preferredType)];
+      const typeOrder = draftMode ? [preferredType] : orderTypesForMixTolerance(preferredType, plots);
       for (let xStart = cursorX; xStart < maxX; xStart += PROBE_STEP_M) {
         for (const houseType of typeOrder) {
           for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
@@ -967,9 +1135,21 @@ export function generateLayout(
         reason: `Frontage is ${bestSideExtentM.toFixed(0)}m: a road and one plot need about ${requiredSideDepthM.toFixed(0)}m.`,
       };
     } else {
+      // Both the turning-head fit and the aggregate side-depth checks
+      // above passed, yet nothing got placed — the eroded buildable
+      // area (after the non-housing reserve, see that computation near
+      // the top of this function) doesn't have one single CONTIGUOUS
+      // stretch long enough for even the smallest block, even though
+      // its overall extent looks sufficient in aggregate. Keep this
+      // honest about not having a crisper diagnosis, rather than
+      // reusing a more specific-sounding message that doesn't actually
+      // match (an earlier version of this message implied a simple
+      // frontage-length shortfall, which read as nonsensical once the
+      // non-housing reserve could be the real cause: the reported
+      // frontage length looked more than enough for the smallest home).
       zeroHomesInfo = {
         cause: "area-too-small",
-        reason: `Only ${maxPlotFrontageY.toFixed(0)}m of road frontage fits before the turning circle — the smallest home needs about ${smallestFrontageWidthM.toFixed(0)}m.`,
+        reason: `This boundary's buildable area${nonHousingReservePercent > 0 ? ` (after the ${nonHousingReservePercent}% non-housing reserve)` : ""} doesn't leave one contiguous stretch long enough for even the smallest home, though the turning head and overall side depth both fit on their own.`,
       };
     }
   }
@@ -1316,12 +1496,23 @@ export function generateLayout(
     parkingSpacesBng: parkingSpacesLocal.map(toWorld),
   };
 
-  return finalize(layout, compliance, boundaryAreaM2, inputs, jurisdiction, t0, topology, zeroHomesInfo);
+  return finalize(layout, compliance, boundaryAreaM2, inputs, jurisdiction, t0, topology, zeroHomesInfo, {
+    percent: nonHousingReservePercent,
+    source: nonHousingReserveSource,
+  });
 }
 
 const DEFAULT_HOUSE_TYPES: HouseTypeId[] = ["2-bed-terrace", "3-bed-semi", "4-bed-detached"];
 
-function buildMixCycle(mix: Partial<Record<HouseTypeId, number>> | undefined): HouseTypeId[] {
+interface MixPlan {
+  cycle: HouseTypeId[];
+  /** Raw (non-ceiled) target weight per type, 0 for anything not requested. Used to compute each type's TARGET share for the mix-tolerance ordering below — not itself a placement order. */
+  weights: Partial<Record<HouseTypeId, number>>;
+  /** Sum of `weights` — 0 only when the mix fell all the way back to DEFAULT_HOUSE_TYPES (an unweighted 1/1/1 fallback is used for target-share purposes in that case). */
+  totalWeight: number;
+}
+
+function buildMixPlan(mix: Partial<Record<HouseTypeId, number>> | undefined): MixPlan {
   // EngineInputs.mix's own doc comment says "missing types default to 0"
   // — the code used to default them to 1 instead, which would have
   // silently pulled bungalows into every unlabelled mix the moment a 4th
@@ -1340,19 +1531,33 @@ function buildMixCycle(mix: Partial<Record<HouseTypeId, number>> | undefined): H
   // what was actually asked for. Rounding up instead guarantees any
   // explicitly-requested nonzero tier/type is always represented by at
   // least one form, never discarded outright.
-  const weights = HOUSE_TYPES.map((t) => {
+  const ceiledWeights = HOUSE_TYPES.map((t) => {
     const w = mix?.[t] ?? 0;
     return w > 0 ? Math.ceil(w) : 0;
   });
   const cycle: HouseTypeId[] = [];
   for (let i = 0; i < HOUSE_TYPES.length; i++) {
-    for (let k = 0; k < weights[i]; k++) cycle.push(HOUSE_TYPES[i]);
+    for (let k = 0; k < ceiledWeights[i]; k++) cycle.push(HOUSE_TYPES[i]);
+  }
+  if (cycle.length > 0) {
+    const weights: Partial<Record<HouseTypeId, number>> = {};
+    let totalWeight = 0;
+    for (const t of HOUSE_TYPES) {
+      const w = mix?.[t] ?? 0;
+      if (w > 0) {
+        weights[t] = w;
+        totalWeight += w;
+      }
+    }
+    return { cycle, weights, totalWeight };
   }
   // Nothing requested at all (mix omitted, or every weight came out 0) —
   // fall back to the original three-type equal mix. Bungalow stays
   // opt-in rather than joining the unlabelled default: it's provisional
   // (see rules.ts) and scheme-specific, not a general-purpose house type yet.
-  return cycle.length > 0 ? cycle : [...DEFAULT_HOUSE_TYPES];
+  const weights: Partial<Record<HouseTypeId, number>> = {};
+  for (const t of DEFAULT_HOUSE_TYPES) weights[t] = 1;
+  return { cycle: [...DEFAULT_HOUSE_TYPES], weights, totalWeight: DEFAULT_HOUSE_TYPES.length };
 }
 
 function finalize(
@@ -1363,7 +1568,8 @@ function finalize(
   jurisdiction: ResolvedJurisdiction,
   t0: number,
   topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none" = "none",
-  zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null
+  zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null,
+  nonHousingReserve: { percent: number; source: string | null } = { percent: 0, source: null }
 ): EngineOutput {
   const mix: Record<HouseTypeId, number> = {
     "2-bed-terrace": 0,
@@ -1529,6 +1735,8 @@ function finalize(
     topologyUsed,
     zeroHomesReason: totalUnits === 0 ? (zeroHomesInfo?.reason ?? "No buildable layout could be found for this boundary and entrance.") : null,
     zeroHomesCause: totalUnits === 0 ? (zeroHomesInfo?.cause ?? null) : null,
+    nonHousingReservePercent: nonHousingReserve.percent,
+    nonHousingReserveSource: nonHousingReserve.source,
   };
 
   compliance.push({
@@ -1556,15 +1764,33 @@ function finalize(
         detail: `Site is ${boundaryAreaHa.toFixed(2)}ha — below ${localPlanning.councilName}'s ${appliesAboveHa}ha threshold for its minimum-density policy to apply.`,
       });
     } else if (!inputs.settlementTier) {
-      const tiers = Object.entries(localPlanning.minGrossDensityDphByTier)
-        .map(([tier, d]) => `${d.value} dph in ${tier}`)
+      // No UI control asks the user for this, and no settlement-tier
+      // lookup exists in the engine yet (see types.ts's doc comment on
+      // settlementTier — a cheap one would read the Built-Up Area field
+      // postcodes.io already returns for a postcode-searched site, not
+      // built yet). Rather than skip the rule entirely (a silent pass by
+      // omission) or warn every single user who hasn't set a tier (most
+      // haven't, and most layouts clear the lower tier anyway), check
+      // against the LOWEST minimum this council has — the one that
+      // can never be wrong in the "too lenient" direction — and say so
+      // plainly in the detail. A genuinely under-density layout still
+      // warns; a typical one just gets a quiet pass.
+      const [fallbackTier, fallbackRule] = Object.entries(localPlanning.minGrossDensityDphByTier).sort(
+        (a, b) => a[1].value - b[1].value
+      )[0];
+      const higherTiers = Object.entries(localPlanning.minGrossDensityDphByTier)
+        .filter(([tier]) => tier !== fallbackTier)
+        .map(([tier, d]) => `${d.value} dph in "${tier}"`)
         .join(", ");
+      const meetsFallback = grossDensityDph >= fallbackRule.value;
       compliance.push({
         id: "density-minimum",
         label: "Minimum gross density",
-        status: "warn",
-        ruleRef: `${localPlanning.councilName} minimum-density policy — settlement tier not set`,
-        detail: `Settlement tier not specified, so ${localPlanning.councilName}'s minimum gross density policy (${tiers}) couldn't be checked against this layout's ${grossDensityDph.toFixed(1)} dwellings/hectare.`,
+        status: meetsFallback ? "pass" : "warn",
+        ruleRef: fallbackRule.source,
+        detail: meetsFallback
+          ? `This layout is ${grossDensityDph.toFixed(1)} dwellings/hectare gross — meets ${localPlanning.councilName}'s baseline minimum of ${fallbackRule.value} dwellings/hectare (settlement type not specified; a higher minimum may apply instead — ${higherTiers}).`
+          : `This layout is ${grossDensityDph.toFixed(1)} dwellings/hectare gross — below ${localPlanning.councilName}'s baseline minimum of ${fallbackRule.value} dwellings/hectare, the lowest tier that could apply (settlement type not specified; ${higherTiers} could require even more).`,
       });
     } else {
       const tierRule = localPlanning.minGrossDensityDphByTier[inputs.settlementTier];

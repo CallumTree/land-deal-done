@@ -540,6 +540,14 @@ export default function Home() {
             </div>
           )}
 
+          {metrics && metrics.nonHousingReservePercent > 0 && (
+            <div className="mt-2 rounded-xl border border-grid-border bg-panel/40 px-3 py-2 text-[11px] leading-snug text-grid-muted">
+              <strong className="font-semibold text-grid-text">{metrics.nonHousingReservePercent}% of this site</strong> is set
+              aside before building — open space, drainage and landscape buffers a real scheme like this would need, not just
+              houses and gardens.
+            </div>
+          )}
+
           {output && (
             <div className="mt-4 rounded-xl border border-grid-border">
               <button

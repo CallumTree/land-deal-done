@@ -200,6 +200,19 @@ export interface Metrics {
    * Null whenever zeroHomesReason is null.
    */
   zeroHomesCause: "boundary-too-complex" | "turning-head-no-fit" | "frontage-too-narrow" | "area-too-small" | null;
+  /**
+   * % of the gross site area set aside as a non-housing reserve (open
+   * space, drainage/SuDS, landscape buffers) before any plot was placed,
+   * sized from the resolved jurisdiction's own net-to-gross evidence by
+   * scheme size. 0 when no local appraisal pack is resolved at all (there's
+   * nothing jurisdiction-specific to size it from) — never a silent
+   * assumption, just genuinely nothing applied. See generateLayout.ts's
+   * reserve computation, right after the boundary erosion, for exactly
+   * how the scheme-size band is estimated and the source cited.
+   */
+  nonHousingReservePercent: number;
+  /** Where nonHousingReservePercent's underlying ratio came from — null iff nonHousingReservePercent is 0. */
+  nonHousingReserveSource: string | null;
 }
 
 export interface ComplianceCheck {

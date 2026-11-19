@@ -266,6 +266,46 @@ export function isValidOffsetResult(original: BNGPolygon, offset: BNGPolygon): b
 }
 
 /**
+ * True if no two NON-ADJACENT edges of `polygon` cross — i.e. the
+ * polygon doesn't self-intersect (a "bowtie"). O(n²) in edge count,
+ * only meant for the handful of times per generateLayout() call this
+ * actually needs checking (not the hot per-candidate placement loop).
+ *
+ * Exists specifically because offsetPolygonInward's own doc comment
+ * already states it can self-intersect past a narrow feature — and
+ * isValidOffsetResult's area-only check does NOT reliably catch that: a
+ * self-intersecting ("bowtie") result can still shoelace-compute to a
+ * plausible-looking smaller positive area, passing the area check while
+ * being geometrically invalid. Confirmed directly: generateLayout.ts's
+ * non-housing-reserve erosion (a much larger offset than the fixed
+ * BOUNDARY_OFFSET_M everywhere else uses) produced exactly this on two
+ * fuzz-harness rectangles, each one tripping a real
+ * plots-inside-boundary invariant failure despite isValidOffsetResult
+ * reporting "valid." Used as an EXTRA gate alongside isValidOffsetResult
+ * wherever an offset distance isn't known in advance to be safely small
+ * (i.e. the reserve's bisection search, not the small fixed
+ * BOUNDARY_OFFSET_M offset everywhere else, which stays on
+ * isValidOffsetResult alone as before — unnecessary to re-verify
+ * something already extensively fuzz-tested at that scale).
+ */
+export function isSimplePolygon(polygon: BNGPolygon): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const a1 = polygon[i];
+    const a2 = polygon[(i + 1) % n];
+    for (let j = i + 1; j < n; j++) {
+      const adjacent = j === i || j === (i + 1) % n || (j + 1) % n === i;
+      if (adjacent) continue;
+      const b1 = polygon[j];
+      const b2 = polygon[(j + 1) % n];
+      if (properCrossing(a1, a2, b1, b2)) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * True if segments p1-p2 and p3-p4 cross transversally — each segment's
  * endpoints strictly straddle the other's line. Unlike segmentsIntersect,
  * this is false for touching endpoints or a collinear overlap, so a rect

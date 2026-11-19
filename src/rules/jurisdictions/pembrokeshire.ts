@@ -1,20 +1,42 @@
 // Local pack: Pembrokeshire County Council (excluding Pembrokeshire Coast
 // National Park, which has its own separate LDP).
 //
-// Sources, both saved unmodified at /docs/evidence/pembrokeshire/:
-//   [LDP2]  Pembrokeshire County Council Deposit Local Development Plan
-//           2017-2033 ("LDP2"), 13-page extract. STATUS: this is a
-//           DEPOSIT plan — out for public consultation, NOT YET ADOPTED.
-//           Every planning-rules figure below is Deposit-stage evidence,
-//           not a confirmed adopted policy; see the README flag.
-//   [FVR]   Burrows-Hutchinson Ltd, "Pembrokeshire (excluding National
-//           Park): Financial Viability Report for Deposit LDP-2", July
-//           2024 ("the Viability Report"). Every £-figure below was read
-//           directly from this document's Section 5 and Appendices
-//           A-F, not taken from any summary.
+// Sources:
+//   [LDP2]     Pembrokeshire County Council Deposit Local Development Plan
+//              2017-2033 ("LDP2"), 13-page extract, saved unmodified at
+//              /docs/evidence/pembrokeshire/. STATUS: a DEPOSIT plan — out
+//              for public consultation, NOT YET ADOPTED as of this
+//              document. Every £-figure/appraisal evidence row below is
+//              Deposit-stage evidence (there is no adopted-plan equivalent
+//              sourced for those); the one exception is the live minimum-
+//              density figures, which now come from [LDP-2013] instead —
+//              see that entry.
+//   [FVR]      Burrows-Hutchinson Ltd, "Pembrokeshire (excluding National
+//              Park): Financial Viability Report for Deposit LDP-2", July
+//              2024 ("the Viability Report"), saved at
+//              /docs/evidence/pembrokeshire/. Every £-figure below was
+//              read directly from this document's Section 5 and
+//              Appendices A-F, not taken from any summary.
+//   [LDP-2013] The CURRENTLY ADOPTED Pembrokeshire Local Development Plan
+//              (adopted 28 February 2013) — NOT independently reviewed as
+//              a document in this session. Its Policy GN.26 wording and
+//              figures are read secondhand, from the Pembrokeshire County
+//              Council delegated decision report for planning application
+//              25/0074/PA (Land south of the Meads, Priory Road, Milford
+//              Haven; decided 02/07/2026), which quotes the policy
+//              directly: "Policy GN.26 (Residential Development) states
+//              that new homes on sites of more than 0.10 hectares and
+//              above will be built at a density of at least 25 dwellings
+//              per hectare, rising to at least 30 dwellings per hectare in
+//              Towns" and confirms the site (2.93ha) is subject to this
+//              rule. Flagged as a secondhand citation, not a direct read
+//              of LDP-2013 itself — if GN.26's wording turns out to
+//              differ from this quote elsewhere in the adopted plan, that
+//              would need correcting against the primary document.
 //
-// Every value below was independently verified against the PDFs, not
-// trusted from any prior description of their contents.
+// Every value below was independently verified against the PDFs it cites,
+// not trusted from any prior description of their contents — except
+// [LDP-2013]'s figures, flagged above as secondhand.
 
 import type { HouseTypeId } from "../../engine/types";
 import type {
@@ -40,21 +62,41 @@ export const PEMBROKESHIRE_PLANNING_RULES: LocalPlanningRules = {
   councilName: "Pembrokeshire County Council (excluding Pembrokeshire Coast National Park)",
 
   /**
-   * Policy GN13 Residential Development: "New homes on allocated sites
-   * in Service Centres and Service Villages and otherwise on sites of
-   * 0.10 hectares and above will be built at a density of at least 23
-   * dwellings per hectare, rising to at least 30 dwellings per hectare
-   * for sites in Towns." Reaffirmed at §5.88 (p.118): "a minimum density
-   * of 23 dwellings per hectare in Service Centres and Service Villages
-   * ... and 30 dwellings per hectare in Towns ... based on gross site
-   * area: net densities will accordingly be higher."
+   * LIVE rule — the currently ADOPTED LDP-2013's Policy GN.26, read
+   * secondhand via the 25/0074/PA delegated report's direct quote (see
+   * the [LDP-2013] source note at the top of this file): "new homes on
+   * sites of more than 0.10 hectares and above will be built at a
+   * density of at least 25 dwellings per hectare, rising to at least 30
+   * dwellings per hectare in Towns." Two tiers only — the adopted
+   * wording doesn't split "Service Centre"/"Service Village" out the
+   * way the deposit LDP2's GN13 does (see
+   * emergingMinGrossDensityDphByTier below); "other" here covers
+   * everywhere that isn't a Town.
    */
   minGrossDensityDphByTier: {
-    town: s(30, "LDP2, Policy GN13 (p.117) and §5.88 (p.118)"),
-    "service centre": s(23, "LDP2, Policy GN13 (p.117) and §5.88 (p.118)"),
-    "service village": s(23, "LDP2, Policy GN13 (p.117) and §5.88 (p.118)"),
+    town: s(30, "LDP-2013 (adopted), Policy GN.26 — see [LDP-2013] source note"),
+    other: s(25, "LDP-2013 (adopted), Policy GN.26 — see [LDP-2013] source note"),
   },
-  densityAppliesAboveHectares: s(0.1, "LDP2, Policy GN13 (p.117): 'otherwise on sites of 0.10 hectares and above'"),
+  /**
+   * EMERGING figures only — from the Deposit LDP2's Policy GN13, NOT
+   * currently adopted and NOT consulted by the engine (see this field's
+   * own doc comment in types.ts). Kept for reference: if/when LDP2 is
+   * adopted, these are the figures expected to supersede the ones above.
+   * "New homes on allocated sites in Service Centres and Service
+   * Villages and otherwise on sites of 0.10 hectares and above will be
+   * built at a density of at least 23 dwellings per hectare, rising to
+   * at least 30 dwellings per hectare for sites in Towns." Reaffirmed at
+   * §5.88 (p.118).
+   */
+  emergingMinGrossDensityDphByTier: {
+    town: s(30, "LDP2 Deposit Plan (NOT ADOPTED), Policy GN13 (p.117) and §5.88 (p.118) — emerging, not used"),
+    "service centre": s(23, "LDP2 Deposit Plan (NOT ADOPTED), Policy GN13 (p.117) and §5.88 (p.118) — emerging, not used"),
+    "service village": s(23, "LDP2 Deposit Plan (NOT ADOPTED), Policy GN13 (p.117) and §5.88 (p.118) — emerging, not used"),
+  },
+  densityAppliesAboveHectares: s(
+    0.1,
+    "LDP-2013 (adopted), Policy GN.26: 'sites of more than 0.10 hectares and above' — matches the deposit LDP2's GN13 wording exactly, see [LDP-2013] source note"
+  ),
 
   /**
    * Policy GN15 Housing Mix, Second Homes and Short-term Holiday Lets,
@@ -88,8 +130,8 @@ export const PEMBROKESHIRE_PLANNING_RULES: LocalPlanningRules = {
   ),
 
   planStatus: s(
-    "Deposit Plan (2017-2033) — out for public consultation, NOT YET ADOPTED as of this document",
-    "LDP2 document header/title on every page; confirmed by the Glossary's own definition of 'Deposit Plan'"
+    "Two plans in play: LDP-2013 (adopted 28 Feb 2013) is the CURRENTLY ADOPTED plan and supplies this pack's live minimum-density figures (minGrossDensityDphByTier). LDP2 (2017-2033) is a Deposit Plan — out for public consultation, NOT YET ADOPTED — and supplies every other planning-rules and appraisal figure below, plus the emerging (not used) density figures in emergingMinGrossDensityDphByTier. LDP-2013 itself wasn't independently reviewed this session — see the [LDP-2013] source note at the top of this file.",
+    "LDP2 document header/title on every page; confirmed by the Glossary's own definition of 'Deposit Plan'. LDP-2013's adoption date and GN.26 wording per the 25/0074/PA delegated decision report (see [LDP-2013] source note)."
   ),
 };
 

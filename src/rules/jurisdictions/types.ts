@@ -75,8 +75,24 @@ export type AffordableHousingTable = Record<MarketBand, Partial<Record<SchemeSiz
 export interface LocalPlanningRules {
   /** council name as it appears in the source documents */
   councilName: string;
-  /** minimum GROSS site density, dwellings/hectare, by settlement tier */
+  /**
+   * The LIVE minimum GROSS site density, dwellings/hectare, by settlement
+   * tier — the engine's density-minimum compliance check (generateLayout.ts)
+   * reads this one, never `emergingMinGrossDensityDphByTier`. Must come
+   * from the currently-ADOPTED local plan, not a deposit/emerging one —
+   * see each pack's own sourcing comment for which document and
+   * adoption date this was read from.
+   */
   minGrossDensityDphByTier: Record<string, Sourced<number>>;
+  /**
+   * Optional: the same figures from a newer, NOT YET ADOPTED local plan
+   * (e.g. a Deposit Plan out for consultation) — kept for reference and
+   * shown in the sourcing/provenance view only, clearly labelled as
+   * emerging. NEVER consulted by generateLayout.ts's compliance check;
+   * swap it into `minGrossDensityDphByTier` (and update this field with
+   * whatever superseded it) once the plan is actually adopted.
+   */
+  emergingMinGrossDensityDphByTier?: Record<string, Sourced<number>>;
   /** site size threshold above which the density minimum applies */
   densityAppliesAboveHectares: Sourced<number>;
   /** % of new-build sites of N+ units that must be Lifetime Homes standard (market homes) */

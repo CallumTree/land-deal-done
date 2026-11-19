@@ -108,6 +108,11 @@ export function planningProvenance(jurisdiction: ResolvedJurisdiction): Provenan
     for (const [tier, d] of Object.entries(lp.minGrossDensityDphByTier)) {
       push(`density-${tier}`, `Min gross density (${tier})`, `${d.value} dph`, d.source);
     }
+    if (lp.emergingMinGrossDensityDphByTier) {
+      for (const [tier, d] of Object.entries(lp.emergingMinGrossDensityDphByTier)) {
+        push(`density-emerging-${tier}`, `Min gross density (${tier}) — EMERGING, not used`, `${d.value} dph`, d.source);
+      }
+    }
     push("lifetime-homes", "Lifetime Homes %", `${lp.lifetimeHomesPercent.value}% on sites of ${lp.lifetimeHomesAppliesAboveUnits.value}+ units`, lp.lifetimeHomesPercent.source);
     push("ndss-status", "NDSS status locally", lp.ndssStatus.value, lp.ndssStatus.source);
     push("plan-status", "Local plan status", lp.planStatus.value, lp.planStatus.source);
