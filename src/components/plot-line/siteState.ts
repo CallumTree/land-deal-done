@@ -128,9 +128,20 @@ function base64UrlDecode(s: string): string {
   return typeof window === "undefined" ? Buffer.from(padded, "base64").toString("utf8") : atob(padded);
 }
 
+// Share-link format version marker. Old links (encoded before this marker
+// existed) are a plain number array starting with hasEntrance (always 0 or
+// 1) — VERSION_SENTINEL (-1) can never appear there, so prepending
+// [VERSION_SENTINEL, HASH_FORMAT_VERSION] to every NEW encoding gives new
+// links a tag old links don't have, without touching old links' own
+// layout or breaking their decode path at all. Bump HASH_FORMAT_VERSION
+// whenever a future change actually alters the payload layout below it;
+// this task only adds the marker, the payload itself is unchanged.
+const VERSION_SENTINEL = -1;
+const HASH_FORMAT_VERSION = 2;
+
 /** Encodes state into a URL hash fragment value (no leading "#"). Never throws — a malformed/empty state just encodes to a tiny, harmless string. */
 export function encodeSiteStateToHash(state: SiteState): string {
-  return base64UrlEncode(JSON.stringify(packSiteState(state)));
+  return base64UrlEncode(JSON.stringify([VERSION_SENTINEL, HASH_FORMAT_VERSION, ...packSiteState(state)]));
 }
 
 /**
@@ -138,13 +149,22 @@ export function encodeSiteStateToHash(state: SiteState): string {
  * ANYTHING malformed (bad base64, invalid JSON, wrong shape, corrupted
  * numbers) — callers fall back to localStorage or a blank site, exactly
  * as if no hash were present. Never throws.
+ *
+ * Backward-compatible with links encoded before HASH_FORMAT_VERSION
+ * existed: those decode as version 1, payload = the whole array. A
+ * version-tagged link's own payload is everything after the
+ * [VERSION_SENTINEL, version] prefix. The payload layout itself hasn't
+ * changed yet, so both paths currently call the same unpackSiteState —
+ * a future version bump that DOES change the layout would branch here.
  */
 export function decodeHashToSiteState(hash: string): SiteState | null {
   if (!hash) return null;
   try {
     const parsed: unknown = JSON.parse(base64UrlDecode(hash));
     if (!Array.isArray(parsed) || !parsed.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
-    return unpackSiteState(parsed);
+    const isVersioned = parsed[0] === VERSION_SENTINEL;
+    const payload = isVersioned ? parsed.slice(2) : parsed;
+    return unpackSiteState(payload);
   } catch {
     return null;
   }

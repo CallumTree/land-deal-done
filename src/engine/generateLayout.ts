@@ -2156,17 +2156,30 @@ function buildMixPlan(mix: Partial<Record<HouseTypeId, number>> | undefined): Mi
   return { cycle: [...DEFAULT_HOUSE_TYPES], weights, totalWeight: DEFAULT_HOUSE_TYPES.length };
 }
 
-function finalize(
+type TopologyUsed = "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none";
+type ZeroHomesInfo = { cause: Metrics["zeroHomesCause"]; reason: string } | null;
+type NonHousingReserve = { percent: number; source: string | null };
+
+/**
+ * Pure appraisal: turns a finished layout into GDV/build-cost/affordable/
+ * residual-land-value Metrics. Deliberately separate from the layout
+ * geometry that produces `layout` and `compliance` — this function never
+ * places a plot, checks a boundary, or decides a topology; it only reads
+ * `layout.plots` and the resolved jurisdiction's appraisal figures. Split
+ * out of what used to be a single finalize() as a pure refactor (no
+ * behaviour change) — see the "typology plug-in" design note this was
+ * requested from: this is the seam where a non-housing typology would
+ * supply its own appraisal method instead.
+ */
+function appraise(
   layout: LayoutResult,
-  compliance: ComplianceCheck[],
   boundaryAreaM2: number,
   inputs: EngineInputs,
   jurisdiction: ResolvedJurisdiction,
-  t0: number,
-  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none" = "none",
-  zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null,
-  nonHousingReserve: { percent: number; source: string | null } = { percent: 0, source: null }
-): EngineOutput {
+  topologyUsed: TopologyUsed = "none",
+  zeroHomesInfo: ZeroHomesInfo = null,
+  nonHousingReserve: NonHousingReserve = { percent: 0, source: null }
+): Metrics {
   const mix: Record<HouseTypeId, number> = {
     "2-bed-terrace": 0,
     "2-bed-semi": 0,
@@ -2334,6 +2347,40 @@ function finalize(
     nonHousingReservePercent: nonHousingReserve.percent,
     nonHousingReserveSource: nonHousingReserve.source,
   };
+
+  return metrics;
+}
+
+/**
+ * Assembles the final EngineOutput: runs appraise() for Metrics, then adds
+ * the appraisal/planning-policy compliance checks whose status depends on
+ * those Metrics (appraisal-sourcing, density-minimum, acg-approximation) —
+ * these read as appraisal-domain checks, not layout geometry, so they stay
+ * alongside appraise() rather than in the geometric compliance list
+ * generateLayout.ts builds up before calling this. `compliance` coming in
+ * already holds every geometric/placement check (ndss-gia, garden-depth,
+ * back-to-back, turning-head, etc.) from the layout-generation step —
+ * nothing about that list changes here, these three are only appended.
+ */
+function finalize(
+  layout: LayoutResult,
+  compliance: ComplianceCheck[],
+  boundaryAreaM2: number,
+  inputs: EngineInputs,
+  jurisdiction: ResolvedJurisdiction,
+  t0: number,
+  topologyUsed: TopologyUsed = "none",
+  zeroHomesInfo: ZeroHomesInfo = null,
+  nonHousingReserve: NonHousingReserve = { percent: 0, source: null }
+): EngineOutput {
+  const metrics = appraise(layout, boundaryAreaM2, inputs, jurisdiction, topologyUsed, zeroHomesInfo, nonHousingReserve);
+
+  const localAppraisal = jurisdiction.localAppraisal;
+  const schemeSizeBand = schemeSizeBandForUnits(metrics.totalUnits);
+  const marketBand = metrics.marketBand;
+  const grossDensityDph = metrics.grossDensityDph;
+  const affordableUnits = metrics.affordableUnits;
+  const affordableValueOverstated = metrics.affordableValueOverstated;
 
   compliance.push({
     id: "appraisal-sourcing",
