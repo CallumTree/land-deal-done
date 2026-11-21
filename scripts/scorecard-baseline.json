@@ -1,5 +1,6 @@
 {
-  "fern-rise-neyland": 15,
-  "meads-priory-road-milford-haven": 69,
-  "pond-bridge-johnston": 0
+  "_comment": "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture, so an UNINTENDED change gets caught. A number matching this baseline says nothing about how close it is to the real scheme's approved count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update.",
+  "fern-rise-neyland": 14,
+  "meads-priory-road-milford-haven": 81,
+  "pond-bridge-johnston": 92
 }

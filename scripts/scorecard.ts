@@ -111,8 +111,18 @@ function runCheck(rows: ScorecardRow[]) {
   process.exit(1);
 }
 
+// JSON has no comment syntax, so the "this isn't an accuracy claim"
+// warning lives as an ordinary "_comment" string key instead of an actual
+// header. Every reader of this file (runCheck's `baseline[r.id]` lookups,
+// its missingFromBaseline/mismatches filters, both keyed by fixture id)
+// only ever indexes by a real fixture id, never iterates Object.keys —
+// "_comment" is invisible to all of that and never collides with a real
+// id (test-sites/ ids are all lowercase-hyphenated, never underscore-led).
+const BASELINE_COMMENT =
+  "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture, so an UNINTENDED change gets caught. A number matching this baseline says nothing about how close it is to the real scheme's approved count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update.";
+
 function writeBaseline(rows: ScorecardRow[]) {
-  const baseline = Object.fromEntries(rows.map((r) => [r.id, r.engineUnits]));
+  const baseline = { _comment: BASELINE_COMMENT, ...Object.fromEntries(rows.map((r) => [r.id, r.engineUnits])) };
   writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + "\n");
   console.log(`Wrote ${BASELINE_PATH} with ${rows.length} fixture(s).`);
 }
