@@ -1,0 +1,31 @@
+{
+  "id": "pond-bridge-johnston",
+  "description": "Real LPA-approved scheme, Pond Bridge, Johnston, Pembrokeshire (04/0070/PA reserved matters, 2005; varied 24/0052/PA, 2024). 123 dwellings in a multi-loop estate (Green Lane / Bracken Way loops plus Moors Road frontage) accessed from a single roundabout off the A40 to the west. Deliberately included as a stress test: v0 only builds one dead-end ribbon road, so this scheme's loops/courtyards are structurally outside what it can produce — a large shortfall here is the EXPECTED, correct result, not a bug to chase or a reason to loosen the engine's topology.",
+  "boundaryBng": [
+    [193573.8, 210943.2],
+    [193540.0, 210938.0],
+    [193540.0, 210962.0],
+    [193526.5, 210970.2],
+    [193519.8, 211004.0],
+    [193533.2, 211044.5],
+    [193553.5, 211078.2],
+    [193594.0, 211125.5],
+    [193634.5, 211166.0],
+    [193688.5, 211186.3],
+    [193742.5, 211172.8],
+    [193776.3, 211139.0],
+    [193769.5, 211085.0],
+    [193742.5, 211044.5],
+    [193756.0, 211004.0],
+    [193729.0, 210963.5],
+    [193675.0, 210943.2],
+    [193621.0, 210936.5]
+  ],
+  "entranceBng": [193540.0, 210950.0],
+  "inputs": { "tenure": "market" },
+  "areaHectares": 4.549,
+  "expectedUnits": 123,
+  "expectedUnitsMethod": "LPA-approved unit count, not derived from density or from this boundary trace. Confirmed directly from the 24/0052/PA application form's own description field: 'Submission of Approval of Reserved Matters Application for the construction of 123 residential dwellings - land at O.S. 5400, to the rear of filling station, Pond Bridge, Johnston, Haverfordwest, Pembrokeshire' (referencing the original 04/0070/PA reserved-matters decision, 30/09/2005). See test-sites/README.md for the boundary tracing method and error margin — that part IS approximate.",
+  "confidence": "approved_unit_count",
+  "category": "stress_test_known_to_exceed_v0_topology"
+}

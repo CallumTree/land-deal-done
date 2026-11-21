@@ -1,0 +1,68 @@
+{
+  "id": "meads-priory-road-milford-haven",
+  "description": "Real LPA-approved scheme, Land south of the Meads, Priory Road, Milford Haven, SA73 2BS (25/0074/PA, reserved matters approval, decided 02/07/2026, under outline 12/0685/PA 2013). 89 dwellings total: 30 one-bedroom flats in 2-3 storey blocks (out of scope for v0, which only places houses/bungalows) plus 59 houses and bungalows. Mixed flats-and-houses scheme on a single spine road with two estate spurs and turning heads, access from Priory Road. Included as a density-rule test: the application site is 2.93ha and the approved scheme sits at 30.3 dwellings/hectare gross, right at Pembrokeshire LDP policy GN.26's stated minimum (30 dph in towns) for a site this size. Tenure: SOCIAL — applicant is ateb, a registered social landlord, 100% affordable (delegated report §8.2) — set via inputs.tenure so the engine does NOT apply the jurisdiction's market-size GIA uplift here (see test-sites/README.md's yield-honesty section on tenure-aware sizing).",
+  "category": "mixed_flats_and_houses",
+  "boundaryBng": [
+    [190283.9, 206657.4],
+    [190341.3, 206625.5],
+    [190376.5, 206599.0],
+    [190344.5, 206535.1],
+    [190317.4, 206504.8],
+    [190277.5, 206486.6],
+    [190234.4, 206419.6],
+    [190215.2, 206370.1],
+    [190131.6, 206387.7],
+    [190157.8, 206435.5],
+    [190161.0, 206467.5],
+    [190178.5, 206509.0],
+    [190221.6, 206563.2],
+    [190272.7, 206635.1]
+  ],
+  "entranceBng": [190312.6, 206641.5],
+  "areaHectares": 2.93,
+  "expectedUnits": 59,
+  "expectedUnitsMethod": "LPA-approved split, read directly from the 25/0074/PA delegated decision report's own house-mix breakdown: 30 one-bedroom flats + 4 one-bed bungalows + 6 two-bed bungalows + 27 two-bed houses + 18 three-bed houses + 2 four-bed houses + 2 five-bed houses = 89 total (30 flats + 59 houses/bungalows). expectedUnits here is deliberately 59, NOT 89 — v0's engine only places houses/bungalows (no multi-storey flat blocks), so comparing its output to the full 89 would misreport a structural scope gap as an accuracy failure. See test-sites/README.md for the full method, the density-flag check this fixture exists for, and the boundary tracing method/error margin.",
+  "confidence": "approved_unit_count",
+  "inputs": {
+    "settlementTier": "town",
+    "tenure": "social",
+    "restrictions": [
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "25/0074/PA delegated decision report §8.14/condition: 'a minimum 2m buffer (measured from the boundary line) to be maintained along western boundary... to remain outside of individual species. A maintenance strategy for this buffer zone shall also be [secured].' Modelled as a 2m-deep strip along the boundary's western run (vertices 6-11 of boundaryBng, the longest contiguous stretch on the low-easting/western side of the site) — per-edge rectangles, not a single mitred polygon (a deliberately simple approximation at the interior vertices, not a precise offset).",
+        "polygon": [[190234.4,206419.6],[190215.2,206370.1],[190213.3,206370.8],[190232.5,206420.3]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190215.2,206370.1],[190131.6,206387.7],[190132.0,206389.7],[190215.6,206372.1]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190131.6,206387.7],[190157.8,206435.5],[190159.6,206434.5],[190133.4,206386.7]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190157.8,206435.5],[190161.0,206467.5],[190163.0,206467.3],[190159.8,206435.3]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190161.0,206467.5],[190178.5,206509.0],[190180.3,206508.2],[190162.8,206466.7]]
+      }
+    ]
+  },
+  "notes": "Sewer easement NOT modelled — stated plainly rather than guessed. The Hydrock drainage strategy plan (test-sites/source/meads-priory-road/approved_P02_Hydrock_drainage-strategy-plan.png) does show two 'Existing Easement Zone to Public Sewer' corridors (see its key), confirming the delegated report §8.13's description of a site 'crossed by a public 225mm and 375mm combined sewer.' But this fixture's boundaryBng was NOT georeferenced from a scaled, coordinate-bearing source (see this fixture's own README section: traced from an NTS — Not To Scale — geotechnical plan with no OS grid references, then uniformly scaled to match the report's stated 2.93ha area). The Hydrock plan is a separate, differently-scaled drawing with no shared control point to that trace. Placing the sewer corridor at any specific BNG position relative to this boundary would be inventing a correspondence the source material doesn't support, not tracing one — so it is left out rather than guessed."
+}

@@ -1,0 +1,48 @@
+{
+  "id": "gibbas-way-pembroke",
+  "description": "Land North of Gibbas Way, Upper Lamphey Road, Pembroke SA71 5JA. Proposed phase of 50 houses/bungalows (no flats) with public open space, applicant South Meadow Homes, infill phase of the surrounding Lords Meadow Farm development. Decision status not confirmed from the documents reviewed (no decision notice found among them) — 50 is the APPLICANT'S proposed unit count per the submitted Green Infrastructure Statement, not a confirmed LPA approval. Included for the house-size comparison (real dwelling GIAs are printed directly on the submitted house-type drawings) and as a second yield-honesty data point alongside Meads.",
+  "category": "proposed_not_confirmed_approved",
+  "boundaryBng": [
+    [199826.0, 201402.4],
+    [200014.9, 201398.3],
+    [199982.0, 201260.9],
+    [199811.8, 201268.6],
+    [199794.5, 201277.4],
+    [199780.0, 201304.4]
+  ],
+  "entranceBng": [199896.9, 201264.8],
+  "inputs": {
+    "tenure": "market",
+    "restrictions": [
+      {
+        "label": "Keep clear: foul/surface-water drain easement",
+        "hardness": "hard",
+        "reason": "law",
+        "source": "Manholes/pipe traced from the topographical survey and existing site plan (test-sites/source/gibbas-way/) — a 6m-each-side building exclusion zone applied per the user's instruction (the planning statement's own paragraph 5.15, which states this figure, was not located among the documents reviewed this session). Spans only the two manholes actually identified in the drawings (a measured ~99m run) — not extrapolated further across the site, since nothing reviewed confirms the pipe's path beyond those two points. NOW ENFORCED (previously recorded as data only, before EngineInputs.restrictions existed).",
+        "polygon": [
+          [199878.1, 201404.9],
+          [199973.4, 201376.8],
+          [199970.1, 201365.3],
+          [199874.7, 201393.4]
+        ]
+      },
+      {
+        "label": "Keep clear: existing public amenity space (south-west corner)",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Green Infrastructure Statement (Oct 2026), p.2: 'the southwestern corner of the site fronting onto Callans Drive/Gibbas Way containing a small, fenced grass amenity area with gates... regularly mowed.' The existing/topographical site plan (test-sites/source/gibbas-way/boundary-and-survey-source_Existing_Site_Plan_1-500.png) sketches its 'APPROXIMATE EXTENT' as a wedge against this same SW boundary corner, but is not dimensioned — pixel-measuring that sketch against the drawing's own scale bar gave a markedly smaller area (~146m²) than the 1,124m² figure supplied for this task, a discrepancy not resolved from the available imagery. Shape here is a CONSTRUCTED approximation, not traced: a uniform-depth strip along the v3-v4-v5 boundary run (the real SW corner vertices from boundaryBng above), depth set so the polygon's area is exactly 1,124m² (the supplied figure, taken as given) — location and total area are grounded in sourced facts, exact boundary shape is not.",
+        "polygon": [
+          [199811.8, 201268.6],
+          [199780.0, 201304.4],
+          [199797.5, 201320.0],
+          [199829.3, 201284.2]
+        ]
+      }
+    ]
+  },
+  "areaHectares": 2.704,
+  "expectedUnits": 50,
+  "expectedUnitsMethod": "Applicant's proposed total, read directly from the submitted Green Infrastructure Statement (October 2026): 'A phase of 50 homes with a public open space.' NOT a confirmed LPA-approved count (no decision notice was found among the documents reviewed) — confidence is sense_check, not approved_unit_count, for that reason. All 50 are houses/bungalows; no flats in this scheme.",
+  "confidence": "sense_check",
+  "notes": "Two known constraints are now modelled as hard, enforced inputs.restrictions entries (see each entry's own source): the drain easement (previously recorded as noBuildCorridorBng_notEnforcedByEngine, data-only, before EngineInputs.restrictions existed) and the SW-corner public amenity space. Both are now genuinely excluded from buildable land in every topology, not just recorded as data."
+}

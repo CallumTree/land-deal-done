@@ -19,7 +19,17 @@ export function scale(a: BNGPoint, s: number): BNGPoint {
 }
 
 export function length(a: BNGPoint): number {
-  return Math.hypot(a[0], a[1]);
+  // Math.hypot is correct for any magnitude (it guards against overflow/
+  // underflow by rescaling internally) but that guard makes it several
+  // times slower than a plain sqrt in V8 — profiling this engine's
+  // hottest path (pointInPolygon, called via distancePointToSegment,
+  // called via convexPolygonFullyInside on every placement candidate)
+  // showed Math.hypot itself accounting for ~28% of total CPU time.
+  // Every coordinate here is BNG metres or a local-frame derivative of
+  // them — at most ~10^6 in magnitude, nowhere near sqrt's overflow
+  // threshold (~10^154) — so the plain form is exactly as correct and
+  // meaningfully faster.
+  return Math.sqrt(a[0] * a[0] + a[1] * a[1]);
 }
 
 export function normalize(a: BNGPoint): BNGPoint {
@@ -90,7 +100,32 @@ export function ensureCCW(polygon: BNGPolygon): BNGPolygon {
   return signedArea(polygon) < 0 ? [...polygon].reverse() : [...polygon];
 }
 
-/** Standard ray-casting point-in-polygon test (boundary-inclusive, small epsilon). */
+/** Squared distance from a point to a segment — avoids a sqrt call for callers that only need to compare against a fixed threshold (compare against threshold², not threshold). */
+export function distanceSquaredPointToSegment(p: BNGPoint, a: BNGPoint, b: BNGPoint): number {
+  const ab = sub(b, a);
+  const abLenSq = dot(ab, ab);
+  if (abLenSq === 0) {
+    const d = sub(p, a);
+    return d[0] * d[0] + d[1] * d[1];
+  }
+  let t = dot(sub(p, a), ab) / abLenSq;
+  t = Math.max(0, Math.min(1, t));
+  const closest: BNGPoint = add(a, scale(ab, t));
+  const d = sub(p, closest);
+  return d[0] * d[0] + d[1] * d[1];
+}
+
+const ON_EDGE_TOLERANCE_M = 1e-6;
+const ON_EDGE_TOLERANCE_M_SQ = ON_EDGE_TOLERANCE_M * ON_EDGE_TOLERANCE_M;
+
+/**
+ * Standard ray-casting point-in-polygon test (boundary-inclusive, small
+ * epsilon). This is the single hottest function in the engine (profiled:
+ * ~30% of CPU time on a large multi-vertex fixture, called once per rect
+ * corner per placement candidate) — the on-edge check below uses the
+ * squared-distance form specifically to avoid a sqrt per polygon edge
+ * per call; see distanceSquaredPointToSegment.
+ */
 export function pointInPolygon(point: BNGPoint, polygon: BNGPolygon): boolean {
   const [px, py] = point;
   let inside = false;
@@ -99,7 +134,7 @@ export function pointInPolygon(point: BNGPoint, polygon: BNGPolygon): boolean {
     const [xi, yi] = polygon[i];
     const [xj, yj] = polygon[j];
     // On-edge counts as inside, within a small tolerance.
-    if (distancePointToSegment(point, polygon[i], polygon[j]) < 1e-6) return true;
+    if (distanceSquaredPointToSegment(point, polygon[i], polygon[j]) < ON_EDGE_TOLERANCE_M_SQ) return true;
     const intersects =
       yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
     if (intersects) inside = !inside;
@@ -117,9 +152,31 @@ export function distancePointToSegment(p: BNGPoint, a: BNGPoint, b: BNGPoint): n
   return length(sub(p, closest));
 }
 
+/**
+ * Sign of the cross product (b-a) x (c-b) — "which way does the path
+ * a->b->c turn." The collinearity tolerance scales with the magnitude of
+ * the terms being subtracted, not a fixed absolute number: BNG
+ * coordinates run ~1e5-1e6, and a rect that's been rotated into an
+ * engine-local frame then rotated back (every plot vs. an eroded
+ * boundary, which is what this function is mostly used for via
+ * properCrossing) accumulates floating-point noise on the order of
+ * 1e-9-1e-8 in absolute coordinate terms — comfortably BELOW a scale-
+ * aware tolerance here, but a bare `1e-9` absolute threshold sits right
+ * in the middle of that noise band and flips sign unpredictably. Found
+ * via scripts/fuzz-shapes.ts: a plot snug against (genuinely touching,
+ * not crossing) the eroded boundary was flagged as "outside" on ~11% of
+ * 300 random shapes, because properCrossing's four orientation() calls
+ * landed just past the old fixed threshold (e.g. 7.5e-9) on what was
+ * really a collinear touch, not a real crossing — never at a magnitude
+ * that corresponds to an actual geometric error of more than a few
+ * nanometres.
+ */
 function orientation(a: BNGPoint, b: BNGPoint, c: BNGPoint): number {
-  const val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
-  if (Math.abs(val) < 1e-9) return 0;
+  const t1 = (b[1] - a[1]) * (c[0] - b[0]);
+  const t2 = (b[0] - a[0]) * (c[1] - b[1]);
+  const val = t1 - t2;
+  const scale = Math.abs(t1) + Math.abs(t2);
+  if (Math.abs(val) < 1e-9 * Math.max(scale, 1)) return 0;
   return val > 0 ? 1 : 2;
 }
 
@@ -209,6 +266,46 @@ export function isValidOffsetResult(original: BNGPolygon, offset: BNGPolygon): b
 }
 
 /**
+ * True if no two NON-ADJACENT edges of `polygon` cross — i.e. the
+ * polygon doesn't self-intersect (a "bowtie"). O(n²) in edge count,
+ * only meant for the handful of times per generateLayout() call this
+ * actually needs checking (not the hot per-candidate placement loop).
+ *
+ * Exists specifically because offsetPolygonInward's own doc comment
+ * already states it can self-intersect past a narrow feature — and
+ * isValidOffsetResult's area-only check does NOT reliably catch that: a
+ * self-intersecting ("bowtie") result can still shoelace-compute to a
+ * plausible-looking smaller positive area, passing the area check while
+ * being geometrically invalid. Confirmed directly: generateLayout.ts's
+ * non-housing-reserve erosion (a much larger offset than the fixed
+ * BOUNDARY_OFFSET_M everywhere else uses) produced exactly this on two
+ * fuzz-harness rectangles, each one tripping a real
+ * plots-inside-boundary invariant failure despite isValidOffsetResult
+ * reporting "valid." Used as an EXTRA gate alongside isValidOffsetResult
+ * wherever an offset distance isn't known in advance to be safely small
+ * (i.e. the reserve's bisection search, not the small fixed
+ * BOUNDARY_OFFSET_M offset everywhere else, which stays on
+ * isValidOffsetResult alone as before — unnecessary to re-verify
+ * something already extensively fuzz-tested at that scale).
+ */
+export function isSimplePolygon(polygon: BNGPolygon): boolean {
+  const n = polygon.length;
+  if (n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const a1 = polygon[i];
+    const a2 = polygon[(i + 1) % n];
+    for (let j = i + 1; j < n; j++) {
+      const adjacent = j === i || j === (i + 1) % n || (j + 1) % n === i;
+      if (adjacent) continue;
+      const b1 = polygon[j];
+      const b2 = polygon[(j + 1) % n];
+      if (properCrossing(a1, a2, b1, b2)) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * True if segments p1-p2 and p3-p4 cross transversally — each segment's
  * endpoints strictly straddle the other's line. Unlike segmentsIntersect,
  * this is false for touching endpoints or a collinear overlap, so a rect
@@ -223,6 +320,42 @@ function properCrossing(p1: BNGPoint, p2: BNGPoint, p3: BNGPoint, p4: BNGPoint):
   return o1 !== 0 && o2 !== 0 && o1 !== o2 && o3 !== 0 && o4 !== 0 && o3 !== o4;
 }
 
+interface BBox {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+// `convexPolygonFullyInside` is called many thousands of times per
+// generateLayout() run with the SAME `polygon` argument (the eroded
+// buildable boundary doesn't change during a single run — only `rect`,
+// the candidate plot, does). Caching that polygon's bounding box against
+// its own array reference lets every call after the first skip
+// recomputing it, and lets a huge fraction of candidates that are
+// nowhere near the boundary (e.g. probing past the far end of a long
+// site, or a type that's simply too deep for this site at all) be
+// rejected with 4 comparisons instead of running the full point-in-
+// polygon + edge-crossing test. This is a performance cache only — it
+// never changes the answer, since a rect whose bbox isn't fully inside
+// the polygon's bbox genuinely cannot be fully inside the polygon.
+const polygonBBoxCache = new WeakMap<BNGPolygon, BBox>();
+
+function polygonBBox(polygon: BNGPolygon): BBox {
+  const cached = polygonBBoxCache.get(polygon);
+  if (cached) return cached;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of polygon) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const bbox = { minX, maxX, minY, maxY };
+  polygonBBoxCache.set(polygon, bbox);
+  return bbox;
+}
+
 /**
  * True if `rect` (a convex polygon, typically a rectangle) is fully
  * contained within `polygon`: every corner inside, and no edge of
@@ -233,6 +366,25 @@ function properCrossing(p1: BNGPoint, p2: BNGPoint, p3: BNGPoint, p4: BNGPoint):
  * area — does not count as a violation.
  */
 export function convexPolygonFullyInside(rect: BNGPolygon, polygon: BNGPolygon): boolean {
+  const box = polygonBBox(polygon);
+  // BBOX_EPSILON_M: a cheap, fast-path pre-filter — exact equality here
+  // is too strict at BNG coordinate scale (~1e5-1e6). A vertex computed
+  // via one path (e.g. rotated into the engine's local frame and back)
+  // and the SAME true position computed independently (e.g. this
+  // function's own `polygon` argument, built a different way) can land
+  // a few tens of nanometres apart — genuinely the same point, not a
+  // real boundary violation. Found via scripts/fuzz-shapes.ts: a plot
+  // vertex sitting exactly ON the eroded boundary's bbox edge was
+  // rejected here, below bbox.minX by ~6e-8m, well before
+  // properCrossing's own (already-fixed) tolerance ever got a chance to
+  // run. 1e-4m (0.1mm) is nanometre-noise-sized relative to any real
+  // geometric violation this check needs to catch.
+  const BBOX_EPSILON_M = 1e-4;
+  for (const [x, y] of rect) {
+    if (x < box.minX - BBOX_EPSILON_M || x > box.maxX + BBOX_EPSILON_M || y < box.minY - BBOX_EPSILON_M || y > box.maxY + BBOX_EPSILON_M) {
+      return false;
+    }
+  }
   for (const corner of rect) {
     if (!pointInPolygon(corner, polygon)) return false;
   }
