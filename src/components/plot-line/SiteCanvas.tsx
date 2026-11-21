@@ -604,7 +604,7 @@ export function SiteCanvas({
         {mode === "entrance" && "Click near the boundary to place the site entrance"}
         {mode === "restriction" &&
           (draftRestriction.length >= 3
-            ? "Click to add more points, or tap “Finish zone”"
+            ? "Click to add more points, or choose “No homes here” / “Nothing here”"
             : "Click to mark land to keep clear — sewer, trees, buffers (3+ points)")}
         {mode === "done" && "Layout live — drag a corner or the entrance to adjust, or edit inputs on the right"}
       </div>

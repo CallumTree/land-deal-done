@@ -24,7 +24,7 @@
 // + base64url is "simplest tool that works," not a performance-critical
 // path.
 
-import type { BNGPoint, BNGPolygon, Restriction } from "@/engine/types";
+import type { BNGPoint, BNGPolygon, Restriction, RestrictionBars } from "@/engine/types";
 import { SIZE_TIERS, type SizeTier } from "@/engine/sizeTiers";
 import type { MixMode } from "@/hooks/useMixState";
 
@@ -89,15 +89,17 @@ function packSiteState(state: SiteState): number[] {
   }
 
   // v3: restriction zones, appended after everything above —
-  // [zoneCount, (per zone) pointCount, originE, originN, dE1, dN1, ...].
-  // Each zone is delta-encoded against ITS OWN first point, not the
-  // site boundary's, so a zone stays self-contained regardless of where
-  // the boundary happens to sit. Only the polygon is persisted — see
-  // SiteState.restrictions' own doc comment for why label/hardness/
-  // reason don't need a field here yet.
+  // [zoneCount, (per zone) pointCount, barsFlag, originE, originN, dE1,
+  // dN1, ...]. Each zone is delta-encoded against ITS OWN first point,
+  // not the site boundary's, so a zone stays self-contained regardless
+  // of where the boundary happens to sit. barsFlag (v4+, see
+  // HASH_FORMAT_VERSION's own history note): 1 = "everything" ("Nothing
+  // here"), 0 = "buildings" ("No homes here"). Only the polygon + bars
+  // are persisted — see SiteState.restrictions' own doc comment for why
+  // label/hardness/reason don't need a field here too.
   out.push(state.restrictions.length);
   for (const r of state.restrictions) {
-    out.push(r.polygon.length);
+    out.push(r.polygon.length, r.bars === "everything" ? 1 : 0);
     let pe = 0;
     let pn = 0;
     r.polygon.forEach(([e, n], i) => {
@@ -113,17 +115,21 @@ function packSiteState(state: SiteState): number[] {
 }
 
 /**
- * `readRestrictions` gates whether the trailing zones section (see
- * packSiteState above) is even attempted — set false for any hash
- * payload versioned below 3 (including legacy unversioned links),
- * regardless of what numbers happen to be left over, so an old link's
- * leftover bytes (there normally are none) can never be misread as a
- * zones section. The localStorage path always passes true: it always
- * WRITES the section going forward, and an old save with nothing left
- * to read decodes to zero zones via the same `zoneCount === undefined`
- * check unpackSiteState already needs internally.
+ * `formatVersion` gates how much of the trailing zones section (see
+ * packSiteState above) is even attempted: < 3 skips it entirely
+ * (including legacy unversioned links), regardless of what numbers
+ * happen to be left over, so an old link's leftover bytes (there
+ * normally are none) can never be misread as a zones section. < 4 reads
+ * the zones but NOT each one's barsFlag (that sub-field didn't exist
+ * yet) — those zones default to bars: "everything", exactly what they
+ * always meant back when every drawn zone was unconditionally fully
+ * blocking (see Restriction.bars' own doc comment: omitted = enforced
+ * as "everything"). The localStorage path always passes the CURRENT
+ * HASH_FORMAT_VERSION: it always WRITES the full current section going
+ * forward, and an old save with nothing left to read decodes to zero
+ * zones via the same `zoneCount === undefined` check below.
  */
-function unpackSiteState(nums: number[], readRestrictions: boolean): SiteState | null {
+function unpackSiteState(nums: number[], formatVersion: number): SiteState | null {
   if (nums.length < 8) return null;
   const [hasEntrance, mixModeFlag, bungalowFlag, small, medium, large, xl, pointCount, ...rest] = nums;
   if (pointCount < 0 || pointCount > 200) return null; // sanity bound — a real boundary never has this many points
@@ -152,7 +158,7 @@ function unpackSiteState(nums: number[], readRestrictions: boolean): SiteState |
   const sizeMix: Partial<Record<SizeTier, number>> = { Small: small, Medium: medium, Large: large, XL: xl };
 
   const restrictions: Restriction[] = [];
-  if (readRestrictions) {
+  if (formatVersion >= 3) {
     const zoneCount = rest[cursor++];
     // undefined = nothing left to read, i.e. an old (pre-v3) payload
     // that still reached here somehow (today, only via the tolerant
@@ -162,6 +168,16 @@ function unpackSiteState(nums: number[], readRestrictions: boolean): SiteState |
       for (let z = 0; z < zoneCount; z++) {
         const ptCount = rest[cursor++];
         if (ptCount === undefined || ptCount < 3 || ptCount > 200) return null;
+        // v4+ only: a barsFlag sits right after pointCount, before the
+        // coordinate deltas. A v3 zone has no such field — its own
+        // enforcement was always full ("everything"), so that's the
+        // default here too, not the UI's current "buildings" default.
+        let bars: RestrictionBars = "everything";
+        if (formatVersion >= 4) {
+          const barsFlag = rest[cursor++];
+          if (barsFlag === undefined) return null;
+          bars = barsFlag === 1 ? "everything" : "buildings";
+        }
         const polygon: BNGPolygon = [];
         let ze = 0;
         let zn = 0;
@@ -173,7 +189,8 @@ function unpackSiteState(nums: number[], readRestrictions: boolean): SiteState |
           zn = i === 0 ? dn : zn + dn;
           polygon.push([ze / COORD_SCALE, zn / COORD_SCALE]);
         }
-        restrictions.push({ polygon, label: "Keep clear", hardness: "hard", reason: "choice" });
+        const label = bars === "buildings" ? "No homes here" : "Nothing here";
+        restrictions.push({ polygon, label, hardness: "hard", reason: "choice", bars });
       }
     }
   }
@@ -209,9 +226,13 @@ function base64UrlDecode(s: string): string {
 // payload change. 3 = restriction zones appended to the payload's tail
 // (see packSiteState/unpackSiteState) — versions 1 and 2 never read that
 // tail, so a zone-less link at either version still decodes correctly
-// with zero zones.
+// with zero zones. 4 = each zone gets its own barsFlag (Restriction.bars
+// — "No homes here" vs "Nothing here"), inserted right after that
+// zone's point count — a version-3 link has no such field, so its zones
+// decode with bars: "everything", matching what they always enforced
+// back when every drawn zone was unconditionally fully blocking.
 const VERSION_SENTINEL = -1;
-const HASH_FORMAT_VERSION = 3;
+const HASH_FORMAT_VERSION = 4;
 
 /** Encodes state into a URL hash fragment value (no leading "#"). Never throws — a malformed/empty state just encodes to a tiny, harmless string. */
 export function encodeSiteStateToHash(state: SiteState): string {
@@ -227,9 +248,10 @@ export function encodeSiteStateToHash(state: SiteState): string {
  * Backward-compatible with links encoded before HASH_FORMAT_VERSION
  * existed: those decode as version 1, payload = the whole array. A
  * version-tagged link's own payload is everything after the
- * [VERSION_SENTINEL, version] prefix. Only version >= 3 even attempts to
- * read the zones tail — a version 1 or 2 link always decodes to zero
- * zones, regardless of what (if anything) is left over in its payload.
+ * [VERSION_SENTINEL, version] prefix. unpackSiteState itself gates how
+ * much of the zones tail a given version actually has (see its own doc
+ * comment) — a version 1 or 2 link always decodes to zero zones, and a
+ * version 3 link's zones decode with bars: "everything".
  */
 export function decodeHashToSiteState(hash: string): SiteState | null {
   if (!hash) return null;
@@ -239,7 +261,7 @@ export function decodeHashToSiteState(hash: string): SiteState | null {
     const isVersioned = parsed[0] === VERSION_SENTINEL;
     const version = isVersioned ? parsed[1] : 1;
     const payload = isVersioned ? parsed.slice(2) : parsed;
-    return unpackSiteState(payload, version >= 3);
+    return unpackSiteState(payload, version);
   } catch {
     return null;
   }
@@ -267,7 +289,7 @@ export function readStoredSiteState(): SiteState | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
-    return unpackSiteState(parsed, true);
+    return unpackSiteState(parsed, HASH_FORMAT_VERSION);
   } catch {
     return null;
   }

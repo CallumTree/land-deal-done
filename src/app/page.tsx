@@ -30,7 +30,7 @@ import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY, BUNGALOW_TOGGLE_HELP
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
 import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/types";
-import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction } from "@/engine/types";
+import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction, RestrictionBars } from "@/engine/types";
 import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
@@ -277,12 +277,21 @@ export default function Home() {
     setMode("restriction");
   }, []);
 
-  const handleFinishRestrictionZone = useCallback(() => {
-    if (draftRestriction.length < 3) return;
-    setRestrictions((rs) => [...rs, { polygon: draftRestriction, label: "Keep clear", hardness: "hard", reason: "choice" }]);
-    setDraftRestriction([]);
-    setMode("done");
-  }, [draftRestriction]);
+  // "No homes here" (bars: "buildings", the default choice — right for a
+  // sewer/drain, where only the building itself must stay off) vs
+  // "Nothing here" (bars: "everything" — right for trees, ecology, a
+  // flood zone, where the land itself is excluded, not just its
+  // buildings). See Restriction.bars' own doc comment in engine/types.ts.
+  const handleFinishRestrictionZone = useCallback(
+    (bars: RestrictionBars) => {
+      if (draftRestriction.length < 3) return;
+      const label = bars === "buildings" ? "No homes here" : "Nothing here";
+      setRestrictions((rs) => [...rs, { polygon: draftRestriction, label, hardness: "hard", reason: "choice", bars }]);
+      setDraftRestriction([]);
+      setMode("done");
+    },
+    [draftRestriction]
+  );
 
   const handleRemoveRestriction = useCallback((index: number) => {
     setRestrictions((rs) => rs.filter((_, i) => i !== index));
@@ -441,14 +450,26 @@ export default function Home() {
           {mode === "restriction" && (
             <>
               {canFinishRestriction && (
-                <button
-                  type="button"
-                  onClick={handleFinishRestrictionZone}
-                  style={{ backgroundColor: GRID_KEEPCLEAR, boxShadow: "0 0 16px rgba(111,168,184,0.5)" }}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-ink"
-                >
-                  Finish zone
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleFinishRestrictionZone("buildings")}
+                    style={{ backgroundColor: GRID_KEEPCLEAR, boxShadow: "0 0 16px rgba(111,168,184,0.5)" }}
+                    className="rounded-full px-3 py-1.5 text-xs font-semibold text-ink"
+                    title="Only the house itself must stay off this land — a road, driveway or garden may cross or run along it. Right for a sewer or drain."
+                  >
+                    No homes here
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFinishRestrictionZone("everything")}
+                    className="rounded-full border px-3 py-1.5 text-xs font-semibold text-ink"
+                    style={{ borderColor: GRID_KEEPCLEAR, backgroundColor: "transparent", color: GRID_KEEPCLEAR }}
+                    title="Nothing at all may be built or placed on this land — not even a road or a garden. Right for trees, an ecology buffer, or a flood zone."
+                  >
+                    Nothing here
+                  </button>
+                </>
               )}
               <button
                 type="button"
