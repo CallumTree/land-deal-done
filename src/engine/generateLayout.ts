@@ -842,7 +842,18 @@ export function generateLayout(
   // topology itself and why its spur spacing guarantees back-to-back by
   // construction (independently re-verified in its own compliance list,
   // not just assumed).
-  const branching = tryBranchingSpurs();
+  //
+  // Skipped entirely in draft mode: measured directly (Playwright +
+  // real CDP CPU throttling, the same technique Lighthouse uses) at a
+  // 6x throttle — a 6ha site where branching wins takes ~370ms median
+  // to fully solve, well past the ~200ms a live drag needs to feel
+  // fluid, and branching itself (trying every junction/spur combination)
+  // is the dominant cost even on sites where it DOESN'T end up winning.
+  // Consistent with quality's own doc comment: draft only ever places a
+  // SUBSET of what full would (fewer units, same hard-rule correctness),
+  // and the one-final-full-recalculation-on-release pattern this field
+  // exists for already expects draft to under-report during a drag.
+  const branching = draftMode ? null : tryBranchingSpurs();
 
   const stateUnits = state.plots.length;
   const ribbonUnits = ribbon?.plots.length ?? 0;
