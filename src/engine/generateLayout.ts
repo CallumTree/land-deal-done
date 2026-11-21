@@ -123,6 +123,60 @@ export function generateLayout(
   const localBoundary = boundary.map(toLocal);
   const boundaryAreaM2 = geo.area(localBoundary);
 
+  // --- Restrictions ("keep clear" zones) — see Restriction's own doc
+  // comment in types.ts. Only "hard" entries are enforced; transformed
+  // into this function's local frame once, up front, so every placement
+  // check below (plots, road corridors, turning heads, in every
+  // topology) can test against them cheaply without re-deriving the
+  // transform per candidate. "soft" entries are kept only for the
+  // self-check's own count/labelling — they place no constraint on
+  // anything below.
+  const hardRestrictionsLocal: BNGPolygon[] = (inputs.restrictions ?? [])
+    .filter((r) => r.hardness === "hard")
+    .map((r) => r.polygon.map(toLocal));
+  const softRestrictionsCount = (inputs.restrictions ?? []).filter((r) => r.hardness === "soft").length;
+
+  /** True if `rectLocal` (any convex rect in this function's local frame — a plot, a road corridor, a turning-head square) overlaps ANY hard restriction. Shared by every topology's placement/turning-head search below. */
+  function overlapsHardRestriction(rectLocal: BNGPolygon): boolean {
+    return hardRestrictionsLocal.some((r) => geo.convexPolygonsOverlap(rectLocal, r));
+  }
+
+  /**
+   * The self-check every topology pushes once placement is done: an
+   * independent re-verification (not just trusting that placement itself
+   * excluded restrictions — the same "trust but verify" pattern every
+   * other compliance check in this file already follows) that NOTHING
+   * placed — plot or road corridor — overlaps a hard restriction.
+   *
+   * Known limitation, stated plainly rather than silently worked around:
+   * a road's path is fixed by construction in every topology here (it
+   * doesn't route around a mid-corridor obstacle) — only PLOTS and the
+   * turning-head search actively avoid a hard restriction during
+   * placement. If a hard restriction happens to cross the road's own
+   * fixed line, this check correctly reports FAIL rather than silently
+   * building over it, but the engine can't yet re-route around that case.
+   */
+  function buildRestrictionsCompliance(plots: PlacedPlot[], roadRectsLocal: BNGPolygon[]): ComplianceCheck {
+    const violatingPlotIds = plots.filter((p) => overlapsHardRestriction(p.plotBng.map(toLocal))).map((p) => p.id);
+    const violatingRoadCount = roadRectsLocal.filter((r) => overlapsHardRestriction(r)).length;
+    const totalHard = hardRestrictionsLocal.length;
+    const ok = violatingPlotIds.length === 0 && violatingRoadCount === 0;
+    const softNote = softRestrictionsCount > 0 ? ` ${softRestrictionsCount} soft zone(s) also recorded, not yet enforced.` : "";
+    return {
+      id: "restrictions",
+      label: "Keep-clear (restriction) zones respected",
+      status: totalHard === 0 ? "pass" : ok ? "pass" : "fail",
+      ruleRef: "Brief requirement — nothing may be built inside a hard restriction zone",
+      detail:
+        totalHard === 0
+          ? `No hard restriction zones set.${softNote}`
+          : ok
+            ? `${totalHard} hard restriction zone(s) respected — no plot or road corridor overlaps any of them.${softNote}`
+            : `${violatingPlotIds.length} plot(s) and ${violatingRoadCount} road segment(s) overlap a hard restriction zone — this v0 engine doesn't yet route a road around a mid-corridor obstacle (see this check's own doc comment).`,
+      affectedPlotIds: violatingPlotIds,
+    };
+  }
+
   const compliance: ComplianceCheck[] = [];
 
   // --- Erode for buildings (road is allowed to meet the boundary at the entrance) ---
@@ -301,7 +355,7 @@ export function generateLayout(
         [offset + half, y + turningHeadSide],
         [offset - half, y + turningHeadSide],
       ];
-      if (geo.convexPolygonFullyInside(square, localBoundary)) return true;
+      if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsHardRestriction(square)) return true;
     }
     return false;
   }
@@ -597,7 +651,8 @@ export function generateLayout(
     for (let u = 0; u < blockSize; u++) {
       const uStart = yStart + u * spec.frontageWidthM;
       const uEnd = uStart + spec.frontageWidthM;
-      if (!geo.convexPolygonFullyInside(buildPlotRect(side, frontageX, rearX, uStart, uEnd), erodedLocal)) {
+      const unitRect = buildPlotRect(side, frontageX, rearX, uStart, uEnd);
+      if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
         return { fits: false, frontageX, rearX, spec };
       }
     }
@@ -846,7 +901,8 @@ export function generateLayout(
       for (let u = 0; u < blockSize; u++) {
         const uStart = xStart + u * spec.frontageWidthM;
         const uEnd = uStart + spec.frontageWidthM;
-        if (!geo.convexPolygonFullyInside(buildFrontageRect(uStart, uEnd, yFront, yFront + spec.totalDepthM), erodedLocal)) {
+        const unitRect = buildFrontageRect(uStart, uEnd, yFront, yFront + spec.totalDepthM);
+        if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
           return { fits: false, spec };
         }
       }
@@ -1131,6 +1187,10 @@ export function generateLayout(
       detail: "Every plot fronts directly onto the existing edge, so frontage-to-access distance is 0m for all plots.",
     });
 
+    // Frontage ribbon builds no new road at all (see this topology's own
+    // top-of-function comment) — only plots can overlap a restriction here.
+    fbCompliance.push(buildRestrictionsCompliance(plots, []));
+
     return { plots, parkingSpacesLocal, compliance: fbCompliance };
   }
 
@@ -1221,7 +1281,7 @@ export function generateLayout(
             spurToMain(u + turningHeadSide, offset + half, originY, dirX),
             spurToMain(u + turningHeadSide, offset - half, originY, dirX),
           ];
-          if (geo.convexPolygonFullyInside(square, localBoundary)) return true;
+          if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsHardRestriction(square)) return true;
         }
         return false;
       }
@@ -1260,7 +1320,8 @@ export function generateLayout(
         for (let b = 0; b < blockSize; b++) {
           const bStart = uStart + b * spec.frontageWidthM;
           const bEnd = bStart + spec.frontageWidthM;
-          if (!geo.convexPolygonFullyInside(spurRectMain(side, frontageV, rearV, bStart, bEnd, originY, dirX), erodedLocal)) {
+          const unitRect = spurRectMain(side, frontageV, rearV, bStart, bEnd, originY, dirX);
+          if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
             return { fits: false, frontageV, rearV, spec };
           }
         }
@@ -1670,6 +1731,8 @@ export function generateLayout(
       ruleRef: `Manual for Streets (DfT, 2007) — ${rules.ROAD_WIDTH_M}m minimum used as v0 default`,
       detail: `Spine and every spur modelled at a constant ${rules.ROAD_WIDTH_M}m width.`,
     });
+
+    branchCompliance.push(buildRestrictionsCompliance(allPlots, allRoadRectsLocal));
 
     return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance };
   }
@@ -2084,6 +2147,8 @@ export function generateLayout(
     detail:
       "Every plot fronts directly onto the road in this v0 topology, so frontage-to-road distance is 0m for all plots — trivially within the limit. Only meaningful once a layout can set plots back from the road.",
   });
+
+  compliance.push(buildRestrictionsCompliance(plots, [roadPolygonLocal]));
 
   const roadsWorld = roads;
   const layout: LayoutResult = {

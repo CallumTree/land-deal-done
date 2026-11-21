@@ -16,6 +16,36 @@ export interface InvariantResult {
   detail: string;
 }
 
+/**
+ * Independent re-verification that nothing placed overlaps a HARD
+ * restriction ("keep clear" zone) from inputs.restrictions — recomputed
+ * directly against each restriction's own polygon, not by trusting the
+ * engine's own "restrictions" ComplianceCheck. Shared by both
+ * checkInvariants and checkBranchingInvariants: restriction enforcement
+ * is identical across every topology (see generateLayout.ts's
+ * overlapsHardRestriction), so one shared check covers all of them.
+ * roadPolys is every road segment's rectangle in WORLD/BNG coords
+ * (checkBranchingInvariants passes all of them; checkInvariants passes
+ * just its one road, or none for frontage ribbon).
+ */
+function checkRestrictions(plots: PlacedPlot[], roadPolys: BNGPolygon[], inputs: EngineInputs): InvariantResult {
+  const hardPolys = (inputs.restrictions ?? []).filter((r) => r.hardness === "hard").map((r) => r.polygon);
+  if (hardPolys.length === 0) {
+    return { id: "restrictions", label: "Keep-clear (restriction) zones respected", pass: true, detail: "No hard restriction zones set." };
+  }
+  const violatingPlots = plots.filter((p) => hardPolys.some((h) => geo.convexPolygonsOverlap(fullPlotRect(p), h)));
+  const violatingRoads = roadPolys.filter((rp) => hardPolys.some((h) => geo.convexPolygonsOverlap(rp, h)));
+  const ok = violatingPlots.length === 0 && violatingRoads.length === 0;
+  return {
+    id: "restrictions",
+    label: "Keep-clear (restriction) zones respected",
+    pass: ok,
+    detail: ok
+      ? `${hardPolys.length} hard restriction zone(s) — no plot or road segment overlaps any of them.`
+      : `${violatingPlots.length} plot(s) and ${violatingRoads.length} road segment(s) overlap a hard restriction zone.`,
+  };
+}
+
 function fullPlotRect(p: PlacedPlot): BNGPolygon {
   return p.plotBng;
 }
@@ -429,6 +459,9 @@ export function checkInvariants(
     detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
   });
 
+  const restrictionsResult = checkRestrictions(plots, roadPoly ? [roadPoly] : [], inputs);
+  results.push(restrictionsResult);
+
   // 8. No compliance "green" on a rule violation — cross-check the subset
   // of engine-reported compliance checks that have a direct independent
   // counterpart above. (Turning head / road width / parking / fire access
@@ -444,6 +477,7 @@ export function checkInvariants(
     { engineId: "block-length", harnessPass: blockLengthOk },
     { engineId: "attached-share-wall", harnessPass: attachedOk },
     { engineId: "no-wasted-gaps", harnessPass: !wastedGapFound },
+    { engineId: "restrictions", harnessPass: restrictionsResult.pass },
   ];
   const greenOnViolation: string[] = [];
   for (const { engineId, harnessPass } of crossCheck) {
@@ -804,6 +838,9 @@ function checkBranchingInvariants(
     detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit (any gap beyond the simple tolerance was confirmed to be a genuine pinch, not assumed).",
   });
 
+  const restrictionsResult = checkRestrictions(plots, roadPolys, inputs);
+  results.push(restrictionsResult);
+
   const crossCheck: { engineId: string; harnessPass: boolean }[] = [
     { engineId: "plots-inside-boundary", harnessPass: insideBoundary },
     { engineId: "no-overlaps", harnessPass: !overlap && parkingInsideAPlot },
@@ -815,6 +852,7 @@ function checkBranchingInvariants(
     { engineId: "block-length", harnessPass: blockLengthOk },
     { engineId: "attached-share-wall", harnessPass: attachedOk },
     { engineId: "no-wasted-gaps", harnessPass: !wastedGapFound },
+    { engineId: "restrictions", harnessPass: restrictionsResult.pass },
   ];
   const greenOnViolation: string[] = [];
   for (const { engineId, harnessPass } of crossCheck) {

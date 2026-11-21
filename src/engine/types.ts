@@ -13,6 +13,48 @@ export type BNGPoint = [number, number];
 /** Closed or open ring of BNG points describing a polygon boundary. */
 export type BNGPolygon = BNGPoint[];
 
+/** "hard": nothing may be built inside it, enforced by the engine. "soft": recorded and shown, but NOT YET enforced — a future pass may add partial/discretionary handling; for now a soft restriction has zero effect on placement. */
+export type RestrictionHardness = "hard" | "soft";
+
+/**
+ * Why this land is set aside, for the UI's plain-English framing and for
+ * anyone auditing a layout later — never used by the engine to decide
+ * enforcement (hardness alone decides that):
+ * "law" — a statutory easement/corridor (e.g. a sewer/drain easement).
+ * "physical" — can't literally build there (e.g. a watercourse, a steep bank).
+ * "policy" — a planning-policy buffer (e.g. an ecology/landscape buffer).
+ * "choice" — the user drew it themselves: land they're choosing to set
+ * aside, with no external legal/physical/policy requirement behind it.
+ */
+export type RestrictionReason = "law" | "physical" | "policy" | "choice";
+
+/**
+ * A generic "keep clear" zone — land a layout must not build on (hard) or
+ * should ideally avoid (soft, not yet enforced). Deliberately typology-
+ * agnostic: nothing here or in how the engine enforces it names a house
+ * type, a plot, a garden, or any other housing concept — a non-
+ * residential typology built on the same core would reuse this
+ * unchanged (see the engine/appraise split's own typology-plug-in note).
+ *
+ * Geometry is assumed CONVEX for the overlap/containment checks the
+ * engine runs against it (geometry.ts's SAT-based
+ * convexPolygonsOverlap/convexPolygonFullyInside) — a non-convex
+ * restriction polygon isn't guaranteed to be caught correctly by those
+ * checks. Real easements/buffers/corridors/open-space parcels are
+ * overwhelmingly simple convex strips or rectangles, so this is a known,
+ * stated limitation, not a silent assumption likely to bite in practice.
+ */
+export interface Restriction {
+  /** BNG polygon, same coordinate frame as the site boundary. */
+  polygon: BNGPolygon;
+  /** Plain-English label shown to the user, e.g. "Keep clear: sewer easement". */
+  label: string;
+  hardness: RestrictionHardness;
+  reason: RestrictionReason;
+  /** Optional citation/evidence for where this restriction comes from (a drawing, a planning condition, a survey). */
+  source?: string;
+}
+
 /**
  * Every HouseTypeId the engine can actually place. User-facing UI should
  * not expose this list directly — see src/engine/sizeTiers.ts for the
@@ -128,6 +170,15 @@ export interface EngineInputs {
    * never narrow it below the sourced ~1m minimum.
    */
   sideGapTier?: "tighter" | "typical" | "roomier";
+  /**
+   * "Keep clear" zones — see Restriction's own doc comment. Only
+   * `hardness: "hard"` entries are enforced (plots, road corridors and
+   * turning heads must not overlap them, in every topology); "soft"
+   * entries are stored on the output for display/audit but have no
+   * effect on placement yet. Omit or leave empty for no restrictions at
+   * all — identical behaviour to before this field existed.
+   */
+  restrictions?: Restriction[];
 }
 
 export interface PlacedPlot {
