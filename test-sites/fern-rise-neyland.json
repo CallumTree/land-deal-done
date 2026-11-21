@@ -14,7 +14,7 @@
     [196318.0, 205600.0]
   ],
   "entranceBng": [196305.0, 205600.0],
-  "inputs": { "mix": { "3-bed-bungalow": 1 } },
+  "inputs": { "mix": { "3-bed-bungalow": 1 }, "tenure": "market" },
   "areaHectares": 0.556,
   "expectedUnits": 9,
   "expectedUnitsMethod": "LPA-approved unit count, confirmed three independent ways in the source documents: the 04/0235/PA decision notice ('9 No. Residential Bungalows & Garages'), the original application form's plot list (Plots 14, 16, 18, 19, 20, 21, 22, 23 & 24 — nine numbers), and a direct count of the numbered footprints inside the red line on the 1:500 site plan. Not derived from density or from this boundary trace.",

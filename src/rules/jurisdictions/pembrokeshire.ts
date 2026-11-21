@@ -331,29 +331,37 @@ export const PEMBROKESHIRE_APPRAISAL_DEFAULTS: LocalAppraisalDefaults = {
     XL: s(0, "No 5-bed/XL row exists in FVR §4.19's dwelling-mix table — 0% reflects the evidence gap, not a policy position"),
   },
   /**
-   * [GIBBAS WAY] Sourced from a single real scheme's own submitted house-
-   * type drawings (Land North of Gibbas Way, Pembroke — Pembroke Design
-   * Ltd, "FOR PLANNING PURPOSES ONLY"), not a council-wide viability or
-   * evidence document like the rest of this pack's figures — flagged as
-   * a smaller, more specific evidence base than FVR-sourced fields.
-   * Actual GIA vs this engine's NDSS minimum for the matching house
-   * type: TYPE F/FS (3-bed detached bungalow) 85.4m² vs 86m² min (0.7%
-   * BELOW — effectively at the floor); TYPE E1A.2 (3-bed detached
-   * bungalow) 106.3m² vs 86m² min (+23.6%); TYPE E2.1 (3-bed detached
-   * bungalow) 116.3m² vs 86m² min (+35.2%); TYPE D (3-bed detached
-   * dormer house) 136.3m² vs the 3-bed-detached 93m² min (+46.6%).
-   * Range 0.7%-46.6%, bungalow-only average ~19.4%. 20% is a round,
-   * conservative figure near the bungalow average, well under the
-   * dormer house's uplift — a deliberately simple flat % across every
-   * house type (see this field's own doc comment in types.ts for why),
-   * not a precise fit to 4 data points. See test-sites/README.md
-   * (gibbas-way-pembroke fixture) for the full sourcing and the
-   * Meads sensitivity test this was checked against (20% uplift closes
-   * most, not all, of that fixture's remaining unit-count overshoot).
+   * [FERN RISE — HOLDOUT-SAFE] Deliberately NOT sourced from Gibbas Way:
+   * Gibbas Way is this pack's untouched holdout test scheme (see
+   * test-sites/README.md's overfitting-guard section), so a parameter
+   * used to evaluate its accuracy must not also be fitted to it. Sourced
+   * instead from Fern Rise, Neyland (04/0235/PA, 2004) — a wholly
+   * separate scheme, different developer, different era, already in
+   * this pack as an independent fixture — by measuring two of its real
+   * dimensioned floor plans against this engine's NDSS minimum:
+   * Plot 14 (no garage, scale 1:50, dimensions read clean with no
+   * garage-boundary ambiguity): external footprint 134.89m² minus a
+   * 6.105m² notch = 128.78m², minus a standard ~300mm/side wall-
+   * thickness allowance ≈ 115.4m² GIA vs the engine's 86m² 3-bed-
+   * bungalow minimum = +34%, high confidence. Plot 16 (has an integral
+   * garage, scale 1:50): habitable area after excluding the garage
+   * footprint ≈85-90m² vs the same 86m² minimum = roughly +0% to +5%,
+   * low confidence — the garage's depth dimension on the scan reads
+   * inconsistently against its own dimension-chain arithmetic, so this
+   * figure is a rough estimate, not a clean read like Plot 14's.
+   * 25% blends the two, weighted toward Plot 14's clean, confident +34%
+   * measurement but pulled down to reflect Plot 16's much lower,
+   * if uncertain, second data point and the general estimation margin
+   * on scanned/dimensioned drawings. This is a genuinely independent,
+   * if thin (2 data points, 1 scheme, 1 house form — bungalows), evidence
+   * base — weaker than the FVR's council-wide figures, but not
+   * contaminated by the scheme it's used to evaluate. See
+   * test-sites/README.md for the full Fern Rise measurement method and
+   * the Gibbas Way holdout result this produces.
    */
   typicalMarketSizeUpliftPercent: s(
-    20,
-    "[GIBBAS WAY] Land North of Gibbas Way, Pembroke — submitted house-type drawings (Pembroke Design Ltd), Oct/Nov 2026. Range across 4 real house types vs this engine's matching NDSS minimum: 0.7%-46.6% (bungalows 0.7%-35.2%, avg ~19.4%; one dormer house +46.6%). 20% is a round, conservative single-scheme figure, not a council-wide evidence table — the weakest-sourced figure in this pack for that reason."
+    25,
+    "[FERN RISE, Neyland, 04/0235/PA] Independent of Gibbas Way (held out as this pack's untouched test scheme). Plot 14 floor plan (no garage, clean read): GIA ≈115.4m² vs the engine's 86m² 3-bed-bungalow NDSS minimum = +34%. Plot 16 floor plan (has a garage, garage footprint excluded, lower-confidence estimate): GIA ≈85-90m² vs the same 86m² minimum = roughly +0% to +5%. 25% blends both, weighted toward Plot 14's confident reading. Thin evidence base (2 data points, 1 scheme, bungalows only) — see test-sites/README.md for the full measurement method."
   ),
   acgApproximatedAsOmv: true,
   acgApproximationNote: s(

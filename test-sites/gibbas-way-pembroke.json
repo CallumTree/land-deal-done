@@ -11,6 +11,7 @@
     [199780.0, 201304.4]
   ],
   "entranceBng": [199896.9, 201264.8],
+  "inputs": { "tenure": "market" },
   "areaHectares": 2.704,
   "expectedUnits": 50,
   "expectedUnitsMethod": "Applicant's proposed total, read directly from the submitted Green Infrastructure Statement (October 2026): 'A phase of 50 homes with a public open space.' NOT a confirmed LPA-approved count (no decision notice was found among the documents reviewed) — confidence is sense_check, not approved_unit_count, for that reason. All 50 are houses/bungalows; no flats in this scheme.",

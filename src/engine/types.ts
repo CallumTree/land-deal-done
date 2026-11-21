@@ -60,6 +60,21 @@ export interface EngineInputs {
   backToBackM?: number;
   /** Minimum NDSS GIA per house type, m². Overrides rules.ts defaults. */
   ndssMinGiaM2?: Partial<Record<HouseTypeId, number>>;
+  /**
+   * Scheme tenure — gates whether the resolved jurisdiction's
+   * typicalMarketSizeUpliftPercent is applied at all. "market" (the
+   * default when unset): the uplift applies, since it's sourced from
+   * market-sale schemes. "social": every house type is built at its
+   * bare NDSS minimum GIA regardless of the jurisdiction's uplift
+   * evidence — an RSL/affordable scheme typically builds at or close to
+   * the space-standard floor to manage cost, not above it; applying a
+   * market-scheme uplift here would be a real sourcing error, not just
+   * an approximation. Only set "social" when there's real evidence the
+   * scheme is RSL-led/100% affordable (e.g. the applicant is a
+   * registered social landlord) — never guessed from unit count or
+   * density alone.
+   */
+  tenure?: "market" | "social";
   /** Which council's local rules pack to resolve against (src/rules/jurisdictions). Defaults to "pembrokeshire" — the only pack implemented so far. Unknown/unset councils fall back to the national baseline alone. */
   localAuthority?: string;
   /** Local market value band (1=lowest..4=highest), a council-specific concept (see src/rules/jurisdictions/types.ts). Defaults to the resolved local pack's own defaultMarketBand. */
@@ -181,8 +196,13 @@ export interface Metrics {
    * fallback whenever the estate-road topologies (double/single-left/
    * single-right) place zero homes. See generateLayout.ts's
    * tryFrontageRibbon for when this applies and why.
+   * "branching-spurs": a central spine road with spur cul-de-sacs
+   * branching off it, each ending in its own turning head — tried
+   * ALONGSIDE the ribbon and frontage-ribbon topologies (not just as a
+   * last-resort fallback), and used whenever it places more homes than
+   * either. See generateLayout.ts's tryBranchingSpurs.
    */
-  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none";
+  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none";
   /**
    * Set WHENEVER totalUnits === 0 — a plain-English, one-line reason this
    * boundary/entrance placed nothing, in the exact style "Frontage is 9m:

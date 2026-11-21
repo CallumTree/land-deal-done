@@ -22,6 +22,7 @@
     [193621.0, 210936.5]
   ],
   "entranceBng": [193540.0, 210950.0],
+  "inputs": { "tenure": "market" },
   "areaHectares": 4.549,
   "expectedUnits": 123,
   "expectedUnitsMethod": "LPA-approved unit count, not derived from density or from this boundary trace. Confirmed directly from the 24/0052/PA application form's own description field: 'Submission of Approval of Reserved Matters Application for the construction of 123 residential dwellings - land at O.S. 5400, to the rear of filling station, Pond Bridge, Johnston, Haverfordwest, Pembrokeshire' (referencing the original 04/0070/PA reserved-matters decision, 30/09/2005). See test-sites/README.md for the boundary tracing method and error margin — that part IS approximate.",

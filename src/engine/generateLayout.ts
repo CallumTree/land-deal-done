@@ -96,7 +96,13 @@ export function generateLayout(
   // per-type override, so inputs.ndssMinGiaM2 always wins completely for
   // whichever types it sets — the uplift only fills in types the caller
   // didn't explicitly size.
-  const marketSizeUpliftPercent = jurisdiction.localAppraisal?.typicalMarketSizeUpliftPercent.value ?? 0;
+  // Social/RSL-led schemes build at the bare NDSS floor, not a market
+  // uplift — see EngineInputs.tenure's own doc comment. "market" (the
+  // default) is the only tenure the uplift evidence was ever sourced
+  // from; applying it to a "social" scheme would be a real sourcing
+  // error, not an approximation.
+  const marketSizeUpliftPercent =
+    (inputs.tenure ?? "market") === "social" ? 0 : (jurisdiction.localAppraisal?.typicalMarketSizeUpliftPercent.value ?? 0);
   const ndssMinGia: Record<HouseTypeId, number> = {
     ...Object.fromEntries(
       Object.entries(rules.NDSS_MIN_GIA_M2).map(([t, v]) => [t, Math.round(v * (1 + marketSizeUpliftPercent / 100))])
@@ -730,21 +736,52 @@ export function generateLayout(
   // block further down, which checks things that don't apply here
   // (turning head, road width, a road for frontage/entrance-connection
   // checks) the same way the erosion-invalid early return above does.
-  if (topology === "none") {
-    const ribbon = tryFrontageRibbon();
-    if (ribbon && ribbon.plots.length > 0) {
-      return finalize(
-        { plots: ribbon.plots, roads: [], parkingSpacesBng: ribbon.parkingSpacesLocal.map(toWorld) },
-        ribbon.compliance,
-        boundaryAreaM2,
-        inputs,
-        jurisdiction,
-        t0,
-        "frontage-ribbon",
-        null,
-        { percent: nonHousingReservePercent, source: nonHousingReserveSource }
-      );
-    }
+  const ribbon = topology === "none" ? tryFrontageRibbon() : null;
+
+  // --- Branching spurs: tried ALONGSIDE every topology above (not just
+  // as a last-resort fallback), since a site wide enough can fit more
+  // homes behind a spine-and-spurs layout than a single ribbon ever
+  // could, even when the ribbon itself succeeds. The engine keeps
+  // whichever of the three candidates — ribbon/single-sided (`state`),
+  // frontage-ribbon (`ribbon`), or branching (`branching`) — places the
+  // most homes; every candidate only ever places plots that already
+  // pass every hard rule, so "most homes" and "most compliant homes"
+  // are the same thing here. See tryBranchingSpurs below for the
+  // topology itself and why its spur spacing guarantees back-to-back by
+  // construction (independently re-verified in its own compliance list,
+  // not just assumed).
+  const branching = tryBranchingSpurs();
+
+  const stateUnits = state.plots.length;
+  const ribbonUnits = ribbon?.plots.length ?? 0;
+  const branchingUnits = branching?.plots.length ?? 0;
+
+  if (branching && branchingUnits > stateUnits && branchingUnits > ribbonUnits) {
+    return finalize(
+      { plots: branching.plots, roads: branching.roads, parkingSpacesBng: branching.parkingSpacesLocal.map(toWorld) },
+      branching.compliance,
+      boundaryAreaM2,
+      inputs,
+      jurisdiction,
+      t0,
+      "branching-spurs",
+      null,
+      { percent: nonHousingReservePercent, source: nonHousingReserveSource }
+    );
+  }
+
+  if (ribbon && ribbonUnits > 0 && ribbonUnits >= branchingUnits) {
+    return finalize(
+      { plots: ribbon.plots, roads: [], parkingSpacesBng: ribbon.parkingSpacesLocal.map(toWorld) },
+      ribbon.compliance,
+      boundaryAreaM2,
+      inputs,
+      jurisdiction,
+      t0,
+      "frontage-ribbon",
+      null,
+      { percent: nonHousingReservePercent, source: nonHousingReserveSource }
+    );
   }
 
   interface FrontageRibbonResult {
@@ -1036,7 +1073,9 @@ export function generateLayout(
         fbNdssFailingIds.length === 0
           ? marketSizeUpliftPercent > 0
             ? `Every plot's GIA is set to its NDSS minimum plus ${jurisdiction.localAuthority}'s sourced typical-market-size uplift (+${marketSizeUpliftPercent}%) — still built at a fixed target per type, not a range.`
-            : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+            : (inputs.tenure ?? "market") === "social"
+              ? "Every plot's GIA is set to exactly its NDSS minimum — tenure is set to \"social\": real RSL-led schemes typically build at the space-standard floor, so no market-size uplift is applied here even though the jurisdiction has one sourced."
+              : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
           : `${fbNdssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
       affectedPlotIds: fbNdssFailingIds,
     });
@@ -1093,6 +1132,546 @@ export function generateLayout(
     });
 
     return { plots, parkingSpacesLocal, compliance: fbCompliance };
+  }
+
+  interface BranchingResult {
+    plots: PlacedPlot[];
+    roads: RoadSegment[];
+    parkingSpacesLocal: BNGPoint[];
+    compliance: ComplianceCheck[];
+  }
+
+  /**
+   * Branching topology: a central spine road running straight in from the
+   * entrance (same direction/position as the estate-road ribbon above —
+   * local X=0 — but carrying no frontage of its own, pure circulation),
+   * with spur cul-de-sacs branching off it perpendicular at intervals,
+   * each ending in its own turning head, plots fronting both sides of
+   * each spur. Gibbas Way's own real layout is exactly this shape
+   * (a spine — "Spire Road" on its own drainage-strategy drawing — with
+   * three spur cul-de-sacs off an existing access spur).
+   *
+   * Deliberately self-contained, like tryFrontageRibbon above, rather
+   * than a generalisation of tryPlaceOnSide/fitsBlockAt: a spur's own
+   * "along" axis is the MAIN frame's X (perpendicular to the spine), and
+   * its "depth" axis is the main frame's Y — a 90-degree swap per spur,
+   * and a different swap for every spur at a different spine position,
+   * which the single fixed road-at-X=0 assumption baked into the
+   * estate-road functions can't express.
+   *
+   * Spur spacing is set, not guessed: two spurs on the SAME side of the
+   * spine (same dirX) must sit far enough apart, centre-to-centre, that
+   * their outward-facing plot rows (each up to `largestTotalDepthM`
+   * deep, plus the spur's OWN road corridor on each side of its
+   * centreline — a plot's rear sits at `roadHalfWidth + totalDepthM`
+   * from its spur's originY, not just `totalDepthM`) can never come
+   * closer than `backToBackM` — this is exactly how the estate-road
+   * ribbon's own rows stay compliant by construction (always backing
+   * onto the outer boundary, never onto another row), just applied
+   * between spurs instead. The back-to-back compliance check below
+   * still measures the ACTUAL placed geometry pairwise, not just this
+   * spacing formula — confirmed via the fuzz/fixture harness to catch a
+   * real version of this formula that omitted the road-corridor term
+   * (2.0m short of the requirement on a real fixture), not assumed safe.
+   */
+  function tryBranchingSpurs(): BranchingResult | null {
+    const largestTotalDepthM = Math.max(...HOUSE_TYPES.map((t) => computePlotSpec(t).totalDepthM));
+    const spurSpacingM = 2 * (roadHalfWidth + largestTotalDepthM) + backToBackM;
+
+    const allPlots: PlacedPlot[] = [];
+    const allParkingLocal: BNGPoint[] = [];
+    const spurRoadsLocal: { originY: number; dirX: 1 | -1; lengthU: number }[] = [];
+    const sideBlockExtents = new Map<string, { blockId: string; uStart: number; uEnd: number }[]>();
+    let plotCounter = 0;
+    let blockCounter = 0;
+
+    // Maps a spur's own (along-spur, across-spur) coordinate to this
+    // function's main local (X,Y) frame. u=0 sits exactly at the spine's
+    // own edge (so the spur road touches the spine road with zero gap,
+    // not an overlap); u increases away from the spine in direction
+    // dirX. v=0 sits on the spur's own centreline at originY.
+    function spurToMain(u: number, v: number, originY: number, dirX: 1 | -1): BNGPoint {
+      return [dirX * (roadHalfWidth + u), originY + v];
+    }
+
+    function spurRectMain(
+      side: "north" | "south",
+      frontageV: number,
+      rearV: number,
+      uStart: number,
+      uEnd: number,
+      originY: number,
+      dirX: 1 | -1
+    ): BNGPolygon {
+      const uv: [number, number][] =
+        side === "north"
+          ? [[uStart, frontageV], [uEnd, frontageV], [uEnd, rearV], [uStart, rearV]]
+          : [[uStart, frontageV], [uStart, rearV], [uEnd, rearV], [uEnd, frontageV]];
+      return uv.map(([u, v]) => spurToMain(u, v, originY, dirX));
+    }
+
+    function trySpur(originY: number, dirX: 1 | -1): { plots: PlacedPlot[]; lengthU: number } | null {
+      const half = turningHeadSide / 2;
+      function turningHeadFitsAtU(u: number): boolean {
+        const offsetStep = 2;
+        for (let offset = -half; offset <= half; offset += offsetStep) {
+          const square: BNGPolygon = [
+            spurToMain(u, offset - half, originY, dirX),
+            spurToMain(u, offset + half, originY, dirX),
+            spurToMain(u + turningHeadSide, offset + half, originY, dirX),
+            spurToMain(u + turningHeadSide, offset - half, originY, dirX),
+          ];
+          if (geo.convexPolygonFullyInside(square, localBoundary)) return true;
+        }
+        return false;
+      }
+
+      const xsLocal = localBoundary.map((p) => p[0]);
+      const maxXExtent = dirX < 0 ? -Math.min(...xsLocal) : Math.max(...xsLocal);
+      const naiveUCeiling = maxXExtent - roadHalfWidth - turningHeadSide;
+      let maxU = 0;
+      let headFits = false;
+      for (let u = Math.max(0, naiveUCeiling); u >= 0; u -= PROBE_STEP_M) {
+        if (turningHeadFitsAtU(u)) {
+          maxU = u;
+          headFits = true;
+          break;
+        }
+      }
+      if (!headFits) return null;
+
+      const spurPlots: PlacedPlot[] = [];
+      let cursorNorth = 0;
+      let cursorSouth = 0;
+      let cycleIndexNorth = 0;
+      let cycleIndexSouth = 0;
+
+      function fitsSpurBlockAt(
+        side: "north" | "south",
+        houseType: HouseTypeId,
+        blockSize: number,
+        uStart: number
+      ): { fits: boolean; frontageV: number; rearV: number; spec: PlotSpec } {
+        const spec = computePlotSpec(houseType);
+        const frontageV = side === "north" ? roadHalfWidth : -roadHalfWidth;
+        const rearV = side === "north" ? frontageV + spec.totalDepthM : frontageV - spec.totalDepthM;
+        const blockLength = spec.frontageWidthM * blockSize;
+        if (uStart + blockLength > maxU) return { fits: false, frontageV, rearV, spec };
+        for (let b = 0; b < blockSize; b++) {
+          const bStart = uStart + b * spec.frontageWidthM;
+          const bEnd = bStart + spec.frontageWidthM;
+          if (!geo.convexPolygonFullyInside(spurRectMain(side, frontageV, rearV, bStart, bEnd, originY, dirX), erodedLocal)) {
+            return { fits: false, frontageV, rearV, spec };
+          }
+        }
+        return { fits: true, frontageV, rearV, spec };
+      }
+
+      function placeSpurUnit(
+        side: "north" | "south",
+        spec: PlotSpec,
+        frontageV: number,
+        rearV: number,
+        uStart: number,
+        uEnd: number,
+        blockId: string,
+        blockPosition: number,
+        blockSize: number
+      ) {
+        const driveV = side === "north" ? frontageV + spec.drivewayDepthM : frontageV - spec.drivewayDepthM;
+        const houseV = side === "north" ? driveV + spec.footprintDepthM : driveV - spec.footprintDepthM;
+
+        plotCounter += 1;
+        const plot: PlacedPlot = {
+          id: `branch-plot-${plotCounter}`,
+          houseType: spec.houseType,
+          plotBng: spurRectMain(side, frontageV, rearV, uStart, uEnd, originY, dirX).map(toWorld),
+          footprintBng: spurRectMain(side, driveV, houseV, uStart, uEnd, originY, dirX).map(toWorld),
+          gardenBng: spurRectMain(side, houseV, rearV, uStart, uEnd, originY, dirX).map(toWorld),
+          giaM2: spec.giaM2,
+          blockId,
+          blockPosition,
+          blockSize,
+        };
+        spurPlots.push(plot);
+        allPlots.push(plot);
+
+        const spacesNeeded = Math.max(1, Math.round(parkingRatio));
+        const spaceWidth = spec.frontageWidthM / spacesNeeded;
+        const driveMidV = side === "north" ? frontageV + spec.drivewayDepthM / 2 : frontageV - spec.drivewayDepthM / 2;
+        for (let s = 0; s < spacesNeeded; s++) {
+          const centerU = uStart + spaceWidth * (s + 0.5);
+          allParkingLocal.push(spurToMain(centerU, driveMidV, originY, dirX));
+        }
+      }
+
+      function tryPlaceSpurSide(side: "north" | "south"): boolean {
+        const cursor = side === "north" ? cursorNorth : cursorSouth;
+        const cycleIndex = side === "north" ? cycleIndexNorth : cycleIndexSouth;
+        const preferredType = mixCycle[cycleIndex % mixCycle.length];
+        const typeOrder = draftMode ? [preferredType] : orderTypesForMixTolerance(preferredType, allPlots);
+        for (let uStart = cursor; uStart < maxU; uStart += PROBE_STEP_M) {
+          for (const houseType of typeOrder) {
+            for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
+              const check = fitsSpurBlockAt(side, houseType, blockSize, uStart);
+              if (check.fits) {
+                blockCounter += 1;
+                const blockId = `branch-block-${blockCounter}`;
+                for (let b = 0; b < blockSize; b++) {
+                  const bStart = uStart + b * check.spec.frontageWidthM;
+                  const bEnd = bStart + check.spec.frontageWidthM;
+                  placeSpurUnit(side, check.spec, check.frontageV, check.rearV, bStart, bEnd, blockId, b, blockSize);
+                }
+                const blockEnd = uStart + check.spec.frontageWidthM * blockSize;
+                const key = `${originY}-${dirX}-${side}`;
+                const list = sideBlockExtents.get(key) ?? [];
+                list.push({ blockId, uStart, uEnd: blockEnd });
+                sideBlockExtents.set(key, list);
+                const newCursor = blockEnd + sideGapM;
+                if (side === "north") {
+                  cursorNorth = newCursor;
+                  cycleIndexNorth += 1;
+                } else {
+                  cursorSouth = newCursor;
+                  cycleIndexSouth += 1;
+                }
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+
+      let progress = true;
+      while (progress) {
+        const n = tryPlaceSpurSide("north");
+        const s = tryPlaceSpurSide("south");
+        progress = n || s;
+      }
+
+      if (spurPlots.length === 0) return null;
+      return { plots: spurPlots, lengthU: maxU };
+    }
+
+    // Spine junctions, evenly spaced along Y starting half a spacing
+    // interval in (so the spacing guarantee above also covers the gap
+    // between the first junction and the entrance, even though nothing
+    // there needs it). A generous but bounded cap guards against a
+    // pathological, very long/narrow boundary looping excessively —
+    // real UK sites this engine targets don't need anywhere near this
+    // many spurs off one spine.
+    const MAX_JUNCTIONS = 12;
+    let junctionsTried = 0;
+    for (let y = spurSpacingM / 2; y < maxBoundaryY && junctionsTried < MAX_JUNCTIONS; y += spurSpacingM, junctionsTried++) {
+      for (const dirX of [-1, 1] as const) {
+        const spur = trySpur(y, dirX);
+        if (spur) {
+          spurRoadsLocal.push({ originY: y, dirX, lengthU: spur.lengthU });
+        }
+      }
+    }
+
+    if (allPlots.length === 0) return null;
+
+    const ySpineEnd = Math.max(...spurRoadsLocal.map((s) => s.originY), 0) + roadHalfWidth;
+    const spineRectLocal: BNGPolygon = [
+      [-roadHalfWidth, 0],
+      [roadHalfWidth, 0],
+      [roadHalfWidth, ySpineEnd],
+      [-roadHalfWidth, ySpineEnd],
+    ];
+    const spurRectsLocal: BNGPolygon[] = spurRoadsLocal.map((s) => [
+      spurToMain(0, -roadHalfWidth, s.originY, s.dirX),
+      spurToMain(0, roadHalfWidth, s.originY, s.dirX),
+      spurToMain(s.lengthU + turningHeadSide, roadHalfWidth, s.originY, s.dirX),
+      spurToMain(s.lengthU + turningHeadSide, -roadHalfWidth, s.originY, s.dirX),
+    ]);
+    const allRoadRectsLocal = [spineRectLocal, ...spurRectsLocal];
+
+    const roads: RoadSegment[] = [
+      { id: "spine", centerlineBng: ([[0, 0], [0, ySpineEnd]] as BNGPolygon).map(toWorld), widthM: rules.ROAD_WIDTH_M },
+      ...spurRoadsLocal.map((s, i) => ({
+        id: `spur-${i + 1}`,
+        centerlineBng: ([spurToMain(0, 0, s.originY, s.dirX), spurToMain(s.lengthU + turningHeadSide, 0, s.originY, s.dirX)] as BNGPolygon).map(
+          toWorld
+        ),
+        widthM: rules.ROAD_WIDTH_M,
+      })),
+    ];
+
+    // --- Compliance list, self-contained (mirrors the estate-road block
+    // further below, generalised from one road segment to N) ---
+    const branchCompliance: ComplianceCheck[] = [];
+
+    branchCompliance.push({
+      id: "topology",
+      label: "Road/plot topology used",
+      status: "pass",
+      ruleRef: "v0: central spine + spur cul-de-sacs, each with its own turning head — tried alongside the single-ribbon and frontage-ribbon topologies, kept when it places more homes",
+      detail: `Branching: ${spurRoadsLocal.length} spur(s) off a central spine, ${allPlots.length} plot(s) total.`,
+    });
+
+    const frontageOk = allPlots.every((p) =>
+      allRoadRectsLocal.some((r) => geo.minDistanceBetweenPolygons(p.plotBng.map(toLocal), r) <= 1e-2)
+    );
+    branchCompliance.push({
+      id: "plot-frontage",
+      label: "Every plot has road frontage",
+      status: frontageOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — every plot must front the access road (here, its own spur)",
+      detail: frontageOk
+        ? `${allPlots.length} plot(s) all touch their own spur's road corridor.`
+        : "At least one plot does not touch any road corridor.",
+    });
+
+    const roadConnectsEntrance = geo.pointInPolygon([0, 0], spineRectLocal);
+    branchCompliance.push({
+      id: "road-connects-entrance",
+      label: "Road connects to entrance",
+      status: roadConnectsEntrance ? "pass" : "fail",
+      ruleRef: "Brief requirement — road-to-entrance connector",
+      detail: roadConnectsEntrance
+        ? "The spine starts exactly at the supplied entrance point; every spur connects to the spine."
+        : "The spine does not reach the entrance point.",
+    });
+
+    const allInsideErosion = allPlots.every((p) => geo.convexPolygonFullyInside(p.plotBng.map(toLocal), erodedLocal));
+    branchCompliance.push({
+      id: "plots-inside-boundary",
+      label: "All plots inside boundary, clear of setbacks",
+      status: allInsideErosion ? "pass" : "fail",
+      ruleRef: `Boundary + ${rules.BOUNDARY_OFFSET_M}m offset`,
+      detail: allInsideErosion
+        ? `${allPlots.length} plot(s) all confirmed within the eroded boundary.`
+        : "At least one plot's footprint/garden falls outside the eroded boundary.",
+    });
+
+    let overlapFound = false;
+    outerBranch: for (let i = 0; i < allPlots.length; i++) {
+      const rectI = allPlots[i].plotBng.map(toLocal);
+      for (const r of allRoadRectsLocal) {
+        if (geo.convexPolygonsOverlap(rectI, r)) {
+          overlapFound = true;
+          break outerBranch;
+        }
+      }
+      for (let j = i + 1; j < allPlots.length; j++) {
+        if (geo.convexPolygonsOverlap(rectI, allPlots[j].plotBng.map(toLocal))) {
+          overlapFound = true;
+          break outerBranch;
+        }
+      }
+    }
+    branchCompliance.push({
+      id: "no-overlaps",
+      label: "No overlaps between plots, road and parking",
+      status: overlapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — geometric non-overlap",
+      detail: overlapFound ? "At least one pair of plots/road overlap." : `${allPlots.length} plot(s) and every road segment checked pairwise — no overlaps.`,
+    });
+
+    const branchBlockGroups = new Map<string, PlacedPlot[]>();
+    for (const p of allPlots) {
+      const group = branchBlockGroups.get(p.blockId) ?? [];
+      group.push(p);
+      branchBlockGroups.set(p.blockId, group);
+    }
+    let blockLengthOk = true;
+    let blockLengthDetail = "";
+    for (const [blockId, group] of branchBlockGroups) {
+      const houseType = group[0].houseType;
+      const maxAllowed = rules.MAX_BLOCK_UNITS[houseType];
+      const sameType = group.every((p) => p.houseType === houseType);
+      if (!sameType || group.length > maxAllowed || group.length !== group[0].blockSize) {
+        blockLengthOk = false;
+        blockLengthDetail = `Block ${blockId}: ${group.length} unit(s) of ${houseType} (max ${maxAllowed}).`;
+        break;
+      }
+    }
+    branchCompliance.push({
+      id: "block-length",
+      label: "Attached block length cap",
+      status: blockLengthOk ? "pass" : "fail",
+      ruleRef: "rules.ts MAX_BLOCK_UNITS (terrace configurable; semi=2 and detached=1 by definition)",
+      detail: blockLengthOk ? `${branchBlockGroups.size} block(s), all within their house type's cap.` : blockLengthDetail,
+    });
+
+    let attachedOk = true;
+    let attachedDetail = "";
+    outerBranchBlocks: for (const [blockId, group] of branchBlockGroups) {
+      if (group.length < 2) continue;
+      const sorted = [...group].sort((a, b) => a.blockPosition - b.blockPosition);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = geo.minDistanceBetweenPolygons(sorted[i].footprintBng, sorted[i + 1].footprintBng);
+        if (gap > 1e-3) {
+          attachedOk = false;
+          attachedDetail = `Block ${blockId}: units ${sorted[i].id} and ${sorted[i + 1].id} are ${gap.toFixed(2)}m apart, not sharing a wall.`;
+          break outerBranchBlocks;
+        }
+      }
+    }
+    branchCompliance.push({
+      id: "attached-share-wall",
+      label: "Attached units genuinely share a wall",
+      status: attachedOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — terrace/semi units must be structurally adjacent, not just nearby",
+      detail: attachedOk ? "Every multi-unit block's consecutive footprints touch with zero gap." : attachedDetail,
+    });
+
+    let wastedGapFound = false;
+    let wastedGapDetail = "";
+    for (const [key, list] of sideBlockExtents) {
+      const sorted = [...list].sort((a, b) => a.uStart - b.uStart);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = sorted[i + 1].uStart - sorted[i].uEnd;
+        const maxReasonableGap = sideGapM + smallestFrontageWidthM + PROBE_STEP_M;
+        if (gap > maxReasonableGap) {
+          wastedGapFound = true;
+          wastedGapDetail = `Spur/side ${key}, between ${sorted[i].blockId} and ${sorted[i + 1].blockId}: ${gap.toFixed(1)}m gap — room for another ${smallestFrontageWidthM.toFixed(1)}m-wide unit plus its side gap.`;
+        }
+      }
+    }
+    branchCompliance.push({
+      id: "no-wasted-gaps",
+      label: "No gap large enough for a smaller unit to fit",
+      status: wastedGapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — backtrack to a smaller type before leaving a gap empty",
+      detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
+    });
+
+    const branchNdssFailingIds = allPlots.filter((p) => p.giaM2 < ndssMinGia[p.houseType] - 1e-6).map((p) => p.id);
+    branchCompliance.push({
+      id: "ndss-gia",
+      label: "NDSS minimum GIA",
+      status: branchNdssFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: "DCLG, NDSS, March 2015, Table 1",
+      detail:
+        branchNdssFailingIds.length === 0
+          ? marketSizeUpliftPercent > 0
+            ? `Every plot's GIA is set to its NDSS minimum plus ${jurisdiction.localAuthority}'s sourced typical-market-size uplift (+${marketSizeUpliftPercent}%) — still built at a fixed target per type, not a range.`
+            : (inputs.tenure ?? "market") === "social"
+              ? "Every plot's GIA is set to exactly its NDSS minimum — tenure is set to \"social\": real RSL-led schemes typically build at the space-standard floor, so no market-size uplift is applied here even though the jurisdiction has one sourced."
+              : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+          : `${branchNdssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
+      affectedPlotIds: branchNdssFailingIds,
+    });
+
+    // Garden depth, back-to-back and the plots' own outward ("rear")
+    // normal are all computed directly from each PLOT's own placed
+    // geometry (footprint→garden direction), not from a single global
+    // road axis — unlike the estate-road ribbon, a branching layout has
+    // no one road direction every plot shares (the spine runs one way,
+    // each spur perpendicular to it), so this has to be genuinely
+    // per-plot to mean anything.
+    function plotCentroid(rect: BNGPolygon): BNGPoint {
+      const xs = rect.map((p) => p[0]);
+      const ys = rect.map((p) => p[1]);
+      return [xs.reduce((a, b) => a + b, 0) / xs.length, ys.reduce((a, b) => a + b, 0) / ys.length];
+    }
+    function plotOutwardNormal(p: PlacedPlot): BNGPoint {
+      return geo.normalize(geo.sub(plotCentroid(p.gardenBng!), plotCentroid(p.footprintBng)));
+    }
+    function gardenDepthWorld(p: PlacedPlot): number {
+      const normal = plotOutwardNormal(p);
+      const projections = p.gardenBng!.map((pt) => geo.dot(pt, normal));
+      return Math.max(...projections) - Math.min(...projections);
+    }
+    function rearMidpoint(p: PlacedPlot, normal: BNGPoint): BNGPoint {
+      const garden = p.gardenBng!;
+      const projections = garden.map((pt) => geo.dot(pt, normal));
+      const maxProj = Math.max(...projections);
+      const farPoints = garden.filter((_, idx) => Math.abs(projections[idx] - maxProj) < 1e-6);
+      return [
+        farPoints.reduce((s, pt) => s + pt[0], 0) / farPoints.length,
+        farPoints.reduce((s, pt) => s + pt[1], 0) / farPoints.length,
+      ];
+    }
+
+    const branchGardenFailingIds = allPlots.filter((p) => gardenDepthWorld(p) < gardenDepthM - 1e-6).map((p) => p.id);
+    branchCompliance.push({
+      id: "garden-depth",
+      label: "Minimum garden depth",
+      status: branchGardenFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `Brief default ${gardenDepthM}m`,
+      detail:
+        branchGardenFailingIds.length === 0
+          ? `Every plot's garden is at least ${gardenDepthM}m deep.`
+          : `${branchGardenFailingIds.length} plot(s) have a garden shallower than the minimum.`,
+      affectedPlotIds: branchGardenFailingIds,
+    });
+
+    let facingPairFound = false;
+    let minFacingDistance = Infinity;
+    for (let i = 0; i < allPlots.length; i++) {
+      for (let j = i + 1; j < allPlots.length; j++) {
+        const a = allPlots[i];
+        const b = allPlots[j];
+        const normalA = plotOutwardNormal(a);
+        const normalB = plotOutwardNormal(b);
+        const rearA = rearMidpoint(a, normalA);
+        const rearB = rearMidpoint(b, normalB);
+        const d = geo.sub(rearB, rearA);
+        const dNorm = geo.normalize(d);
+        const facingA = geo.dot(dNorm, normalA) > 0.7;
+        const facingB = geo.dot(geo.scale(dNorm, -1), normalB) > 0.7;
+        if (facingA && facingB) {
+          facingPairFound = true;
+          minFacingDistance = Math.min(minFacingDistance, geo.length(d));
+        }
+      }
+    }
+    const backToBackOk = !facingPairFound || minFacingDistance >= backToBackM - 1e-6;
+    branchCompliance.push({
+      id: "back-to-back",
+      label: `${backToBackM}m back-to-back distance`,
+      status: backToBackOk ? "pass" : "fail",
+      ruleRef: `Brief default ${backToBackM}m (Essex Design Guide, 1973, convention)`,
+      detail: facingPairFound
+        ? `Closest facing pair is ${minFacingDistance.toFixed(1)}m apart (independently recomputed from each plot's own footprint→garden direction, not assumed from the spur spacing formula).`
+        : "No two plots face each other — every facing pair's distance was checked directly, not assumed.",
+    });
+
+    const branchParkingFailingIds = allPlots
+      .filter((p) => computePlotSpec(p.houseType).frontageWidthM < parkingRatio * rules.PARKING_SPACE_WIDTH_M - 1e-6)
+      .map((p) => p.id);
+    branchCompliance.push({
+      id: "parking",
+      label: `Parking (${parkingRatio}/unit)`,
+      status: branchParkingFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `v0 default ${rules.PARKING_SPACES_PER_UNIT}/unit (common UK local parking SPD figure, editable)`,
+      detail:
+        branchParkingFailingIds.length === 0
+          ? "Every plot's frontage is sized to fit its required parking."
+          : `${branchParkingFailingIds.length} plot(s) are narrower than their required parking allocation.`,
+      affectedPlotIds: branchParkingFailingIds,
+    });
+
+    branchCompliance.push({
+      id: "fire-access",
+      label: "Fire/refuse appliance access",
+      status: "pass",
+      ruleRef: `Approved Document B / common ${rules.MAX_FIRE_ACCESS_DISTANCE_M}m hose-run convention`,
+      detail: "Every plot fronts directly onto its own spur road, so frontage-to-road distance is 0m for all plots.",
+    });
+
+    branchCompliance.push({
+      id: "turning-head",
+      label: "Turning head at road end",
+      status: "pass",
+      ruleRef: `Manual for Streets (DfT, 2007) — ~${rules.TURNING_HEAD_DIAMETER_M}m turning circle for a dead-end road`,
+      detail: `${spurRoadsLocal.length} spur(s), each individually confirmed to fit a ${rules.TURNING_HEAD_DIAMETER_M}m turning head at its own dead end before any plot was placed on it.`,
+    });
+
+    branchCompliance.push({
+      id: "road-width",
+      label: "Road carriageway width",
+      status: "pass",
+      ruleRef: `Manual for Streets (DfT, 2007) — ${rules.ROAD_WIDTH_M}m minimum used as v0 default`,
+      detail: `Spine and every spur modelled at a constant ${rules.ROAD_WIDTH_M}m width.`,
+    });
+
+    return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance };
   }
 
   const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
@@ -1389,7 +1968,9 @@ export function generateLayout(
     detail: ndssOk
       ? marketSizeUpliftPercent > 0
         ? `Every plot's GIA is set to its NDSS minimum plus ${jurisdiction.localAuthority}'s sourced typical-market-size uplift (+${marketSizeUpliftPercent}%) — still built at a fixed target per type, not a range.`
-        : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
+        : (inputs.tenure ?? "market") === "social"
+          ? "Every plot's GIA is set to exactly its NDSS minimum — tenure is set to \"social\": real RSL-led schemes typically build at the space-standard floor, so no market-size uplift is applied here even though the jurisdiction has one sourced."
+          : "Every plot's GIA is set to exactly its NDSS minimum for its house type (v0 builds at the floor, not above it)."
       : `${ndssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
     affectedPlotIds: ndssFailingIds,
   });
@@ -1582,7 +2163,7 @@ function finalize(
   inputs: EngineInputs,
   jurisdiction: ResolvedJurisdiction,
   t0: number,
-  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "none" = "none",
+  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none" = "none",
   zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null,
   nonHousingReserve: { percent: number; source: string | null } = { percent: 0, source: null }
 ): EngineOutput {
