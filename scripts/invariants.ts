@@ -23,25 +23,38 @@ export interface InvariantResult {
  * engine's own "restrictions" ComplianceCheck. Shared by both
  * checkInvariants and checkBranchingInvariants: restriction enforcement
  * is identical across every topology (see generateLayout.ts's
- * overlapsHardRestriction), so one shared check covers all of them.
- * roadPolys is every road segment's rectangle in WORLD/BNG coords
- * (checkBranchingInvariants passes all of them; checkInvariants passes
- * just its one road, or none for frontage ribbon).
+ * overlapsAnyHardRestriction/overlapsEverythingRestriction), so one
+ * shared check covers all of them. roadPolys is every road segment's
+ * rectangle in WORLD/BNG coords (checkBranchingInvariants passes all of
+ * them; checkInvariants passes just its one road, or none for frontage
+ * ribbon).
+ *
+ * Split by `bars` (RestrictionBars, defaulting to "everything" when
+ * omitted, same as the engine): a "buildings"-bars zone only keeps a
+ * house FOOTPRINT out — a whole plot's driveway/garden, a road corridor
+ * or a turning head may freely cross or run along it — while
+ * "everything" keeps a whole plot/road out entirely.
  */
 function checkRestrictions(plots: PlacedPlot[], roadPolys: BNGPolygon[], inputs: EngineInputs): InvariantResult {
-  const hardPolys = (inputs.restrictions ?? []).filter((r) => r.hardness === "hard").map((r) => r.polygon);
-  if (hardPolys.length === 0) {
+  const hardRestrictions = (inputs.restrictions ?? []).filter((r) => r.hardness === "hard");
+  const allHardPolys = hardRestrictions.map((r) => r.polygon);
+  const everythingPolys = hardRestrictions.filter((r) => (r.bars ?? "everything") === "everything").map((r) => r.polygon);
+  if (allHardPolys.length === 0) {
     return { id: "restrictions", label: "Keep-clear (restriction) zones respected", pass: true, detail: "No hard restriction zones set." };
   }
-  const violatingPlots = plots.filter((p) => hardPolys.some((h) => geo.convexPolygonsOverlap(fullPlotRect(p), h)));
-  const violatingRoads = roadPolys.filter((rp) => hardPolys.some((h) => geo.convexPolygonsOverlap(rp, h)));
+  const violatingPlots = plots.filter(
+    (p) =>
+      allHardPolys.some((h) => geo.convexPolygonsOverlap(p.footprintBng, h)) ||
+      everythingPolys.some((h) => geo.convexPolygonsOverlap(fullPlotRect(p), h))
+  );
+  const violatingRoads = roadPolys.filter((rp) => everythingPolys.some((h) => geo.convexPolygonsOverlap(rp, h)));
   const ok = violatingPlots.length === 0 && violatingRoads.length === 0;
   return {
     id: "restrictions",
     label: "Keep-clear (restriction) zones respected",
     pass: ok,
     detail: ok
-      ? `${hardPolys.length} hard restriction zone(s) — no plot or road segment overlaps any of them.`
+      ? `${allHardPolys.length} hard restriction zone(s) — no plot/footprint or road segment overlaps any of them.`
       : `${violatingPlots.length} plot(s) and ${violatingRoads.length} road segment(s) overlap a hard restriction zone.`,
   };
 }

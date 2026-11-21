@@ -17,6 +17,22 @@ export type BNGPolygon = BNGPoint[];
 export type RestrictionHardness = "hard" | "soft";
 
 /**
+ * What a hard restriction actually keeps out:
+ * "buildings" — only a house footprint/garage may not stand inside it.
+ * Roads, turning heads, driveways, gardens and open space may freely
+ * cross or run along it — the right model for a sewer/drain easement,
+ * where the legal/physical requirement is "don't build ON it," not
+ * "don't go near it at all." The UI's plain-English choice for this is
+ * "No homes here" and it's the default.
+ * "everything" — nothing may be built or placed inside it at all (no
+ * plot, no road, no turning head) — the right model for trees, an
+ * ecology buffer, or a flood zone, where the land itself is excluded,
+ * not just its buildings. The UI's plain-English choice for this is
+ * "Nothing here".
+ */
+export type RestrictionBars = "buildings" | "everything";
+
+/**
  * Why this land is set aside, for the UI's plain-English framing and for
  * anyone auditing a layout later — never used by the engine to decide
  * enforcement (hardness alone decides that):
@@ -51,6 +67,14 @@ export interface Restriction {
   label: string;
   hardness: RestrictionHardness;
   reason: RestrictionReason;
+  /**
+   * What this restriction keeps out — see RestrictionBars' own doc
+   * comment. Defaults to "everything" when omitted (the stricter,
+   * previously-only behaviour — any Restriction written before this
+   * field existed is read exactly as before: nothing may be placed
+   * inside it at all), so this field is additive, not a breaking change.
+   */
+  bars?: RestrictionBars;
   /** Optional citation/evidence for where this restriction comes from (a drawing, a planning condition, a survey). */
   source?: string;
 }

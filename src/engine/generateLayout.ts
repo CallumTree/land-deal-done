@@ -131,35 +131,58 @@ export function generateLayout(
   // transform per candidate. "soft" entries are kept only for the
   // self-check's own count/labelling — they place no constraint on
   // anything below.
-  const hardRestrictionsLocal: BNGPolygon[] = (inputs.restrictions ?? [])
+  //
+  // Split by `bars` (RestrictionBars — see its own doc comment): a
+  // "buildings"-bars zone only keeps a house footprint/garage out —
+  // roads, turning heads, driveways, gardens may freely cross or run
+  // along it — while "everything" (the default when `bars` is omitted,
+  // preserving every Restriction written before this field existed)
+  // keeps a plot, a road corridor and a turning head out entirely, same
+  // as before this field existed.
+  const allHardRestrictionsLocal: BNGPolygon[] = (inputs.restrictions ?? [])
     .filter((r) => r.hardness === "hard")
+    .map((r) => r.polygon.map(toLocal));
+  const everythingRestrictionsLocal: BNGPolygon[] = (inputs.restrictions ?? [])
+    .filter((r) => r.hardness === "hard" && (r.bars ?? "everything") === "everything")
     .map((r) => r.polygon.map(toLocal));
   const softRestrictionsCount = (inputs.restrictions ?? []).filter((r) => r.hardness === "soft").length;
 
-  /** True if `rectLocal` (any convex rect in this function's local frame — a plot, a road corridor, a turning-head square) overlaps ANY hard restriction. Shared by every topology's placement/turning-head search below. */
-  function overlapsHardRestriction(rectLocal: BNGPolygon): boolean {
-    return hardRestrictionsLocal.some((r) => geo.convexPolygonsOverlap(rectLocal, r));
+  /** True if `rectLocal` overlaps a hard restriction of EITHER bars type — the check a building FOOTPRINT must pass, since both "buildings" and "everything" zones keep a building out. */
+  function overlapsAnyHardRestriction(rectLocal: BNGPolygon): boolean {
+    return allHardRestrictionsLocal.some((r) => geo.convexPolygonsOverlap(rectLocal, r));
+  }
+
+  /** True if `rectLocal` overlaps a hard "everything"-bars restriction — the check a whole PLOT, a road corridor or a turning-head square must pass (a "buildings"-bars zone never blocks any of these). */
+  function overlapsEverythingRestriction(rectLocal: BNGPolygon): boolean {
+    return everythingRestrictionsLocal.some((r) => geo.convexPolygonsOverlap(rectLocal, r));
   }
 
   /**
    * The self-check every topology pushes once placement is done: an
    * independent re-verification (not just trusting that placement itself
    * excluded restrictions — the same "trust but verify" pattern every
-   * other compliance check in this file already follows) that NOTHING
-   * placed — plot or road corridor — overlaps a hard restriction.
+   * other compliance check in this file already follows) that nothing
+   * placed violates a hard restriction — a building footprint inside
+   * EITHER bars type, or a whole plot/road corridor inside an
+   * "everything" one.
    *
    * Known limitation, stated plainly rather than silently worked around:
    * a road's path is fixed by construction in every topology here (it
    * doesn't route around a mid-corridor obstacle) — only PLOTS and the
-   * turning-head search actively avoid a hard restriction during
-   * placement. If a hard restriction happens to cross the road's own
-   * fixed line, this check correctly reports FAIL rather than silently
+   * turning-head search actively avoid an "everything" restriction
+   * during placement. If one happens to cross the road's own fixed
+   * line, this check correctly reports FAIL rather than silently
    * building over it, but the engine can't yet re-route around that case.
    */
   function buildRestrictionsCompliance(plots: PlacedPlot[], roadRectsLocal: BNGPolygon[]): ComplianceCheck {
-    const violatingPlotIds = plots.filter((p) => overlapsHardRestriction(p.plotBng.map(toLocal))).map((p) => p.id);
-    const violatingRoadCount = roadRectsLocal.filter((r) => overlapsHardRestriction(r)).length;
-    const totalHard = hardRestrictionsLocal.length;
+    const violatingPlotIds = plots
+      .filter(
+        (p) =>
+          overlapsAnyHardRestriction(p.footprintBng.map(toLocal)) || overlapsEverythingRestriction(p.plotBng.map(toLocal))
+      )
+      .map((p) => p.id);
+    const violatingRoadCount = roadRectsLocal.filter((r) => overlapsEverythingRestriction(r)).length;
+    const totalHard = allHardRestrictionsLocal.length;
     const ok = violatingPlotIds.length === 0 && violatingRoadCount === 0;
     const softNote = softRestrictionsCount > 0 ? ` ${softRestrictionsCount} soft zone(s) also recorded, not yet enforced.` : "";
     return {
@@ -171,7 +194,7 @@ export function generateLayout(
         totalHard === 0
           ? `No hard restriction zones set.${softNote}`
           : ok
-            ? `${totalHard} hard restriction zone(s) respected — no plot or road corridor overlaps any of them.${softNote}`
+            ? `${totalHard} hard restriction zone(s) respected — no plot/footprint or road corridor overlaps any of them.${softNote}`
             : `${violatingPlotIds.length} plot(s) and ${violatingRoadCount} road segment(s) overlap a hard restriction zone — this v0 engine doesn't yet route a road around a mid-corridor obstacle (see this check's own doc comment).`,
       affectedPlotIds: violatingPlotIds,
     };
@@ -355,7 +378,7 @@ export function generateLayout(
         [offset + half, y + turningHeadSide],
         [offset - half, y + turningHeadSide],
       ];
-      if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsHardRestriction(square)) return true;
+      if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsEverythingRestriction(square)) return true;
     }
     return false;
   }
@@ -398,7 +421,7 @@ export function generateLayout(
   // fixture's ecology-buffer restriction, which the road's fixed path
   // ran straight through before this cap existed.
   let roadRestrictionCeilingY = Infinity;
-  if (hardRestrictionsLocal.length > 0) {
+  if (everythingRestrictionsLocal.length > 0) {
     for (let y = 0; y < maxBoundaryY; y += PROBE_STEP_M) {
       const slice: BNGPolygon = [
         [-roadHalfWidth, y],
@@ -406,7 +429,7 @@ export function generateLayout(
         [roadHalfWidth, y + PROBE_STEP_M],
         [-roadHalfWidth, y + PROBE_STEP_M],
       ];
-      if (overlapsHardRestriction(slice)) {
+      if (overlapsEverythingRestriction(slice)) {
         roadRestrictionCeilingY = y;
         break;
       }
@@ -685,11 +708,20 @@ export function generateLayout(
     if (yStart + blockWidth > maxPlotFrontageY) {
       return { fits: false, frontageX, rearX, spec };
     }
+    const driveX = depthToX(side, frontageX, spec.drivewayDepthM);
+    const houseX = depthToX(side, frontageX, spec.drivewayDepthM + spec.footprintDepthM);
     for (let u = 0; u < blockSize; u++) {
       const uStart = yStart + u * spec.frontageWidthM;
       const uEnd = uStart + spec.frontageWidthM;
       const unitRect = buildPlotRect(side, frontageX, rearX, uStart, uEnd);
-      if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
+      if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsEverythingRestriction(unitRect)) {
+        return { fits: false, frontageX, rearX, spec };
+      }
+      // The house footprint alone must ALSO avoid a "buildings"-bars
+      // restriction (overlapsEverythingRestriction above already covers
+      // "everything"-bars zones for the whole plot, footprint included).
+      const footprintRect = buildPlotRect(side, driveX, houseX, uStart, uEnd);
+      if (overlapsAnyHardRestriction(footprintRect)) {
         return { fits: false, frontageX, rearX, spec };
       }
     }
@@ -873,7 +905,7 @@ export function generateLayout(
     [roadHalfWidth, stateRoadEndY + turningHeadSide],
     [-roadHalfWidth, stateRoadEndY + turningHeadSide],
   ];
-  const stateRoadOk = stateUnits === 0 || !overlapsHardRestriction(stateRoadPolygonLocal);
+  const stateRoadOk = stateUnits === 0 || !overlapsEverythingRestriction(stateRoadPolygonLocal);
   const branchingRoadOk = branching?.roadRestrictionOk ?? true;
 
   const effectiveStateUnits = stateRoadOk ? stateUnits : 0;
@@ -994,11 +1026,17 @@ export function generateLayout(
       const spec = computePlotSpec(houseType);
       const blockWidth = spec.frontageWidthM * blockSize;
       if (xStart + blockWidth > maxX) return { fits: false, spec };
+      const driveY = yFront + spec.drivewayDepthM;
+      const houseY = driveY + spec.footprintDepthM;
       for (let u = 0; u < blockSize; u++) {
         const uStart = xStart + u * spec.frontageWidthM;
         const uEnd = uStart + spec.frontageWidthM;
         const unitRect = buildFrontageRect(uStart, uEnd, yFront, yFront + spec.totalDepthM);
-        if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
+        if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsEverythingRestriction(unitRect)) {
+          return { fits: false, spec };
+        }
+        const footprintRect = buildFrontageRect(uStart, uEnd, driveY, houseY);
+        if (overlapsAnyHardRestriction(footprintRect)) {
           return { fits: false, spec };
         }
       }
@@ -1379,7 +1417,7 @@ export function generateLayout(
             spurToMain(u + turningHeadSide, offset + half, originY, dirX),
             spurToMain(u + turningHeadSide, offset - half, originY, dirX),
           ];
-          if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsHardRestriction(square)) return true;
+          if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsEverythingRestriction(square)) return true;
         }
         return false;
       }
@@ -1413,13 +1451,19 @@ export function generateLayout(
         const spec = computePlotSpec(houseType);
         const frontageV = side === "north" ? roadHalfWidth : -roadHalfWidth;
         const rearV = side === "north" ? frontageV + spec.totalDepthM : frontageV - spec.totalDepthM;
+        const driveV = side === "north" ? frontageV + spec.drivewayDepthM : frontageV - spec.drivewayDepthM;
+        const houseV = side === "north" ? driveV + spec.footprintDepthM : driveV - spec.footprintDepthM;
         const blockLength = spec.frontageWidthM * blockSize;
         if (uStart + blockLength > maxU) return { fits: false, frontageV, rearV, spec };
         for (let b = 0; b < blockSize; b++) {
           const bStart = uStart + b * spec.frontageWidthM;
           const bEnd = bStart + spec.frontageWidthM;
           const unitRect = spurRectMain(side, frontageV, rearV, bStart, bEnd, originY, dirX);
-          if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsHardRestriction(unitRect)) {
+          if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsEverythingRestriction(unitRect)) {
+            return { fits: false, frontageV, rearV, spec };
+          }
+          const footprintRect = spurRectMain(side, driveV, houseV, bStart, bEnd, originY, dirX);
+          if (overlapsAnyHardRestriction(footprintRect)) {
             return { fits: false, frontageV, rearV, spec };
           }
         }
@@ -1832,7 +1876,7 @@ export function generateLayout(
 
     branchCompliance.push(buildRestrictionsCompliance(allPlots, allRoadRectsLocal));
 
-    const roadRestrictionOk = allRoadRectsLocal.every((r) => !overlapsHardRestriction(r));
+    const roadRestrictionOk = allRoadRectsLocal.every((r) => !overlapsEverythingRestriction(r));
 
     return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance, roadRestrictionOk };
   }
