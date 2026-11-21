@@ -27,3 +27,12 @@ export const GRID_CYAN = "#19f6ff";
 export const GRID_AMBER = "#ffb020";
 export const GRID_GREEN = "#27ff8a";
 export const ROAD_GREY_BLUE = "#4b5a7a";
+/**
+ * "Keep clear" (restriction zone) colour — land set aside, not an error,
+ * so deliberately NOT red/amber (those read as "something's wrong" per
+ * the compliance-colour convention elsewhere in this app). A calm,
+ * neutral slate-teal instead, distinct from every other accent colour
+ * already in use (cyan=boundary, green=entrance/live, amber=tight
+ * plot, magenta/violet=house sizes).
+ */
+export const GRID_KEEPCLEAR = "#6fa8b8";

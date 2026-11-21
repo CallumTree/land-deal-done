@@ -30,7 +30,8 @@ import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY, BUNGALOW_TOGGLE_HELP
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
 import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/types";
-import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck } from "@/engine/types";
+import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction } from "@/engine/types";
+import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
 
@@ -73,6 +74,15 @@ export default function Home() {
   const [mode, setMode] = useState<DrawMode>("boundary");
   const [isDragging, setIsDragging] = useState(false);
   const [view3D, setView3D] = useState(false);
+
+  // "Keep clear" zones — see SiteCanvas's own "restriction" draw mode.
+  // Every zone drawn through this UI is always hard+choice (land the
+  // user is choosing to set aside, with the engine fully enforcing it —
+  // see EngineInputs.restrictions/Restriction's own doc comments);
+  // `restrictions` holds completed zones, `draftRestriction` the points
+  // placed so far for the one currently being drawn.
+  const [restrictions, setRestrictions] = useState<Restriction[]>([]);
+  const [draftRestriction, setDraftRestriction] = useState<BNGPolygon>([]);
 
   // Must start "dark" (matching SSR, which has no window/localStorage)
   // rather than reading the stored preference in a lazy initializer —
@@ -147,6 +157,7 @@ export default function Home() {
       mix.setMode(state.mixMode);
       for (const tier of SIZE_TIERS) mix.setTierWeight(tier, state.sizeMix[tier] ?? 0);
       mix.setIncludeBungalows(state.includeBungalows);
+      setRestrictions(state.restrictions);
       if (hashState) storeSiteState(state); // a shared link becomes the new auto-save going forward
     }
     setRestored(true);
@@ -162,8 +173,8 @@ export default function Home() {
   // transition itself re-running it.
   useEffect(() => {
     if (!restored || isDragging) return;
-    storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows });
-  }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, isDragging]);
+    storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions });
+  }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, isDragging]);
 
   const liveInputs = useMemo(
     () => ({
@@ -172,8 +183,9 @@ export default function Home() {
       localAuthority: "pembrokeshire",
       marketBand,
       sideGapTier: FIXED_SIDE_GAP_TIER,
+      restrictions,
     }),
-    [mix.engineMixFields, marketBand]
+    [mix.engineMixFields, marketBand, restrictions]
   );
 
   // Auto-entrance: only searches once a real boundary exists AND the
@@ -250,17 +262,36 @@ export default function Home() {
   const planningEntries = useMemo(() => planningProvenance(jurisdiction), [jurisdiction]);
 
   const canFinishBoundary = mode === "boundary" && boundary.length >= 3;
+  const canFinishRestriction = mode === "restriction" && draftRestriction.length >= 3;
 
   const handleReset = useCallback(() => {
     setBoundary([]);
     setEntrance(null);
     setMode("boundary");
+    setRestrictions([]);
+    setDraftRestriction([]);
+  }, []);
+
+  const handleStartRestrictionZone = useCallback(() => {
+    setDraftRestriction([]);
+    setMode("restriction");
+  }, []);
+
+  const handleFinishRestrictionZone = useCallback(() => {
+    if (draftRestriction.length < 3) return;
+    setRestrictions((rs) => [...rs, { polygon: draftRestriction, label: "Keep clear", hardness: "hard", reason: "choice" }]);
+    setDraftRestriction([]);
+    setMode("done");
+  }, [draftRestriction]);
+
+  const handleRemoveRestriction = useCallback((index: number) => {
+    setRestrictions((rs) => rs.filter((_, i) => i !== index));
   }, []);
 
   const [shareCopied, setShareCopied] = useState(false);
   const shareCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleShare = useCallback(() => {
-    const state: SiteState = { boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows };
+    const state: SiteState = { boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions };
     // Always sync the address bar to the current state — a visible,
     // copy-able fallback if the clipboard write below fails (no
     // permission, insecure context) or isn't available at all.
@@ -273,7 +304,7 @@ export default function Home() {
         shareCopiedTimeoutRef.current = setTimeout(() => setShareCopied(false), 1500);
       })
       .catch(() => {});
-  }, [boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows]);
+  }, [boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions]);
 
   const handlePostcodeFound = useCallback(
     (center: BNGPoint) => {
@@ -285,9 +316,9 @@ export default function Home() {
 
   const handleRunOptimizer = useCallback(() => {
     if (!effectiveEntrance || boundary.length < 3) return;
-    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full" };
+    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full", restrictions };
     optimizer.run(boundary, effectiveEntrance, inputs);
-  }, [boundary, effectiveEntrance, marketBand, optimizer]);
+  }, [boundary, effectiveEntrance, marketBand, optimizer, restrictions]);
 
   const handleToggleAuto = useCallback(() => {
     const turningOn = mix.mode !== "auto";
@@ -315,6 +346,7 @@ export default function Home() {
           layout={output?.layout ?? null}
           tightPlotIds={tightPlotIds}
           dark={mapDark}
+          restrictionZones={restrictions.map((r) => r.polygon)}
         />
       ) : (
         <SiteCanvas
@@ -327,6 +359,9 @@ export default function Home() {
             setEntrance(p);
             setMode("done");
           }}
+          restrictions={restrictions.map((r) => r.polygon)}
+          draftRestriction={draftRestriction}
+          onAddRestrictionPoint={(p) => setDraftRestriction((d) => [...d, p])}
           onBoundaryChange={setBoundary}
           onEntranceChange={setEntrance}
           onDragStateChange={handleDragStateChange}
@@ -392,6 +427,40 @@ export default function Home() {
             >
               Finish boundary
             </button>
+          )}
+          {mode === "done" && boundary.length >= 3 && (
+            <button
+              type="button"
+              onClick={handleStartRestrictionZone}
+              className="rounded-full border border-grid-border bg-sheet px-3 py-1.5 text-xs font-medium text-grid-text"
+              title="Mark land to keep clear — sewer, trees, buffers"
+            >
+              + Keep clear
+            </button>
+          )}
+          {mode === "restriction" && (
+            <>
+              {canFinishRestriction && (
+                <button
+                  type="button"
+                  onClick={handleFinishRestrictionZone}
+                  style={{ backgroundColor: GRID_KEEPCLEAR, boxShadow: "0 0 16px rgba(111,168,184,0.5)" }}
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold text-ink"
+                >
+                  Finish zone
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftRestriction([]);
+                  setMode("done");
+                }}
+                className="rounded-full border border-grid-border bg-sheet px-3 py-1.5 text-xs font-medium text-grid-muted"
+              >
+                Cancel
+              </button>
+            </>
           )}
           {boundary.length > 0 && (
             <button
@@ -545,6 +614,28 @@ export default function Home() {
               <strong className="font-semibold text-grid-text">{metrics.nonHousingReservePercent}% of this site</strong> is set
               aside before building — open space, drainage and landscape buffers a real scheme like this would need, not just
               houses and gardens.
+            </div>
+          )}
+
+          {restrictions.length > 0 && (
+            <div className="mt-2 rounded-xl border border-grid-border bg-panel/40 px-3 py-2 text-[11px] leading-snug">
+              <div className="mb-1 font-semibold text-grid-text">
+                {restrictions.length} keep-clear zone{restrictions.length === 1 ? "" : "s"} — land set aside, never built on
+              </div>
+              <ul className="space-y-1">
+                {restrictions.map((r, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2 text-grid-muted">
+                    <span>{r.label || "Keep clear"}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRestriction(i)}
+                      className="shrink-0 rounded-full border border-grid-border px-2 py-0.5 text-[10px] text-grid-muted hover:text-grid-text"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

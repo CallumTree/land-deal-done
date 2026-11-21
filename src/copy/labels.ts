@@ -173,6 +173,15 @@ export const COMPLIANCE_COPY: Record<string, ComplianceCopyEntry> = {
       warn: "Below the council's minimum density, or the policy couldn't be checked — see the detail below.",
     },
   },
+  restrictions: {
+    title: "Keep-clear zones",
+    copy: {
+      // Deliberately neutral, not alarming — a keep-clear zone is land
+      // being set aside, not an error, even when the status is "pass".
+      pass: "Any keep-clear zones you've drawn are respected — nothing is built inside them.",
+      fail: "Something was built inside a keep-clear zone — see the detail below (this engine can't yet route a road around one).",
+    },
+  },
 };
 
 /** Looks up the plain-English copy for a check, falling back to the engine's own label/detail if this dictionary hasn't caught up with a new id — never silently blank. */

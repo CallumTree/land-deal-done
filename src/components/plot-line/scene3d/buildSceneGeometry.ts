@@ -14,7 +14,7 @@
 import * as THREE from "three";
 import type { BNGPolygon, LayoutResult, PlacedPlot } from "@/engine/types";
 import * as rules from "@/engine/rules";
-import { GRID_AMBER, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "../gridColors";
+import { GRID_AMBER, GRID_KEEPCLEAR, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "../gridColors";
 import { bufferStraightRoad } from "../bufferRoad";
 import { bngToScene, type SceneOrigin } from "./coords";
 
@@ -155,6 +155,15 @@ export interface SceneGeometries {
   homes: THREE.BufferGeometry | null;
   roads: THREE.BufferGeometry | null;
   gardens: THREE.BufferGeometry | null;
+  /**
+   * "Keep clear" zones (EngineInputs.restrictions) as a flat, tinted
+   * ground marker — land set aside, not an error, so no extrusion and a
+   * calm colour (GRID_KEEPCLEAR), not red/amber. v0 doesn't attempt a
+   * true diagonal-hatch TEXTURE here (unlike the 2D map's SVG/canvas
+   * pattern) — a flat tinted plane is a deliberately simpler, honestly-
+   * scoped stand-in that still reads clearly in 3D.
+   */
+  restrictions: THREE.BufferGeometry | null;
   /** Boundary outline points in scene space, Y-elevated slightly to avoid z-fighting with the ground plane — for a THREE.Line, not a filled mesh. */
   boundaryPoints: THREE.Vector3[];
   /** Entrance marker position in scene space, or null if no entrance set. */
@@ -163,6 +172,7 @@ export interface SceneGeometries {
 
 const GARDEN_COLOR: [number, number, number] = hexToRgb01("#27573f"); // a dark, desaturated green — distinct from the neon GRID_GREEN used for live/entrance accents, since a flat ground slab rendered at full neon brightness would fight with the homes for attention.
 const ROAD_COLOR: [number, number, number] = hexToRgb01(ROAD_GREY_BLUE);
+const RESTRICTION_COLOR: [number, number, number] = hexToRgb01(GRID_KEEPCLEAR);
 const BOUNDARY_Y = 0.05;
 
 export function buildSceneGeometry(
@@ -170,11 +180,13 @@ export function buildSceneGeometry(
   boundary: BNGPolygon,
   entrance: [number, number] | null,
   tightPlotIds: ReadonlySet<string>,
-  origin: SceneOrigin
+  origin: SceneOrigin,
+  restrictionZones: BNGPolygon[] = []
 ): SceneGeometries {
   const homesB = newBuilder();
   const roadsB = newBuilder();
   const gardensB = newBuilder();
+  const restrictionsB = newBuilder();
 
   for (const plot of layout?.plots ?? []) {
     addHouseGeometry(homesB, plot, origin, tightPlotIds.has(plot.id));
@@ -184,6 +196,12 @@ export function buildSceneGeometry(
   for (const road of layout?.roads ?? []) {
     const rect = bufferStraightRoad(road.centerlineBng, road.widthM);
     if (rect) addFlatPolygon(roadsB, rect, origin, ROAD_COLOR, 0.02);
+  }
+
+  // Above roads/gardens but below the boundary outline, so a zone drawn
+  // over a garden/road still reads as the topmost flat layer there.
+  for (const zone of restrictionZones) {
+    addFlatPolygon(restrictionsB, zone, origin, RESTRICTION_COLOR, 0.03);
   }
 
   const boundaryPoints = boundary.map((p) => {
@@ -203,6 +221,7 @@ export function buildSceneGeometry(
     homes: finishGeometry(homesB),
     roads: finishGeometry(roadsB),
     gardens: finishGeometry(gardensB),
+    restrictions: finishGeometry(restrictionsB),
     boundaryPoints,
     entrancePosition,
   };

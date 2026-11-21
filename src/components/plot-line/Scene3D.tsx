@@ -30,6 +30,8 @@ export interface Scene3DProps {
   tightPlotIds: ReadonlySet<string>;
   /** Mirrors the 2D map's Dark/Light toggle — see mapFilter.ts. */
   dark: boolean;
+  /** "Keep clear" zone polygons — see buildSceneGeometry's own doc comment on how these render in 3D. */
+  restrictionZones?: BNGPolygon[];
 }
 
 interface CameraFrame {
@@ -184,10 +186,10 @@ function GroundPlane({ boundary, dark }: { boundary: BNGPolygon; dark: boolean }
   );
 }
 
-function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark }: Scene3DProps & { origin: SceneOrigin }) {
+function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark, restrictionZones = [] }: Scene3DProps & { origin: SceneOrigin }) {
   const sceneGeo = useMemo(
-    () => buildSceneGeometry(layout, boundary, entrance, tightPlotIds, origin),
-    [layout, boundary, entrance, tightPlotIds, origin]
+    () => buildSceneGeometry(layout, boundary, entrance, tightPlotIds, origin, restrictionZones),
+    [layout, boundary, entrance, tightPlotIds, origin, restrictionZones]
   );
 
   // Ordinary effect-cleanup-on-change: this closure captures the
@@ -200,19 +202,27 @@ function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark 
       sceneGeo.homes?.dispose();
       sceneGeo.roads?.dispose();
       sceneGeo.gardens?.dispose();
+      sceneGeo.restrictions?.dispose();
     };
   }, [sceneGeo]);
 
   const homesMaterial = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), []);
   const roadsMaterial = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), []);
   const gardensMaterial = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), []);
+  // Translucent, not opaque — reads as "land set aside" rather than a
+  // solid obstacle blotting out the ground beneath it.
+  const restrictionsMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }),
+    []
+  );
   useEffect(
     () => () => {
       homesMaterial.dispose();
       roadsMaterial.dispose();
       gardensMaterial.dispose();
+      restrictionsMaterial.dispose();
     },
-    [homesMaterial, roadsMaterial, gardensMaterial]
+    [homesMaterial, roadsMaterial, gardensMaterial, restrictionsMaterial]
   );
 
   const boundaryGeometry = useMemo(() => {
@@ -229,6 +239,7 @@ function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark 
       <GroundPlane boundary={boundary} dark={dark} />
       {sceneGeo.roads && <mesh geometry={sceneGeo.roads} material={roadsMaterial} />}
       {sceneGeo.gardens && <mesh geometry={sceneGeo.gardens} material={gardensMaterial} />}
+      {sceneGeo.restrictions && <mesh geometry={sceneGeo.restrictions} material={restrictionsMaterial} />}
       {sceneGeo.homes && <mesh geometry={sceneGeo.homes} material={homesMaterial} />}
       {sceneGeo.boundaryPoints.length > 0 && <primitive object={new THREE.Line(boundaryGeometry, boundaryMaterial)} />}
       {sceneGeo.entrancePosition && (
@@ -241,7 +252,7 @@ function SceneContents({ boundary, entrance, layout, tightPlotIds, origin, dark 
   );
 }
 
-export function Scene3D({ boundary, entrance, layout, tightPlotIds, dark }: Scene3DProps) {
+export function Scene3D({ boundary, entrance, layout, tightPlotIds, dark, restrictionZones = [] }: Scene3DProps) {
   const [resetSignal, setResetSignal] = useState(0);
   const hasSite = boundary.length >= 3;
 
@@ -281,7 +292,15 @@ export function Scene3D({ boundary, entrance, layout, tightPlotIds, dark }: Scen
       */}
       <Canvas camera={{ fov: 50, near: 0.5, far: 5000 }} dpr={[1, 1.5]} gl={{ antialias: false }}>
         <Controls frame={initialFrame} resetSignal={resetSignal} />
-        <SceneContents boundary={boundary} entrance={entrance} layout={layout} tightPlotIds={tightPlotIds} origin={origin} dark={dark} />
+        <SceneContents
+          boundary={boundary}
+          entrance={entrance}
+          layout={layout}
+          tightPlotIds={tightPlotIds}
+          origin={origin}
+          dark={dark}
+          restrictionZones={restrictionZones}
+        />
       </Canvas>
       <button
         type="button"

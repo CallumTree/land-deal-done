@@ -13,11 +13,47 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OsMapBasemap } from "./OsMapBasemap";
-import { GRID_AMBER, GRID_CYAN, GRID_GREEN, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "./gridColors";
+import { GRID_AMBER, GRID_CYAN, GRID_GREEN, GRID_KEEPCLEAR, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "./gridColors";
 import { bufferStraightRoad } from "./bufferRoad";
 import type { BNGPoint, BNGPolygon, LayoutResult } from "@/engine/types";
 
-export type DrawMode = "boundary" | "entrance" | "done";
+export type DrawMode = "boundary" | "entrance" | "restriction" | "done";
+
+/**
+ * A repeating diagonal-stripe CanvasPattern for "keep clear" zone fills —
+ * land set aside, not an error (see gridColors.ts's GRID_KEEPCLEAR), so a
+ * hatch rather than a solid block reads as "excluded area," not "red
+ * alert." Built once lazily (needs `document`, so only on the client)
+ * and cached — every zone on the map reuses the same pattern instance.
+ */
+let keepClearHatchCache: CanvasPattern | null | undefined;
+function getKeepClearHatch(): CanvasPattern | null {
+  if (keepClearHatchCache !== undefined) return keepClearHatchCache;
+  if (typeof document === "undefined") return null;
+  const size = 10;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    keepClearHatchCache = null;
+    return null;
+  }
+  ctx.strokeStyle = "rgba(111,168,184,0.8)"; // GRID_KEEPCLEAR
+  ctx.lineWidth = 1.5;
+  // Three parallel diagonals (one through the tile, two half-offset at
+  // the edges) so the 45-degree stripe tiles seamlessly with no visible seam.
+  ctx.beginPath();
+  ctx.moveTo(0, size);
+  ctx.lineTo(size, 0);
+  ctx.moveTo(-size / 2, size / 2);
+  ctx.lineTo(size / 2, -size / 2);
+  ctx.moveTo(size / 2, size * 1.5);
+  ctx.lineTo(size * 1.5, size / 2);
+  ctx.stroke();
+  keepClearHatchCache = ctx.createPattern(canvas, "repeat");
+  return keepClearHatchCache;
+}
 
 type OlMap = import("ol/Map").default;
 type OlVectorSource = import("ol/source/Vector").default;
@@ -66,6 +102,12 @@ interface SiteCanvasProps {
   mode: DrawMode;
   onAddBoundaryPoint: (p: BNGPoint) => void;
   onSetEntrance: (p: BNGPoint) => void;
+  /** Completed "keep clear" zones (always hard+choice when drawn here — see page.tsx) — rendered with a diagonal-hatch fill regardless of mode. */
+  restrictions?: BNGPolygon[];
+  /** Points placed so far for the zone currently being drawn (mode "restriction" only) — rendered like the boundary's own in-progress draft, in GRID_KEEPCLEAR instead of cyan. */
+  draftRestriction?: BNGPolygon;
+  /** Called on each click while mode is "restriction", appending a point to the in-progress zone — same click-to-add interaction as onAddBoundaryPoint. */
+  onAddRestrictionPoint?: (p: BNGPoint) => void;
   /**
    * Called with the full updated point list whenever the user drags an
    * EXISTING boundary corner (mode "done" only — dragging edits an
@@ -95,6 +137,8 @@ interface SiteCanvasProps {
 }
 
 const EMPTY_TIGHT_IDS: ReadonlySet<string> = new Set();
+const EMPTY_RESTRICTIONS: BNGPolygon[] = [];
+const EMPTY_DRAFT_RESTRICTION: BNGPolygon = [];
 
 export function SiteCanvas({
   boundary,
@@ -103,6 +147,9 @@ export function SiteCanvas({
   mode,
   onAddBoundaryPoint,
   onSetEntrance,
+  restrictions = EMPTY_RESTRICTIONS,
+  draftRestriction = EMPTY_DRAFT_RESTRICTION,
+  onAddRestrictionPoint,
   onBoundaryChange,
   onEntranceChange,
   onDragStateChange,
@@ -130,8 +177,11 @@ export function SiteCanvas({
     layout,
     mode,
     tightPlotIds,
+    restrictions,
+    draftRestriction,
     onAddBoundaryPoint,
     onSetEntrance,
+    onAddRestrictionPoint,
     onBoundaryChange,
     onEntranceChange,
     onDragStateChange,
@@ -144,8 +194,11 @@ export function SiteCanvas({
       layout,
       mode,
       tightPlotIds,
+      restrictions,
+      draftRestriction,
       onAddBoundaryPoint,
       onSetEntrance,
+      onAddRestrictionPoint,
       onBoundaryChange,
       onEntranceChange,
       onDragStateChange,
@@ -320,7 +373,7 @@ export function SiteCanvas({
 
       function redraw() {
         source.clear();
-        const { boundary: b, entrance: e, layout: l, mode: m, tightPlotIds: tight } = propsRef.current;
+        const { boundary: b, entrance: e, layout: l, mode: m, tightPlotIds: tight, restrictions: zones, draftRestriction: draftZone } = propsRef.current;
 
         // Draggable corners/entrance only make sense once a boundary and
         // entrance already exist. Skip syncing their geometry while a
@@ -372,6 +425,49 @@ export function SiteCanvas({
           source.addFeature(f);
         }
 
+        // "Keep clear" zones — land set aside, not an error, so a
+        // diagonal hatch (not a solid red/amber block) plus a calm
+        // outline. Rendered regardless of mode, so a drawn zone stays
+        // visible once the user moves on to "done".
+        const hatch = getKeepClearHatch();
+        for (const zone of zones) {
+          if (zone.length < 3) continue;
+          const f = new Feature(new Polygon([[...zone, zone[0]]]));
+          f.setStyle(
+            new Style({
+              fill: new Fill({ color: hatch ?? "rgba(111,168,184,0.18)" }), // plain tint fallback if canvas pattern creation ever fails
+              stroke: new Stroke({ color: GRID_KEEPCLEAR, width: 1.5, lineDash: [5, 4] }),
+            })
+          );
+          source.addFeature(f);
+        }
+
+        // In-progress zone draft (mode "restriction" only) — same corner-
+        // dot/dashed-outline language as the boundary's own draft below,
+        // in GRID_KEEPCLEAR instead of cyan so it reads as a different
+        // kind of thing being drawn, not a second site boundary.
+        if (m === "restriction" && draftZone.length > 0) {
+          if (draftZone.length >= 3) {
+            const closed = new Feature(new Polygon([[...draftZone, draftZone[0]]]));
+            closed.setStyle([
+              new Style({ stroke: new Stroke({ color: "rgba(111,168,184,0.35)", width: 8 }) }),
+              new Style({
+                fill: new Fill({ color: hatch ?? "rgba(111,168,184,0.18)" }),
+                stroke: new Stroke({ color: GRID_KEEPCLEAR, width: 2, lineDash: [6, 5] }),
+              }),
+            ]);
+            source.addFeature(closed);
+          }
+          for (const p of draftZone) {
+            const f = new Feature(new Point(p));
+            f.setStyle([
+              new Style({ image: new CircleStyle({ radius: 9, fill: new Fill({ color: "rgba(111,168,184,0.35)" }) }) }),
+              new Style({ image: new CircleStyle({ radius: 4.5, fill: new Fill({ color: GRID_KEEPCLEAR }) }) }),
+            ]);
+            source.addFeature(f);
+          }
+        }
+
         if (b.length > 0) {
           if (b.length >= 3) {
             // Simulated glow: a wider, low-opacity stroke underneath the
@@ -414,12 +510,21 @@ export function SiteCanvas({
 
       clickKey = map.on("singleclick", (evt) => {
         const [x, y] = evt.coordinate;
-        const { mode: m, boundary: b, onAddBoundaryPoint: add, onSetEntrance: setEnt, onMapInteraction } = propsRef.current;
+        const {
+          mode: m,
+          boundary: b,
+          onAddBoundaryPoint: add,
+          onSetEntrance: setEnt,
+          onAddRestrictionPoint: addRestriction,
+          onMapInteraction,
+        } = propsRef.current;
         onMapInteraction?.();
         if (m === "boundary") {
           add([x, y]);
         } else if (m === "entrance" && b.length >= 3) {
           setEnt(nearestPointOnPolygon([x, y], b));
+        } else if (m === "restriction") {
+          addRestriction?.([x, y]);
         }
       });
     })();
@@ -456,7 +561,7 @@ export function SiteCanvas({
   // toggles the drag interactions' active state — see redraw()).
   useEffect(() => {
     redrawRef.current?.();
-  }, [boundary, entrance, layout, mode]);
+  }, [boundary, entrance, layout, mode, restrictions, draftRestriction]);
 
   // Animate to a new location (e.g. from a postcode search) whenever
   // `flyTo` changes. Guarded on `map` existing; `flyTo.key` (not just
@@ -497,6 +602,10 @@ export function SiteCanvas({
             ? "Click to add more boundary points, or tap “Finish boundary”"
             : "Pan/zoom to your site, then click to place boundary points (3+)")}
         {mode === "entrance" && "Click near the boundary to place the site entrance"}
+        {mode === "restriction" &&
+          (draftRestriction.length >= 3
+            ? "Click to add more points, or tap “Finish zone”"
+            : "Click to mark land to keep clear — sewer, trees, buffers (3+ points)")}
         {mode === "done" && "Layout live — drag a corner or the entrance to adjust, or edit inputs on the right"}
       </div>
     </div>
