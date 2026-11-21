@@ -270,7 +270,7 @@ export interface Metrics {
    * (see scripts/fuzz-shapes.ts) rather than string-matching the prose.
    * Null whenever zeroHomesReason is null.
    */
-  zeroHomesCause: "boundary-too-complex" | "turning-head-no-fit" | "frontage-too-narrow" | "area-too-small" | null;
+  zeroHomesCause: "boundary-too-complex" | "turning-head-no-fit" | "frontage-too-narrow" | "area-too-small" | "restriction-blocks-road" | null;
   /**
    * % of the gross site area set aside as a non-housing reserve (open
    * space, drainage/SuDS, landscape buffers) before any plot was placed,

@@ -25,6 +25,44 @@
   "confidence": "approved_unit_count",
   "inputs": {
     "settlementTier": "town",
-    "tenure": "social"
-  }
+    "tenure": "social",
+    "restrictions": [
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "25/0074/PA delegated decision report §8.14/condition: 'a minimum 2m buffer (measured from the boundary line) to be maintained along western boundary... to remain outside of individual species. A maintenance strategy for this buffer zone shall also be [secured].' Modelled as a 2m-deep strip along the boundary's western run (vertices 6-11 of boundaryBng, the longest contiguous stretch on the low-easting/western side of the site) — per-edge rectangles, not a single mitred polygon (a deliberately simple approximation at the interior vertices, not a precise offset).",
+        "polygon": [[190234.4,206419.6],[190215.2,206370.1],[190213.3,206370.8],[190232.5,206420.3]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190215.2,206370.1],[190131.6,206387.7],[190132.0,206389.7],[190215.6,206372.1]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190131.6,206387.7],[190157.8,206435.5],[190159.6,206434.5],[190133.4,206386.7]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190157.8,206435.5],[190161.0,206467.5],[190163.0,206467.3],[190159.8,206435.3]]
+      },
+      {
+        "label": "Keep clear: 2m western ecology buffer",
+        "hardness": "hard",
+        "reason": "policy",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190161.0,206467.5],[190178.5,206509.0],[190180.3,206508.2],[190162.8,206466.7]]
+      }
+    ]
+  },
+  "notes": "Sewer easement NOT modelled — stated plainly rather than guessed. The Hydrock drainage strategy plan (test-sites/source/meads-priory-road/approved_P02_Hydrock_drainage-strategy-plan.png) does show two 'Existing Easement Zone to Public Sewer' corridors (see its key), confirming the delegated report §8.13's description of a site 'crossed by a public 225mm and 375mm combined sewer.' But this fixture's boundaryBng was NOT georeferenced from a scaled, coordinate-bearing source (see this fixture's own README section: traced from an NTS — Not To Scale — geotechnical plan with no OS grid references, then uniformly scaled to match the report's stated 2.93ha area). The Hydrock plan is a separate, differently-scaled drawing with no shared control point to that trace. Placing the sewer corridor at any specific BNG position relative to this boundary would be inventing a correspondence the source material doesn't support, not tracing one — so it is left out rather than guessed."
 }

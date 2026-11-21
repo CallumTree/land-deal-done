@@ -459,7 +459,28 @@ export function checkInvariants(
     detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
   });
 
-  const restrictionsResult = checkRestrictions(plots, roadPoly ? [roadPoly] : [], inputs);
+  // The exported road[0] segment's own centerline (and so roadPoly, built
+  // from it) stops at roadEndY — it does NOT reach as far as
+  // generateLayout.ts's own internal roadPolygonLocal, which reserves an
+  // extra TURNING_HEAD_DIAMETER_M beyond that for the turning head itself
+  // (roadLengthWithHead = roadEndY + turningHeadSide). Reusing roadPoly
+  // as-is here would under-check: a hard restriction sitting only in that
+  // reserved turning-head stretch — confirmed directly on
+  // meads-priory-road-milford-haven's ecology-buffer fixture, where the
+  // engine's own "restrictions" check correctly reports FAIL but a naive
+  // recheck against the plain roadPoly reported PASS — would be missed.
+  // Branching's own exported road segments already include this
+  // extension in their own centrelines (see tryBranchingSpurs), so
+  // checkBranchingInvariants below needs no equivalent fix.
+  const roadPolyForRestrictions = road
+    ? (() => {
+        const [p0, p1] = road.centerlineBng;
+        const dir = geo.normalize(geo.sub(p1, p0));
+        const extendedP1 = geo.add(p1, geo.scale(dir, rules.TURNING_HEAD_DIAMETER_M));
+        return roadRect([p0, extendedP1], road.widthM);
+      })()
+    : null;
+  const restrictionsResult = checkRestrictions(plots, roadPolyForRestrictions ? [roadPolyForRestrictions] : [], inputs);
   results.push(restrictionsResult);
 
   // 8. No compliance "green" on a rule violation — cross-check the subset

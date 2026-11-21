@@ -385,7 +385,44 @@ export function generateLayout(
   // y=0 — maxPlotFrontageY stays 0 and the final turning-head check
   // legitimately fails: that's a genuinely infeasible site shape, not
   // something to paper over.
-  const naiveTurningHeadCeiling = maxBoundaryY - turningHeadSide;
+  // A hard restriction can also sit directly in the road's own fixed path
+  // (X in [-roadHalfWidth, roadHalfWidth]), not just where a plot or the
+  // turning head would go — turningHeadFitsAt above already refuses a
+  // turning-head position that overlaps a restriction, but nothing yet
+  // stops the PLAIN road corridor between the entrance and the turning
+  // head from running straight through one. Cap the ceiling the
+  // turning-head search starts from at the first Y (if any) where a
+  // restriction crosses the road's own band, so placement naturally
+  // stops short of the obstacle instead of building a road through it —
+  // confirmed necessary directly on the meads-priory-road-milford-haven
+  // fixture's ecology-buffer restriction, which the road's fixed path
+  // ran straight through before this cap existed.
+  let roadRestrictionCeilingY = Infinity;
+  if (hardRestrictionsLocal.length > 0) {
+    for (let y = 0; y < maxBoundaryY; y += PROBE_STEP_M) {
+      const slice: BNGPolygon = [
+        [-roadHalfWidth, y],
+        [roadHalfWidth, y],
+        [roadHalfWidth, y + PROBE_STEP_M],
+        [-roadHalfWidth, y + PROBE_STEP_M],
+      ];
+      if (overlapsHardRestriction(slice)) {
+        roadRestrictionCeilingY = y;
+        break;
+      }
+    }
+  }
+
+  // The extra PROBE_STEP_M below is slack for roadRestrictionCeilingY's
+  // own probe-step granularity (it's the START of the first overlapping
+  // slice, not the restriction's exact true edge) — without it, the
+  // turning head's reserved square can land EXACTLY touching the
+  // restriction's probed boundary, which is sometimes still a genuine
+  // overlap once converted to/from the exact polygon geometry. Confirmed
+  // necessary directly on meads-priory-road-milford-haven: without this
+  // margin the two ceilings came out numerically equal and the resulting
+  // road still overlapped, discarding an otherwise-fully-placeable site.
+  const naiveTurningHeadCeiling = Math.min(maxBoundaryY - turningHeadSide, roadRestrictionCeilingY - turningHeadSide - PROBE_STEP_M);
   let maxPlotFrontageY = 0;
   for (let y = naiveTurningHeadCeiling; y >= 0; y -= PROBE_STEP_M) {
     if (turningHeadFitsAt(y)) {
@@ -811,7 +848,28 @@ export function generateLayout(
   const ribbonUnits = ribbon?.plots.length ?? 0;
   const branchingUnits = branching?.plots.length ?? 0;
 
-  if (branching && branchingUnits > stateUnits && branchingUnits > ribbonUnits) {
+  // Road-restriction viability per candidate: a hard restriction crossing
+  // a topology's own road corridor disqualifies it from WINNING the
+  // selection below (never from being considered at all — if NOTHING
+  // avoids the restriction, the tail further down still returns the main
+  // ribbon's own result, honestly flagged non-compliant by its own
+  // "restrictions" check, rather than returning nothing). Frontage ribbon
+  // builds no road, so it's never disqualified this way.
+  const stateRoadEndY = Math.max(state.cursorLeft, state.cursorRight, 0);
+  const stateRoadPolygonLocal: BNGPolygon = [
+    [-roadHalfWidth, 0],
+    [roadHalfWidth, 0],
+    [roadHalfWidth, stateRoadEndY + turningHeadSide],
+    [-roadHalfWidth, stateRoadEndY + turningHeadSide],
+  ];
+  const stateRoadOk = stateUnits === 0 || !overlapsHardRestriction(stateRoadPolygonLocal);
+  const branchingRoadOk = branching?.roadRestrictionOk ?? true;
+
+  const effectiveStateUnits = stateRoadOk ? stateUnits : 0;
+  const effectiveRibbonUnits = ribbonUnits; // frontage ribbon has no road to violate
+  const effectiveBranchingUnits = branchingRoadOk ? branchingUnits : 0;
+
+  if (branching && effectiveBranchingUnits > effectiveStateUnits && effectiveBranchingUnits > effectiveRibbonUnits) {
     return finalize(
       { plots: branching.plots, roads: branching.roads, parkingSpacesBng: branching.parkingSpacesLocal.map(toWorld) },
       branching.compliance,
@@ -825,7 +883,7 @@ export function generateLayout(
     );
   }
 
-  if (ribbon && ribbonUnits > 0 && ribbonUnits >= branchingUnits) {
+  if (ribbon && effectiveRibbonUnits > 0 && effectiveRibbonUnits >= effectiveBranchingUnits) {
     return finalize(
       { plots: ribbon.plots, roads: [], parkingSpacesBng: ribbon.parkingSpacesLocal.map(toWorld) },
       ribbon.compliance,
@@ -835,6 +893,33 @@ export function generateLayout(
       t0,
       "frontage-ribbon",
       null,
+      { percent: nonHousingReservePercent, source: nonHousingReserveSource }
+    );
+  }
+
+  // Nothing above won: either every candidate placed zero plots, or every
+  // candidate that DID place plots has a road corridor crossing a hard
+  // restriction (effectiveStateUnits/effectiveBranchingUnits both zeroed
+  // it out). Falling through to the estate-road tail below with `state`
+  // as-is would silently return a layout whose own road crosses a hard
+  // restriction — "must not overlap any hard entry, in all topologies" is
+  // a real requirement, not an attempt, so a topology that can't honour
+  // it is not a valid result to return at all. Zero homes, with a plain
+  // reason, same "never a silent zero" discipline as every other
+  // genuinely-infeasible-site case above.
+  if (!stateRoadOk && stateUnits > 0) {
+    return finalize(
+      { plots: [], roads: [], parkingSpacesBng: [] },
+      compliance,
+      boundaryAreaM2,
+      inputs,
+      jurisdiction,
+      t0,
+      "none",
+      {
+        cause: "restriction-blocks-road",
+        reason: "A hard restriction zone crosses every topology's road corridor, and this v0 engine can't yet route a road around one — no compliant layout could be built.",
+      },
       { percent: nonHousingReservePercent, source: nonHousingReserveSource }
     );
   }
@@ -1199,6 +1284,8 @@ export function generateLayout(
     roads: RoadSegment[];
     parkingSpacesLocal: BNGPoint[];
     compliance: ComplianceCheck[];
+    /** False if the spine or any used spur's road corridor overlaps a hard restriction — used by the topology-selection step below to disqualify this candidate from WINNING (never to silently hide the violation; buildRestrictionsCompliance above still reports it honestly if this candidate is returned anyway because nothing else was viable). */
+    roadRestrictionOk: boolean;
   }
 
   /**
@@ -1734,7 +1821,9 @@ export function generateLayout(
 
     branchCompliance.push(buildRestrictionsCompliance(allPlots, allRoadRectsLocal));
 
-    return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance };
+    const roadRestrictionOk = allRoadRectsLocal.every((r) => !overlapsHardRestriction(r));
+
+    return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance, roadRestrictionOk };
   }
 
   const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
