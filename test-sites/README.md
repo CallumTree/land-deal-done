@@ -336,6 +336,60 @@ are in `/test-sites/source/gibbas-way/`.
   on this elongated, irregular shape, not a tracing artifact. Invariants:
   0 failures.
 
+### sageston-hays-lane
+
+A phase of 12 detached 3-bed market houses on land off Hays Lane (the old
+school paddock), Sageston, Tenby — applicant Carew Castle Estate, agent
+Harries Planning Design Management. **Held-out fixture**: added and run
+once, after the restriction bars-semantics fix (`Restriction.bars`:
+`"buildings"` | `"everything"`), with no engine parameter changed to
+chase its own number. Source documents are in
+`/test-sites/source/sageston/`.
+
+- **Unit count (12): applicant's proposed total, NOT a confirmed
+  approval.** Read from the Planning, Design and Access Statement (18
+  May 2026): "a full application for the development of 12 residential
+  units." No decision notice was reviewed — `confidence` is
+  `"sense_check"`, not `"approved_unit_count"`, for exactly the same
+  reason as gibbas-way-pembroke.
+- **File-naming trap caught and worked around:** the Drive file actually
+  named "PA-Planning Block Plan-25062026" turned out, on inspection, to
+  be Drawing 07 Rev A, "EXISTING SITE PLAN" — the pre-development
+  topographical survey, with no proposed layout on it at all. The real
+  1:200 proposed block plan (house footprints, road, SuDS basin) is
+  "Figure 5 – Proposed Block Plan", embedded inside the Planning, Design
+  and Access Statement — one of the files already in scope, so used
+  directly rather than opening a fourth file.
+- **Boundary tracing method — same family as Meads, worse than Gibbas
+  Way:** neither block-plan drawing carries OS grid references or a
+  legible printed dimension, only "Scale - 1:200". The boundary (7
+  vertices) and the SuDS basin (4 vertices) were pixel-traced from a
+  400dpi render of Figure 5, then uniformly scaled (shape/angles
+  preserved, no rotation fitted to anything) so the traced area matches
+  the Application Form's own stated site area exactly — 0.65ha (Q20 and
+  Q22 both give 0.65). An early trace of the NW corner and left edge was
+  caught as wrong (off by several metres) via an overlay sanity check
+  and corrected before use — see the fixture's own `notes` field. Net
+  effect: the shape is a genuine hand trace with a sourced, exact area,
+  but absolute position/scale/orientation are not independently
+  verified against any surveyed coordinate.
+- **SuDS infiltration basin (north strip) — `bars: "everything"`
+  ("Nothing here"), enforced.** Traced from the same drawing's own
+  hatched basin annotation and corroborated by the Statement's text
+  ("a large portion of the north of the site has been used to create a
+  SuDS feature").
+- **Mains sewer and electrical utilities — NOT modelled, stated
+  plainly.** The Statement confirms a mains sewer crosses "the northern
+  part of the site" (reducing the applicant's own usable area to
+  4167m²) and that the site has electric/telephone connections, but no
+  document reviewed gives either service's actual route, width or
+  depth. Modelling an undimensioned corridor on top of the SuDS basin
+  would be inventing a position the source material doesn't support —
+  left out rather than guessed, same approach as Meads' own un-locatable
+  sewer easement.
+- **Current engine result: 8 houses vs 12 proposed (33% under).**
+  Invariants: 0 failures.
+
 ## Pass/fail tolerance
 
 The harness treats a fixture's unit count as a pass if the engine's
