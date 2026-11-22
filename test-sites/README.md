@@ -446,6 +446,135 @@ chase its own number. Source documents are in
   unchanged — only the explanation for its own gap is now informed by
   measurement.
 
+### slade-lane-haverfordwest
+
+115 dwellings (105 houses/bungalows + 10 one-bed walk-up flats), Phase 1,
+Land at Slade Lane, Haverfordwest, Pembrokeshire (SA61 2UR). Source
+documents are in `/test-sites/source/slade-lane/` — the key drawing
+("PROPOSED NMA PLANNING LAYOUT", SLAD/15/04/02 Rev C) plus the Delegated
+Report, Scanned Decision Notice and Application Forms for the
+Non-Material Amendment this Drive folder actually holds (23/0640/NM,
+decided 15-Dec-2023) to the underlying Reserved Matters consent
+(18/1040/PA, 115 dwellings, decided 26/07/2019). A genuinely clean
+hold-out: this folder was never opened before this task.
+
+- **Unit count (115 total; 105 is what this fixture tests against):**
+  both the NM Scanned Decision Notice and Application Forms quote
+  18/1040/PA's own description verbatim — *"erection of 115 dwellings
+  and associated works."* The split (105 houses/bungalows + 10 one-bed
+  walk-up flats) is read directly off the Planning Layout's own legend
+  (Milford x6, Lansdown x18, Lambourne x45, Gainsborough x4 — market;
+  7P4B x6, 5.3.1 x8, 4.2.1 x10, 3.2.1 (2-bed bungalow) x8, 2.1.3 (1-bed
+  flat) x10 — "Affordable homes"). `expectedUnits` is 105, not 115 — v0
+  has no flat-block topology, so scoring against 115 would misreport a
+  structural scope gap as an accuracy failure (same convention as
+  meads-priory-road-milford-haven).
+- **Status: DECIDED/APPROVED, but at one remove.** This Drive folder is
+  a Non-Material Amendment (Section 96A) to materials/minor layout
+  details — a design tweak, not the unit-count-defining consent itself.
+  The 115-dwelling Reserved Matters permission it amends (18/1040/PA)
+  was itself decided 26/07/2019, under outline consent 16/0388/PA (729
+  dwellings across the whole multi-phase site), as varied for time by
+  16/0858/PA.
+- **Tenure: mixed, not representable by one engine input.** 73 units
+  read as open-market (Milford/Lansdown/Lambourne/Gainsborough); 42 sit
+  under the Planning Layout's own separate "Affordable homes" heading,
+  at least some explicitly described as "social rented" in the NM
+  application's own text ("Air Source Heat Pumps added to social rented
+  housetype planning drawings"). The engine's `tenure` input is a single
+  scheme-wide market/social switch; this fixture runs on the default
+  (market) rather than guess a scheme-wide label a 63/37 real split
+  doesn't actually have.
+- **Site area: not stated anywhere reviewed — computed, not sourced.**
+  Unlike pond-bridge-johnston or meads-priory-road-milford-haven, no
+  document in this folder gives a hectare figure (the NM application
+  doesn't require one, and the original 18/1040/PA application form
+  isn't among these files). `areaHectares` (4.235) is this fixture's
+  own shoelace-formula computation from the traced boundary — a
+  derived number, not a planning-document fact.
+- **Boundary tracing method: colour-threshold on the drawing's own red
+  line, same technique as pond-bridge-johnston and gibbas-way-pembroke,
+  applied here programmatically rather than by eye.** Source: the
+  "PROPOSED NMA PLANNING LAYOUT" (SLAD/15/04/02 Rev C, drawn at
+  **1:500** scale "@ A1" — confirmed as the PDF page's own physical
+  size, 841x594mm, so the scale annotation applies directly with no
+  A3-rescale ambiguity). The red boundary was isolated by colour
+  threshold, closed to bridge small rendering gaps, reduced to its
+  largest connected contour, and simplified to 33 vertices
+  (`cv2.approxPolyDP`), visually checked against the source drawing at
+  three different simplification levels before picking one that
+  tracked every real corner including the concave notch beside Redhill
+  Preparatory School — see
+  `boundary-trace-verification-plot.png`. **Scale calibration:** measured
+  directly off the drawing's own printed scale bar (11 tick marks, 0m to
+  50m at 5m spacing) rather than assumed from the "1:500" label alone —
+  23.62 px/m at the 300dpi render used, which matches the arithmetic
+  for 1:500 at 300dpi exactly (2mm/m x 11.811px/mm), confirming the
+  calibration two independent ways.
+- **Georeferencing assumption — a general site-location point, not a
+  surveyed corner (same category of approximation as
+  meads-priory-road-milford-haven's postcode-centroid anchor).** This
+  drawing carries no OS grid lines of its own. The traced polygon
+  (accurate in shape and relative scale) is anchored to real BNG
+  coordinates by matching its own centroid to the NM Application Form's
+  "Description of site location" easting/northing (E194337, N216099) —
+  a general locating point the form itself doesn't tie to any specific
+  drawn feature. North is assumed up (the drawing's own compass symbol
+  shows standard orientation). The entrance point is snapped onto the
+  nearest traced boundary edge at the site's one vehicular access off
+  St Davids Road.
+- **Restrictions found and modelled (all `bars: "everything"`, label
+  "Nothing here"):** 3x "LAP" (Local Area of Play, 100m² each,
+  approximated as 10x10m squares centred on the drawn feature) + 1x
+  "LEAP" (Local Equipped Area of Play, 400m², approximated as a 20x20m
+  square) — all four read directly off the Planning Layout's own KEY
+  and plan. Plus one unlabelled hedge/hatch-bordered corridor (~4m
+  wide, approximated as a straight rectangle) running the site's full
+  depth along the Phase 1A/Phase 1B sub-phase line, with two parallel
+  grey lines down its centre (possibly a drainage run — no text label
+  confirms this); no plot is built across it anywhere in the approved
+  layout.
+- **Restrictions found but NOT modelled — stated, not guessed:** (a) "Row
+  of Leyland Cypress conifers to be felled leaving native hedgerow in
+  place. Refer to Tree Protection Plan" along the full St Davids Road
+  frontage — a boundary planting treatment, not a dimensioned keep-clear
+  polygon, and the referenced Tree Protection Plan isn't in this folder;
+  (b) a highway visibility splay ("VIS SPLAY 2.4 x 56m" per the KEY) at
+  the St Davids Road junction — a sightline convention, not necessarily
+  a full no-build zone, and not legibly dimensioned at the resolution
+  available; (c) two unlabelled blue-dashed, diagonally-hatched
+  rectangles near the LEAP — no text label anywhere identifies them,
+  and they don't appear in the KEY; (d) no SuDS basin, flood-zone
+  hatching, ecology buffer or drainage easement is shown on any of the
+  three drawings reviewed (Planning Layout, Materials Layout, Boundary
+  Enclosures) — the Site Location Plan references a separate "Context &
+  Constraints Plan" that is NOT among the files in this folder, so any
+  such constraint it shows simply isn't visible in what's provided.
+- **Current engine result: 39 houses vs 105 real houses/bungalows (63%
+  under — far outside ±15%).** Invariants: 0 failures. Topology chosen:
+  `double` (double-loaded ribbon). Restrictions active: of the 5
+  modelled zones, only the central LAP (beside the Mature Ash Tree,
+  ~5m from the nearest placed plot) sat close enough to have plausibly
+  shaped this result — the other 3 LAP/LEAP zones and the Phase 1A/1B
+  corridor were 20-137m from the nearest placed plot, well outside the
+  area this run actually built on.
+- **Where the engine's layout differs from the real one — no fix
+  applied, per instruction.** `double` builds exactly one straight road
+  from the entrance and stops at the first boundary edge it reaches —
+  here, a single ~192m north-south ribbon of 39 plots occupying only a
+  ~54m-wide strip in the site's south-west corner. The real scheme's
+  road is a full looped spine with multiple spurs (visible on the
+  Planning Layout as a continuous loop around the central open space
+  plus a dedicated spur reaching the detached eastern cluster, plots
+  96-115) that develops the entire 4.235ha site, including the whole
+  eastern two-thirds this run never touches at all. This is the same
+  structural gap already documented on pond-bridge-johnston (tagged
+  `stress_test_known_to_exceed_v0_topology`) — a larger, more extreme
+  instance of exactly that known ceiling, not a new or different
+  finding. `holdout: true` — tracked in `scripts/scorecard-baseline.json`
+  for drift detection and printed in `scripts/scorecard.ts`'s own
+  "HOLD-OUT" table, but never used to tune any engine parameter.
+
 ## Drive "X-Plot" folder index — hold-out pool, NOT opened/traced
 
 A snapshot index of the Google Drive "X-Plot" folder's own case-study
@@ -456,6 +585,14 @@ anything marked "unknown — not opened" genuinely isn't known yet, not
 glossed over. Re-check this list (it's a live Drive folder, not a
 snapshot this repo controls) before treating it as current.
 
+**UPDATE (same day, later task):** a "Slade lane" subfolder appeared in
+this same Drive folder after the index below was first compiled (created
+2026-11-22T22:42, i.e. after this index's own 2026-11-22 snapshot time) —
+genuinely not there to find at index time, not a miss. It has since been
+opened and traced (see `slade-lane-haverfordwest` below and its own
+README section above) — added as a new row rather than silently
+rewriting the original snapshot.
+
 | Drive subfolder | Files | Dates | This repo's fixture | Council | Real homes | Area | Status | Boundary/layout file | Used here? |
 |---|---|---|---|---|---|---|---|---|---|
 | Sageston | 36 PDFs | Jun–Aug 2026 | `sageston-hays-lane` | Pembrokeshire | 12 (proposed) | 0.65ha | proposed, undetermined | `PA-Planning Block Plan-25062026.PDF` (1:200) + `PA-Planning Application Forms-21072026.PDF` | **Yes** — traced, holdout |
@@ -464,6 +601,7 @@ snapshot this repo controls) before treating it as current.
 | Land south of Meads | 10 PDFs | Jan–Jul 2026 | `meads-priory-road-milford-haven` | Pembrokeshire | 89 total (59 houses/bungalows + 30 flats), approved | 2.93ha | approved (25/0074/PA, reserved matters, decided 02/07/2026) | `PA-Planning Delegated Report-02072026.PDF` (+ the Hydrock drainage plan already in `test-sites/source/meads-priory-road/`, which lives outside this Drive folder) | **Yes** — traced, now `nonComparable: true` |
 | Pond Bridge | 9 PDFs | Apr–Jun 2024 | `pond-bridge-johnston` | Pembrokeshire | 123, approved | — | approved (reserved matters 04/0070/PA, varied 24/0052/PA) | `PA-Planning Block Plan-19042024.pdf` + `PA-Planning Site Location Plan-19042024.pdf` | **Yes** — traced, approved_unit_count |
 | *(loose in the library's own root, no subfolder)* | 4 items: 1 `.zip` + 3 PDFs | 15 Sep 2008 | — | unknown — not opened | unknown — not opened | unknown — not opened | unknown — not opened | `PA-Plans general-15092008.PDF` (by name only) | **No — FLAGGED.** No scheme name or subfolder of its own, and dated years before every other folder here (2008 vs 2024–2026) — genuinely unidentified until opened. |
+| Slade lane *(appeared after the index above was taken — see UPDATE note)* | 17 PDFs | Oct–Dec 2023 | `slade-lane-haverfordwest` | Pembrokeshire | 115 total (105 houses/bungalows + 10 flats), approved | 4.235ha (computed, not sourced — see this fixture's own entry) | approved — NM 23/0640/NM decided 15/12/2023, amending RM 18/1040/PA (115 dwellings, decided 26/07/2019) | `NM-Planning Application Amendments-24112023.pdf` (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) | **Yes** — traced, holdout |
 
 Not in this Drive folder at all: `fern-rise-neyland` — sourced separately (its own PDFs are committed under `test-sites/source/fern-rise/`), not part of "X-Plot".
 

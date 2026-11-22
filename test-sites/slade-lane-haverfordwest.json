@@ -1,0 +1,278 @@
+{
+  "id": "slade-lane-haverfordwest",
+  "description": "Real LPA-approved scheme, Phase 1, Land at Slade Lane, Haverfordwest, Pembrokeshire (SA61 2UR). This folder covers a Non-Material Amendment (23/0640/NM, decided 15-Dec-2023) to the Reserved Matters consent (18/1040/PA, decided 26/07/2019) for 115 dwellings -- 105 houses/bungalows + 10 one-bed walk-up flats -- under outline consent 16/0388/PA (729 dwellings total development across all phases) as varied by 16/0858/PA. Clean hold-out: never opened before this task, not tuned on.",
+  "category": "stress_test_known_to_exceed_v0_topology",
+  "boundaryBng": [
+    [
+      194433.1,
+      216214.0
+    ],
+    [
+      194369.9,
+      216193.0
+    ],
+    [
+      194354.1,
+      216234.1
+    ],
+    [
+      194369.2,
+      216192.5
+    ],
+    [
+      194351.7,
+      216186.4
+    ],
+    [
+      194207.1,
+      216163.1
+    ],
+    [
+      194146.1,
+      216146.8
+    ],
+    [
+      194144.0,
+      216143.0
+    ],
+    [
+      194148.8,
+      216139.9
+    ],
+    [
+      194145.8,
+      216138.6
+    ],
+    [
+      194149.2,
+      216138.6
+    ],
+    [
+      194152.8,
+      216119.0
+    ],
+    [
+      194244.3,
+      215985.9
+    ],
+    [
+      194260.8,
+      215970.4
+    ],
+    [
+      194275.0,
+      215965.0
+    ],
+    [
+      194313.7,
+      215965.2
+    ],
+    [
+      194306.2,
+      215972.6
+    ],
+    [
+      194303.8,
+      215988.9
+    ],
+    [
+      194317.6,
+      216037.4
+    ],
+    [
+      194345.0,
+      216075.3
+    ],
+    [
+      194383.7,
+      216103.6
+    ],
+    [
+      194419.8,
+      216024.6
+    ],
+    [
+      194413.3,
+      216020.7
+    ],
+    [
+      194515.1,
+      216061.6
+    ],
+    [
+      194467.0,
+      216043.3
+    ],
+    [
+      194454.5,
+      216072.9
+    ],
+    [
+      194460.5,
+      216076.8
+    ],
+    [
+      194448.8,
+      216108.5
+    ],
+    [
+      194454.4,
+      216111.6
+    ],
+    [
+      194444.7,
+      216133.6
+    ],
+    [
+      194453.8,
+      216138.1
+    ],
+    [
+      194431.6,
+      216195.3
+    ],
+    [
+      194435.7,
+      216206.8
+    ]
+  ],
+  "entranceBng": [
+    194292.4,
+    215965.1
+  ],
+  "areaHectares": 4.235,
+  "expectedUnits": 105,
+  "expectedUnitsMethod": "115 total dwellings (confirmed in NM-Planning Scanned Decision Notice-18122023.pdf and NM-Planning Application Forms-18102023.pdf, both quoting the 18/1040/PA description 'erection of 115 dwellings'), split per the Planning Layout's own legend (SLAD/15/04/02 Rev C, in NM-Planning Application Amendments-24112023.pdf): 105 houses/bungalows (Milford x6, Lansdown x18, Lambourne x45, Gainsborough x4, 7P4B x6, 5.3.1 x8, 4.2.1 x10, 3.2.1 (2-bed bungalow) x8) + 10 one-bed walk-up flats (2.1.3 x10, plots 73-76/81-84/104-105). expectedUnits is deliberately 105, not 115 -- v0's engine only places houses/bungalows, no flat blocks, so comparing against 115 would misreport a structural scope gap as an accuracy failure (same convention as meads-priory-road-milford-haven).",
+  "confidence": "approved_unit_count",
+  "holdout": true,
+  "inputs": {
+    "restrictions": [
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "NM-Planning Application Amendments-24112023.pdf (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) -- visible on-plan LAP/LEAP symbol, approximated here as a square of the drawing's own stated area, centred on the drawn feature's visual centroid (not individually dimensioned beyond that stated area).",
+        "polygon": [
+          [
+            194421.9,
+            216204.3
+          ],
+          [
+            194431.9,
+            216204.3
+          ],
+          [
+            194431.9,
+            216194.3
+          ],
+          [
+            194421.9,
+            216194.3
+          ]
+        ]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "NM-Planning Application Amendments-24112023.pdf (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) -- visible on-plan LAP/LEAP symbol, approximated here as a square of the drawing's own stated area, centred on the drawn feature's visual centroid (not individually dimensioned beyond that stated area).",
+        "polygon": [
+          [
+            194267.5,
+            216078.6
+          ],
+          [
+            194277.5,
+            216078.6
+          ],
+          [
+            194277.5,
+            216068.6
+          ],
+          [
+            194267.5,
+            216068.6
+          ]
+        ]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "NM-Planning Application Amendments-24112023.pdf (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) -- visible on-plan LAP/LEAP symbol, approximated here as a square of the drawing's own stated area, centred on the drawn feature's visual centroid (not individually dimensioned beyond that stated area).",
+        "polygon": [
+          [
+            194449.4,
+            216058.3
+          ],
+          [
+            194459.4,
+            216058.3
+          ],
+          [
+            194459.4,
+            216048.3
+          ],
+          [
+            194449.4,
+            216048.3
+          ]
+        ]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "NM-Planning Application Amendments-24112023.pdf (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) -- visible on-plan LAP/LEAP symbol, approximated here as a square of the drawing's own stated area, centred on the drawn feature's visual centroid (not individually dimensioned beyond that stated area).",
+        "polygon": [
+          [
+            194235.9,
+            216026.8
+          ],
+          [
+            194255.9,
+            216026.8
+          ],
+          [
+            194255.9,
+            216006.8
+          ],
+          [
+            194235.9,
+            216006.8
+          ]
+        ]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "NM-Planning Application Amendments-24112023.pdf (PROPOSED NMA PLANNING LAYOUT, SLAD/15/04/02 Rev C) -- an unlabelled hedge/hatch-bordered corridor (~4m wide, approximated as a straight rectangle between its visible north and south ends) running the depth of the site between the Phase 1A/Phase 1B sub-phase boundary; two parallel grey lines run along its centre (possibly a drainage run, not confirmed by any text label in the files reviewed). No plot is shown built across it in the approved layout.",
+        "polygon": [
+          [
+            194349.7,
+            216186.6
+          ],
+          [
+            194353.7,
+            216186.3
+          ],
+          [
+            194347.0,
+            216075.2
+          ],
+          [
+            194343.0,
+            216075.4
+          ]
+        ]
+      }
+    ]
+  },
+  "notes": "REAL FACTS (recorded before any engine run, from the Slade Lane Drive files only — see this fixture's own README section for full source quotes):\n- 115 total dwellings approved (105 houses/bungalows + 10 one-bed walk-up flats), split and plot-numbered on the Planning Layout legend (SLAD/15/04/02 Rev C).\n- Status: DECIDED/APPROVED. This specific folder is a Non-Material Amendment (23/0640/NM, Section 96A, decided 15-Dec-2023) to materials/minor layout details on the underlying Reserved Matters consent (18/1040/PA, 115 dwellings, decided 26/07/2019), itself under outline consent 16/0388/PA (729 dwellings total development, varied for time by 16/0858/PA).\n- Tenure: MIXED. 73 units (Milford/Lansdown/Lambourne/Gainsborough) read as open-market; 42 units are under a separate 'Affordable homes' legend heading (7P4B/5.3.1/4.2.1/3.2.1/2.1.3), at least some explicitly 'social rented' per the NM application's own description. No single engine tenure input cleanly represents this mix — engine run below uses the default (market).\n- Site area: NOT STATED in any document reviewed (the NM application doesn't require it, and the original RM application form isn't in this folder). 4.235ha is this fixture's own COMPUTED area from the traced boundary, not a sourced figure.\n- Access: ONE vehicular access, from St Davids Road via a roundabout junction, feeding a single looped spine+spur road network reaching every plot including a detached eastern cluster (plots 96-115) via a corridor past Redhill Preparatory School's boundary. One pedestrian-only 'Footpath to Public Open Space' exits the NE corner — not a vehicular access.\n- Restrictions found and modelled (all bars='everything', label 'Nothing here'): 3x 'LAP' (Local Area of Play, 100m² each, approximated as 10x10m squares at their visual centroids) + 1x 'LEAP' (Local Equipped Area of Play, 400m², approximated as a 20x20m square) — all four read directly off the Planning Layout's own KEY and plan. Plus 1x unlabelled hedge/hatch-bordered corridor (~4m wide, approximated as a straight rectangle) running the depth of the site along the Phase 1A/Phase 1B sub-phase line, with two parallel grey lines down its centre (possibly a drainage run — no text label confirms this); no plot is built across it in the approved layout.\n- Restrictions found but NOT modelled (marked, not guessed): (a) 'Row of Leyland Cypress conifers to be felled leaving native hedgerow in place. Refer to Tree Protection Plan' along the full St Davids Road (SW) frontage — a boundary planting treatment, not a dimensioned keep-clear polygon, and the referenced Tree Protection Plan isn't in this folder; (b) a highway visibility splay ('VIS SPLAY 2.4 x 56m' per the KEY) at the St Davids Road junction — a sightline convention, not necessarily a full no-build zone, and not legibly dimensioned at the resolution available; (c) two unlabelled blue-dashed, diagonally-hatched rectangles near the LEAP — no text label anywhere in the files identifies them (not SuDS, not in the KEY); (d) no SuDS basin, flood-zone hatching, ecology buffer or drainage easement corridor is shown anywhere on the Planning Layout, Materials Layout or Boundary Enclosures drawings — the Site Location Plan references a separate 'Context & Constraints Plan' that is NOT among the files in this folder, so any such constraint it might show is simply not visible in what's provided.\n\nBOUNDARY TRACING: traced from the red boundary line on 'PROPOSED NMA PLANNING LAYOUT' (SLAD/15/04/02 Rev C, 1:500 @ A1, in NM-Planning Application Amendments-24112023.pdf) by colour-thresholding the red line, closing small gaps, taking its largest connected contour, and simplifying to 33 vertices (Douglas-Peucker, visually verified against the source drawing — see this fixture's own README section). Scale calibrated directly from the drawing's own printed scale bar (0-50m, 5m ticks), measured at 23.62 px/m on the 300dpi render — this exactly matches the arithmetic for 1:500 at 300dpi, confirming the calibration. GEOREFERENCING ASSUMPTION: this drawing carries no OS grid lines or graticule of its own, so the traced polygon (accurate in shape and relative scale) is anchored to real BNG coordinates by matching its own centroid to the NM application form's 'Description of site location' easting/northing (194337, 216099) — a general site-location point, not a surveyed corner or a point tied to any specific drawn feature (same category of approximation as meads-priory-road-milford-haven's postcode-centroid anchor). North is assumed up (standard drawing convention, confirmed by the drawing's own compass symbol). Entrance point snapped onto the nearest traced boundary edge at the single vehicular access off St Davids Road (41m/1.7m snap distance from the visually-identified access point — small relative to the drawing's own precision).\n\nENGINE RESULT (run once, no parameter changes): 39 units vs 105 real houses/bungalows (62.9% under — far outside ±15%). Topology chosen: 'double' (double-loaded ribbon — the engine's simplest topology). Restrictions active: of the 5 modelled zones, only the central LAP (near the Mature Ash Tree, ~5m from the nearest placed plot) sat close enough to the engine's own road to plausibly have shaped this result; the other 3 LAP/LEAP zones and the Phase 1A/1B corridor were 20-137m from the nearest placed plot — well outside the area this run actually built on, so they had no effect on this particular output. WHERE THE ENGINE'S LAYOUT DIFFERS FROM THE REAL ONE (no fix applied): the engine's 'double' topology builds exactly one straight road from the entrance and stops at the first boundary edge it reaches — here that produced a single ~192m north-south ribbon of 39 plots occupying only a ~54m-wide strip in the SOUTH-WEST part of the site. The real scheme's road is a full looped spine with multiple spurs (visible on the Planning Layout as a continuous loop around the central open space plus a dedicated spur reaching the detached eastern cluster, plots 96-115) that reaches and develops the ENTIRE 4.235ha site, including the whole eastern two-thirds this run never touches at all. This is the same structural gap already documented on pond-bridge-johnston (category stress_test_known_to_exceed_v0_topology) — a real scheme with a looped/multi-spur road network will always be underbuilt by v0's single-ribbon topology ceiling, and Slade Lane is a larger, more extreme instance of exactly that gap, not a new or different finding. Per instruction: no parameter changed, no fix attempted."
+}

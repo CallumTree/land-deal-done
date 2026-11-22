@@ -88,7 +88,7 @@ function loadAllFixtures(): Fixture[] {
 }
 
 function loadApprovedFixtures(): Fixture[] {
-  return loadAllFixtures().filter((fx) => fx.confidence === "approved_unit_count" && !fx.nonComparable);
+  return loadAllFixtures().filter((fx) => fx.confidence === "approved_unit_count" && !fx.nonComparable && !fx.holdout);
 }
 
 function loadHoldoutFixtures(): Fixture[] {

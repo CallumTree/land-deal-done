@@ -58,6 +58,12 @@ interface Fixture {
   // instead of PASS/FAIL rather than reporting a confident-looking
   // result the underlying data doesn't actually support.
   nonComparable?: boolean;
+  // Set on a fixture deliberately never used to tune any engine parameter
+  // (see Fixture's own doc comment in scripts/scorecard.ts, which this
+  // mirrors) — kept out of the "real accuracy signal" footnote count
+  // below so a hold-out's PASS/FAIL isn't quietly read as part of the
+  // calibration set, even though its own row still prints normally.
+  holdout?: boolean;
 }
 
 interface FixtureResult {
@@ -158,13 +164,19 @@ function printUnitCountTable(results: FixtureResult[]) {
       `\n${nonComparableFixtures.length} fixture(s) are marked NON-COMPARABLE — a real count, but not a fair PASS/FAIL signal yet (see test-sites/README.md for what's missing).`
     );
   }
-  const approvedFixtures = results.filter((r) => r.fixture.confidence === "approved_unit_count" && !r.fixture.nonComparable);
+  const holdoutFixtures = results.filter((r) => r.fixture.holdout);
+  if (holdoutFixtures.length > 0) {
+    console.log(
+      `\n${holdoutFixtures.length} fixture(s) are marked holdout — a real, sourced count deliberately never used to tune any engine parameter (see test-sites/README.md). Their PASS/FAIL above is informational, not part of the calibration signal below.`
+    );
+  }
+  const approvedFixtures = results.filter((r) => r.fixture.confidence === "approved_unit_count" && !r.fixture.nonComparable && !r.fixture.holdout);
   if (approvedFixtures.length > 0) {
     console.log(
       `\n${approvedFixtures.length} fixture(s) are confidence="approved_unit_count" (real LPA-approved unit counts) — their PASS/FAIL above is a real signal, not a ballpark guess. A FAIL on one tagged stress_test_known_to_exceed_v0_topology is the expected, honest result of v0's topology limits, not a surprise to chase.`
     );
   }
-  const senseCheckOnly = results.length - approvedFixtures.length - nonComparableFixtures.length;
+  const senseCheckOnly = results.length - approvedFixtures.length - nonComparableFixtures.length - holdoutFixtures.length;
   if (senseCheckOnly > 0) {
     console.log(
       `The remaining ${senseCheckOnly} fixture(s) are confidence="sense_check" — their PASS/FAIL is only a ballpark check against a flat density guess, not validation.`
