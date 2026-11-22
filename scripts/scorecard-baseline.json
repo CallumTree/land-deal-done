@@ -1,6 +1,7 @@
 {
-  "_comment": "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture, so an UNINTENDED change gets caught. A number matching this baseline says nothing about how close it is to the real scheme's approved count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update.",
+  "_comment": "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture AND each holdout:true fixture, so an UNINTENDED change gets caught on either set. A number matching this baseline says nothing about how close it is to the real scheme's count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update. A hold-out fixture's own number must NEVER be chased by changing an engine parameter — see each such fixture's own 'held-out' framing in test-sites/README.md.",
   "fern-rise-neyland": 14,
   "meads-priory-road-milford-haven": 73,
-  "pond-bridge-johnston": 92
+  "pond-bridge-johnston": 92,
+  "sageston-hays-lane": 8
 }

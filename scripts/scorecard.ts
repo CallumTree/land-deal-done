@@ -36,6 +36,19 @@ interface Fixture {
   confidence: "sense_check" | "approved_unit_count";
   category?: string;
   inputs?: EngineInputs;
+  /**
+   * Deliberately held-out fixture: a real, sourced proposed/applied-for
+   * unit count (so a genuine engine-vs-real comparison is possible), but
+   * NEVER used to tune any engine parameter — the point is to see how
+   * the engine does on a scheme it wasn't shaped against, not to chase
+   * its number. Tracked in the same baseline file as the approved set
+   * (so an unintended drift still gets caught), but printed in its own
+   * section below, never mixed into the "real accuracy signal" table —
+   * conflating "approved and used to calibrate" with "held out and
+   * never tuned on" would undersell exactly the distinction this field
+   * exists to preserve.
+   */
+  holdout?: boolean;
 }
 
 interface ScorecardRow {
@@ -46,12 +59,19 @@ interface ScorecardRow {
   knownGap: boolean;
 }
 
-function loadApprovedFixtures(): Fixture[] {
+function loadAllFixtures(): Fixture[] {
   return readdirSync(FIXTURES_DIR)
     .filter((f) => f.endsWith(".json"))
     .sort()
-    .map((f) => JSON.parse(readFileSync(join(FIXTURES_DIR, f), "utf8")) as Fixture)
-    .filter((fx) => fx.confidence === "approved_unit_count");
+    .map((f) => JSON.parse(readFileSync(join(FIXTURES_DIR, f), "utf8")) as Fixture);
+}
+
+function loadApprovedFixtures(): Fixture[] {
+  return loadAllFixtures().filter((fx) => fx.confidence === "approved_unit_count");
+}
+
+function loadHoldoutFixtures(): Fixture[] {
+  return loadAllFixtures().filter((fx) => fx.holdout === true);
 }
 
 function buildScorecard(fixtures: Fixture[]): ScorecardRow[] {
@@ -84,6 +104,22 @@ function printScorecard(rows: ScorecardRow[]) {
   console.log(`\n${rows.length} approved-unit-count fixture(s). This is a real accuracy signal, not a ballpark guess — see test-sites/README.md.`);
 }
 
+function printHoldoutScorecard(rows: ScorecardRow[]) {
+  if (rows.length === 0) return;
+  console.log("\n=== HOLD-OUT (real proposed count, NEVER tuned on — informational, not the calibration set) ===\n");
+  console.log("FIXTURE".padEnd(22), "PROPOSED".padStart(9), "ENGINE".padStart(7), "ERROR%".padStart(8), "NOTE");
+  for (const r of rows) {
+    console.log(
+      r.id.padEnd(22),
+      String(r.approvedUnits).padStart(9),
+      String(r.engineUnits).padStart(7),
+      r.errorPercent.toFixed(1).padStart(8),
+      r.knownGap ? "known v0 topology gap — not a surprise" : ""
+    );
+  }
+  console.log(`\n${rows.length} hold-out fixture(s). Tracked in the same baseline for drift detection, but never a target to hit.`);
+}
+
 function runCheck(rows: ScorecardRow[]) {
   let baseline: Record<string, number>;
   try {
@@ -97,7 +133,7 @@ function runCheck(rows: ScorecardRow[]) {
   const missingFromBaseline = rows.filter((r) => baseline[r.id] === undefined);
 
   if (mismatches.length === 0 && missingFromBaseline.length === 0) {
-    console.log("\nScorecard check: PASS — every approved-unit-count fixture matches its committed baseline exactly.");
+    console.log("\nScorecard check: PASS — every approved-unit-count and hold-out fixture matches its committed baseline exactly.");
     return;
   }
 
@@ -119,7 +155,7 @@ function runCheck(rows: ScorecardRow[]) {
 // "_comment" is invisible to all of that and never collides with a real
 // id (test-sites/ ids are all lowercase-hyphenated, never underscore-led).
 const BASELINE_COMMENT =
-  "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture, so an UNINTENDED change gets caught. A number matching this baseline says nothing about how close it is to the real scheme's approved count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update.";
+  "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture AND each holdout:true fixture, so an UNINTENDED change gets caught on either set. A number matching this baseline says nothing about how close it is to the real scheme's count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update. A hold-out fixture's own number must NEVER be chased by changing an engine parameter — see each such fixture's own 'held-out' framing in test-sites/README.md.";
 
 function writeBaseline(rows: ScorecardRow[]) {
   const baseline = { _comment: BASELINE_COMMENT, ...Object.fromEntries(rows.map((r) => [r.id, r.engineUnits])) };
@@ -128,13 +164,16 @@ function writeBaseline(rows: ScorecardRow[]) {
 }
 
 function main() {
-  const rows = buildScorecard(loadApprovedFixtures());
-  printScorecard(rows);
+  const approvedRows = buildScorecard(loadApprovedFixtures());
+  const holdoutRows = buildScorecard(loadHoldoutFixtures());
+  printScorecard(approvedRows);
+  printHoldoutScorecard(holdoutRows);
 
+  const allRows = [...approvedRows, ...holdoutRows];
   if (process.argv.includes("--write-baseline")) {
-    writeBaseline(rows);
+    writeBaseline(allRows);
   } else if (process.argv.includes("--check")) {
-    runCheck(rows);
+    runCheck(allRows);
   }
 }
 

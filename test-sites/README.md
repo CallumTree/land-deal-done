@@ -46,6 +46,11 @@ specific finding, not fixed by loosening the fixture.
   // and that's the point of including it: the gap must show up here, not
   // be tuned away.
   "category": "stress_test_known_to_exceed_v0_topology",
+  // Optional. true on a fixture with a real, sourced proposed/applied-for
+  // unit count that is deliberately NEVER used to tune any engine
+  // parameter — see scripts/scorecard.ts's own "HOLD-OUT" table, printed
+  // separately from the approved_unit_count calibration set.
+  "holdout": true,
   // Optional. Engine inputs for this fixture, e.g. a real scheme built
   // entirely of one house type: { "mix": { "3-bed-bungalow": 1 } }.
   // Omitted fixtures get the engine's own default mix.
@@ -388,7 +393,10 @@ chase its own number. Source documents are in
   left out rather than guessed, same approach as Meads' own un-locatable
   sewer easement.
 - **Current engine result: 8 houses vs 12 proposed (33% under).**
-  Invariants: 0 failures.
+  Invariants: 0 failures. `holdout: true` — tracked in
+  `scripts/scorecard-baseline.json` for drift detection and printed in
+  `scripts/scorecard.ts`'s own "HOLD-OUT" table, but never used to tune
+  any engine parameter.
 
 ## Pass/fail tolerance
 

@@ -2,6 +2,7 @@
   "id": "sageston-hays-lane",
   "description": "Full application for residential development on the School Paddock, land off Hays Lane, Sageston, Tenby, Pembrokeshire SA70 8SQ (applicant Carew Castle Estate, agent Harries Planning Design Management, Job No. 2026). Proposed phase of 12 detached 3-bed market houses with one adoptable dead-end access road off Hays Lane. Status: proposed, undetermined (no decision notice reviewed) — confidence is sense_check, not approved_unit_count, for that reason. Held out: not used to tune any engine parameter, run once after the restriction bars-semantics fix (Restriction.bars: 'buildings' | 'everything') and reported as-is.",
   "category": "proposed_not_confirmed_approved",
+  "holdout": true,
   "boundaryBng": [
     [205000.0, 198000.0],
     [205062.3, 197999.5],
