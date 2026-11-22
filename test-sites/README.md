@@ -51,6 +51,14 @@ specific finding, not fixed by loosening the fixture.
   // parameter — see scripts/scorecard.ts's own "HOLD-OUT" table, printed
   // separately from the approved_unit_count calibration set.
   "holdout": true,
+  // Optional. true on a fixture with a real, sourced unit count where the
+  // engine-vs-real comparison still isn't on fair footing (e.g. a
+  // restriction zone standing in for something the source drawings don't
+  // let us position precisely) — see scripts/scorecard.ts's own
+  // "NON-COMPARABLE" table. Not a structural "can't model this" gap:
+  // read that fixture's own "notes" for exactly what's missing to lift
+  // this. Its number is still tracked for drift, never chased by tuning.
+  "nonComparable": true,
   // Optional. Engine inputs for this fixture, e.g. a real scheme built
   // entirely of one house type: { "mix": { "3-bed-bungalow": 1 } }.
   // Omitted fixtures get the engine's own default mix.
@@ -273,6 +281,33 @@ what's in the two documents that are).
   since it wasn't exercised by this fixture's own numbers). `inputs`
   sets `settlementTier: "town"`, sourced from the delegated report's own
   description of the site as being subject to the "Towns" density rate.
+- **UPDATE — now `nonComparable: true`, current result 73 vs 59 (23.7%
+  over):** the 102-vs-59 figure above predates two later changes to this
+  fixture — `tenure: "social"` (so the engine stops applying the
+  jurisdiction's market-size GIA uplift, since ateb is a 100% affordable
+  registered social landlord) and the 4 flat-block/parking-court
+  restriction zones described in this fixture's own `notes` field. Both
+  moved the number; 73 is today's actual houses-only count. But those 4
+  zones are explicitly POSITION-APPROXIMATE — this fixture's own boundary
+  was shape-matched to a stated hectare figure (see above), never
+  georeferenced, so there's no verified coordinate correspondence to
+  place the real flat blocks precisely against it. A 73-vs-59 PASS/FAIL
+  read under that condition looks more precise than the underlying data
+  supports, so this fixture is marked `nonComparable: true`
+  (`scripts/scorecard.ts`'s own "NON-COMPARABLE" table, and
+  `scripts/run-fixtures.ts` prints "NON-COMPARABLE" in place of PASS/
+  FAIL for it) rather than counted as a real accuracy signal either way.
+  **What's missing to lift this:** a scaled, coordinate-bearing source
+  for the site boundary — an OS-grid-referenced site plan, or any
+  drawing with at least two identifiable control points against the real
+  OS map (Priory Road's own kerb line, a building corner visible on both
+  an aerial photo and the drawing) — so the boundary (and the flat-block/
+  parking-court footprints already sourced from the Hydrock drainage
+  plan and the delegated report's own text) can be positioned with a
+  real coordinate transform instead of a best-effort approximation. Its
+  number is still tracked in the committed baseline for drift detection,
+  exactly like the approved and hold-out sets — it must never be chased
+  by tuning anything, same as them.
 
 ### gibbas-way-pembroke
 

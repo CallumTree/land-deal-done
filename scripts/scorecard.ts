@@ -49,6 +49,27 @@ interface Fixture {
    * exists to preserve.
    */
   holdout?: boolean;
+  /**
+   * Set when a fixture's expectedUnits/engine comparison isn't on fair
+   * footing YET — not a structural "can't model this" gap, but a known
+   * precision limitation that makes a strict PASS/FAIL read as more
+   * confident than the evidence actually supports. meads-priory-road-
+   * milford-haven is the case this exists for: its 30 flats ARE modelled
+   * as "Nothing here" restriction zones (so the houses-only engine isn't
+   * unfairly offered land the real scheme already used), but their
+   * position within the fixture's own boundary is this session's own
+   * best-effort approximation, not a drawing-traced coordinate — the
+   * fixture's boundary itself was shape-matched to a stated hectare
+   * figure (no OS grid reference on the source plan), so there's no
+   * verified coordinate correspondence to the real architectural
+   * drawings' exact plot positions. Tracked in the same baseline as the
+   * approved/hold-out sets (so an unintended drift still gets caught),
+   * printed in its own section, never counted toward "real accuracy
+   * signal" or "never tuned on" either — it's its own, third thing: real
+   * data, modelled as precisely as the source material allows, but not
+   * yet on the same footing as a fixture with a georeferenced boundary.
+   */
+  nonComparable?: boolean;
 }
 
 interface ScorecardRow {
@@ -67,11 +88,15 @@ function loadAllFixtures(): Fixture[] {
 }
 
 function loadApprovedFixtures(): Fixture[] {
-  return loadAllFixtures().filter((fx) => fx.confidence === "approved_unit_count");
+  return loadAllFixtures().filter((fx) => fx.confidence === "approved_unit_count" && !fx.nonComparable);
 }
 
 function loadHoldoutFixtures(): Fixture[] {
-  return loadAllFixtures().filter((fx) => fx.holdout === true);
+  return loadAllFixtures().filter((fx) => fx.holdout === true && !fx.nonComparable);
+}
+
+function loadNonComparableFixtures(): Fixture[] {
+  return loadAllFixtures().filter((fx) => fx.nonComparable === true);
 }
 
 function buildScorecard(fixtures: Fixture[]): ScorecardRow[] {
@@ -120,6 +145,16 @@ function printHoldoutScorecard(rows: ScorecardRow[]) {
   console.log(`\n${rows.length} hold-out fixture(s). Tracked in the same baseline for drift detection, but never a target to hit.`);
 }
 
+function printNonComparableScorecard(rows: ScorecardRow[]) {
+  if (rows.length === 0) return;
+  console.log("\n=== NON-COMPARABLE (real count, but the comparison isn't on fair footing yet — see each fixture's own notes) ===\n");
+  console.log("FIXTURE".padEnd(32), "REAL".padStart(6), "ENGINE".padStart(7), "ERROR%".padStart(8));
+  for (const r of rows) {
+    console.log(r.id.padEnd(32), String(r.approvedUnits).padStart(6), String(r.engineUnits).padStart(7), r.errorPercent.toFixed(1).padStart(8));
+  }
+  console.log(`\n${rows.length} non-comparable fixture(s). Tracked in the same baseline for drift detection, but not a PASS/FAIL signal — see test-sites/README.md for what's missing to make it one.`);
+}
+
 function runCheck(rows: ScorecardRow[]) {
   let baseline: Record<string, number>;
   try {
@@ -133,7 +168,7 @@ function runCheck(rows: ScorecardRow[]) {
   const missingFromBaseline = rows.filter((r) => baseline[r.id] === undefined);
 
   if (mismatches.length === 0 && missingFromBaseline.length === 0) {
-    console.log("\nScorecard check: PASS — every approved-unit-count and hold-out fixture matches its committed baseline exactly.");
+    console.log("\nScorecard check: PASS — every approved-unit-count, hold-out and non-comparable fixture matches its committed baseline exactly.");
     return;
   }
 
@@ -155,7 +190,7 @@ function runCheck(rows: ScorecardRow[]) {
 // "_comment" is invisible to all of that and never collides with a real
 // id (test-sites/ ids are all lowercase-hyphenated, never underscore-led).
 const BASELINE_COMMENT =
-  "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture AND each holdout:true fixture, so an UNINTENDED change gets caught on either set. A number matching this baseline says nothing about how close it is to the real scheme's count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update. A hold-out fixture's own number must NEVER be chased by changing an engine parameter — see each such fixture's own 'held-out' framing in test-sites/README.md.";
+  "Regression guard only — NOT an accuracy claim. This records whatever the engine outputs today for each approved_unit_count fixture, each holdout:true fixture, AND each nonComparable:true fixture, so an UNINTENDED change gets caught on all three sets. A number matching this baseline says nothing about how close it is to the real scheme's count (see the ERROR% column scorecard.ts itself prints, and test-sites/README.md's honest accounting of it) — only that nothing changed since the last deliberate, explained update. A hold-out or non-comparable fixture's own number must NEVER be chased by changing an engine parameter — see each such fixture's own framing in test-sites/README.md.";
 
 function writeBaseline(rows: ScorecardRow[]) {
   const baseline = { _comment: BASELINE_COMMENT, ...Object.fromEntries(rows.map((r) => [r.id, r.engineUnits])) };
@@ -166,10 +201,12 @@ function writeBaseline(rows: ScorecardRow[]) {
 function main() {
   const approvedRows = buildScorecard(loadApprovedFixtures());
   const holdoutRows = buildScorecard(loadHoldoutFixtures());
+  const nonComparableRows = buildScorecard(loadNonComparableFixtures());
   printScorecard(approvedRows);
   printHoldoutScorecard(holdoutRows);
+  printNonComparableScorecard(nonComparableRows);
 
-  const allRows = [...approvedRows, ...holdoutRows];
+  const allRows = [...approvedRows, ...holdoutRows, ...nonComparableRows];
   if (process.argv.includes("--write-baseline")) {
     writeBaseline(allRows);
   } else if (process.argv.includes("--check")) {

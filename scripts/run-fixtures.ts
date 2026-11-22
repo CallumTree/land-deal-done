@@ -52,6 +52,12 @@ interface Fixture {
   // scheme actually used. Omitted fixtures get the engine's own default
   // mix (equal terrace/semi/detached), same as before this field existed.
   inputs?: EngineInputs;
+  // Set when the expectedUnits/engine comparison isn't on fair footing
+  // yet (see Fixture's own doc comment in scripts/scorecard.ts, which
+  // this mirrors) — the unit-count table below marks it NON-COMPARABLE
+  // instead of PASS/FAIL rather than reporting a confident-looking
+  // result the underlying data doesn't actually support.
+  nonComparable?: boolean;
 }
 
 interface FixtureResult {
@@ -139,20 +145,26 @@ function printUnitCountTable(results: FixtureResult[]) {
       String(r.fixture.expectedUnits),
       r.totalUnits === null ? "—" : String(r.totalUnits),
       r.unitDiffPct === null ? "—" : `${Math.round(r.unitDiffPct * 1000) / 10}%`,
-      r.unitCountPass ? "PASS" : "FAIL",
+      r.fixture.nonComparable ? "NON-COMPARABLE" : r.unitCountPass ? "PASS" : "FAIL",
     ]);
   }
   const widths = header.map((_, i) => Math.max(...rows.map((row) => row[i].length)));
   for (const row of rows) {
     console.log(row.map((cell, i) => cell.padEnd(widths[i])).join("  "));
   }
-  const approvedFixtures = results.filter((r) => r.fixture.confidence === "approved_unit_count");
+  const nonComparableFixtures = results.filter((r) => r.fixture.nonComparable);
+  if (nonComparableFixtures.length > 0) {
+    console.log(
+      `\n${nonComparableFixtures.length} fixture(s) are marked NON-COMPARABLE — a real count, but not a fair PASS/FAIL signal yet (see test-sites/README.md for what's missing).`
+    );
+  }
+  const approvedFixtures = results.filter((r) => r.fixture.confidence === "approved_unit_count" && !r.fixture.nonComparable);
   if (approvedFixtures.length > 0) {
     console.log(
       `\n${approvedFixtures.length} fixture(s) are confidence="approved_unit_count" (real LPA-approved unit counts) — their PASS/FAIL above is a real signal, not a ballpark guess. A FAIL on one tagged stress_test_known_to_exceed_v0_topology is the expected, honest result of v0's topology limits, not a surprise to chase.`
     );
   }
-  const senseCheckOnly = results.length - approvedFixtures.length;
+  const senseCheckOnly = results.length - approvedFixtures.length - nonComparableFixtures.length;
   if (senseCheckOnly > 0) {
     console.log(
       `The remaining ${senseCheckOnly} fixture(s) are confidence="sense_check" — their PASS/FAIL is only a ballpark check against a flat density guess, not validation.`
