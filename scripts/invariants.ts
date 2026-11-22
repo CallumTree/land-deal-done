@@ -63,6 +63,14 @@ function fullPlotRect(p: PlacedPlot): BNGPolygon {
   return p.plotBng;
 }
 
+function hardRestrictionPolygons(inputs: EngineInputs): BNGPolygon[] {
+  return (inputs.restrictions ?? []).filter((r) => r.hardness === "hard").map((r) => r.polygon);
+}
+
+function overlapsAnyHardRestrictionPoly(rect: BNGPolygon, hardPolys: BNGPolygon[]): boolean {
+  return hardPolys.some((h) => geo.convexPolygonsOverlap(rect, h));
+}
+
 /**
  * Independently recomputes the SAME buildable-area erosion generateLayout.ts
  * applies before placing anything — boundary offset, then (if the resolved
@@ -437,6 +445,7 @@ export function checkInvariants(
       return Math.max(footprintWidthM, parkingWidthM);
     })
   );
+  const hardPolys = hardRestrictionPolygons(inputs);
   let wastedGapFound = false;
   let wastedGapDetail = "";
   for (const sideSign of [-1, 1]) {
@@ -452,7 +461,14 @@ export function checkInvariants(
       })
       .map((group) => {
         const tangentProj = group.flatMap((p) => p.plotBng.map((pt) => geo.dot(pt, tangentAxis)));
-        return { blockId: group[0].blockId, yStart: Math.min(...tangentProj), yEnd: Math.max(...tangentProj) };
+        const depthProj = group.flatMap((p) => p.plotBng.map((pt) => geo.dot(pt, depthAxis)));
+        return {
+          blockId: group[0].blockId,
+          yStart: Math.min(...tangentProj),
+          yEnd: Math.max(...tangentProj),
+          depthMin: Math.min(...depthProj),
+          depthMax: Math.max(...depthProj),
+        };
       })
       .sort((a, b) => a.yStart - b.yStart);
     for (let i = 0; i < sideBlocks.length - 1; i++) {
@@ -460,8 +476,29 @@ export function checkInvariants(
       const probeStepM = inputs.quality === "draft" ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
       const maxReasonableGap = rules.SIDE_GAP_M + smallestFrontageWidthM + probeStepM; // probe-step slack, matching the engine's own search granularity for whichever quality this run used
       if (gap > maxReasonableGap) {
-        wastedGapFound = true;
-        wastedGapDetail = `Between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap.`;
+        // Before reporting this as wasted, check whether a hard
+        // restriction zone (either bars type — a footprint can't stand
+        // in either) explains the gap: build the real-world rectangle
+        // the gap actually spans (tangent extent of the gap itself,
+        // depth extent of the two neighbouring blocks together — depth
+        // and tangent axes are orthonormal, so depthAxis*d +
+        // tangentAxis*t exactly reconstructs the real point, no origin
+        // offset needed) and skip flagging it if a restriction overlaps
+        // that rectangle. A restriction-caused gap is the engine
+        // correctly leaving land unbuilt, not a wasted-space bug.
+        const depthMin = Math.min(sideBlocks[i].depthMin, sideBlocks[i + 1].depthMin);
+        const depthMax = Math.max(sideBlocks[i].depthMax, sideBlocks[i + 1].depthMax);
+        const corner = (d: number, t: number): BNGPoint => geo.add(geo.scale(depthAxis, d), geo.scale(tangentAxis, t));
+        const gapRect: BNGPolygon = [
+          corner(depthMin, sideBlocks[i].yEnd),
+          corner(depthMin, sideBlocks[i + 1].yStart),
+          corner(depthMax, sideBlocks[i + 1].yStart),
+          corner(depthMax, sideBlocks[i].yEnd),
+        ];
+        if (!overlapsAnyHardRestrictionPoly(gapRect, hardPolys)) {
+          wastedGapFound = true;
+          wastedGapDetail = `Between ${sideBlocks[i].blockId} and ${sideBlocks[i + 1].blockId}: ${gap.toFixed(1)}m gap.`;
+        }
       }
     }
   }
@@ -834,6 +871,7 @@ function checkBranchingInvariants(
   // reserve-eroded boundary genuinely narrows below one unit's depth)
   // must read as a pass, exactly like the engine itself correctly
   // skipped it, not as a false "wasted gap" bug report.
+  const hardPolys = hardRestrictionPolygons(inputs);
   function someUnitFitsInGap(group: SideGroup, gapStart: number, gapEnd: number): boolean {
     const probeStepM = inputs.quality === "draft" ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
     for (let t = gapStart; t + smallestFrontageWidthM <= gapEnd + 1e-6; t += probeStepM) {
@@ -846,7 +884,11 @@ function checkBranchingInvariants(
       const rect: BNGPolygon = corners.map(([tt, nn]) =>
         geo.add(group.origin, geo.add(geo.scale(group.tangent, tt), geo.scale(group.normal, nn)))
       );
-      if (geo.convexPolygonFullyInside(rect, buildableBoundary)) return true;
+      // A restriction-blocked spot doesn't count as "fits" — a hard
+      // restriction (either bars type) stops a footprint just as surely
+      // as the boundary does, so skip it rather than reporting a gap
+      // the engine left empty for a real reason as a wasted-space bug.
+      if (geo.convexPolygonFullyInside(rect, buildableBoundary) && !overlapsAnyHardRestrictionPoly(rect, hardPolys)) return true;
     }
     return false;
   }
