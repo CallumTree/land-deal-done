@@ -67,8 +67,41 @@ function hardRestrictionPolygons(inputs: EngineInputs): BNGPolygon[] {
   return (inputs.restrictions ?? []).filter((r) => r.hardness === "hard").map((r) => r.polygon);
 }
 
+function everythingRestrictionPolygons(inputs: EngineInputs): BNGPolygon[] {
+  return (inputs.restrictions ?? [])
+    .filter((r) => r.hardness === "hard" && (r.bars ?? "everything") === "everything")
+    .map((r) => r.polygon);
+}
+
 function overlapsAnyHardRestrictionPoly(rect: BNGPolygon, hardPolys: BNGPolygon[]): boolean {
   return hardPolys.some((h) => geo.convexPolygonsOverlap(rect, h));
+}
+
+/**
+ * The NDSS minimum GIA a house type is ACTUALLY placed at, mirroring
+ * generateLayout.ts's own `ndssMinGia` exactly (jurisdiction-driven
+ * market-size uplift applied to the default NDSS figure for "market"
+ * tenure — the default tenure whenever inputs.tenure is unset — then
+ * inputs.ndssMinGiaM2 overridden on top). Using the raw
+ * rules.NDSS_MIN_GIA_M2 figure here instead (as earlier code in this
+ * file did) makes every "smallest possible unit" dimension derived from
+ * it — frontage width, footprint depth — SMALLER than any unit the
+ * engine would ever actually place under market tenure, which can make
+ * someUnitFitsInGap report a "fit" no real placement search could ever
+ * produce. Confirmed directly on a fuzz-generated restricted shape
+ * (irregular-5-8-26): the engine's own fitsSpurBlockAt correctly
+ * rejected a 2-bed-terrace at the exact position this checker claimed
+ * one fit, because its ACTUAL (uplifted) footprint was ~1.3m wider than
+ * this function assumed before this fix.
+ */
+function effectiveNdssMinGiaM2(inputs: EngineInputs, houseType: HouseTypeId): number {
+  const jurisdiction = resolveJurisdiction(inputs.localAuthority);
+  const marketSizeUpliftPercent =
+    (inputs.tenure ?? "market") === "social" ? 0 : (jurisdiction.localAppraisal?.typicalMarketSizeUpliftPercent.value ?? 0);
+  return (
+    inputs.ndssMinGiaM2?.[houseType] ??
+    Math.round(rules.NDSS_MIN_GIA_M2[houseType] * (1 + marketSizeUpliftPercent / 100))
+  );
 }
 
 /**
@@ -438,7 +471,7 @@ export function checkInvariants(
   // 7. No gap between blocks big enough that a smaller unit could have fit and didn't.
   const smallestFrontageWidthM = Math.min(
     ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"] as HouseTypeId[]).map((t) => {
-      const giaM2 = (inputs.ndssMinGiaM2?.[t] ?? rules.NDSS_MIN_GIA_M2[t]) as number;
+      const giaM2 = effectiveNdssMinGiaM2(inputs, t);
       const footprintDepthM = rules.ASSUMED_FOOTPRINT_DEPTH_M[t];
       const footprintWidthM = giaM2 / rules.STOREYS[t] / footprintDepthM;
       const parkingWidthM = (inputs.parkingRatioPerUnit ?? rules.PARKING_SPACES_PER_UNIT) * rules.PARKING_SPACE_WIDTH_M;
@@ -821,7 +854,7 @@ function checkBranchingInvariants(
   }
   const smallestFrontageWidthM = Math.min(
     ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"] as HouseTypeId[]).map((t) => {
-      const giaM2 = (inputs.ndssMinGiaM2?.[t] ?? rules.NDSS_MIN_GIA_M2[t]) as number;
+      const giaM2 = effectiveNdssMinGiaM2(inputs, t);
       const footprintDepthM = rules.ASSUMED_FOOTPRINT_DEPTH_M[t];
       const footprintWidthM = giaM2 / rules.STOREYS[t] / footprintDepthM;
       const parkingWidthM = (inputs.parkingRatioPerUnit ?? rules.PARKING_SPACES_PER_UNIT) * rules.PARKING_SPACE_WIDTH_M;
@@ -872,23 +905,88 @@ function checkBranchingInvariants(
   // must read as a pass, exactly like the engine itself correctly
   // skipped it, not as a false "wasted gap" bug report.
   const hardPolys = hardRestrictionPolygons(inputs);
+  const everythingPolys = everythingRestrictionPolygons(inputs);
   function someUnitFitsInGap(group: SideGroup, gapStart: number, gapEnd: number): boolean {
     const probeStepM = inputs.quality === "draft" ? rules.DRAFT_PROBE_STEP_M : rules.PROBE_STEP_M;
-    for (let t = gapStart; t + smallestFrontageWidthM <= gapEnd + 1e-6; t += probeStepM) {
-      const corners = [
-        [t, group.frontN],
-        [t + smallestFrontageWidthM, group.frontN],
-        [t + smallestFrontageWidthM, group.frontN + smallestTotalDepthM],
-        [t, group.frontN + smallestTotalDepthM],
-      ] as [number, number][];
-      const rect: BNGPolygon = corners.map(([tt, nn]) =>
-        geo.add(group.origin, geo.add(geo.scale(group.tangent, tt), geo.scale(group.normal, nn)))
+    // A candidate must keep rules.SIDE_GAP_M clearance from BOTH
+    // neighbours, same as a real placement would (the engine's own
+    // cursor only ever resumes at blockEnd + sideGapM) — scanning from
+    // gapStart itself (zero clearance from the preceding block) could
+    // claim a "fit" sitting flush against it, which no real placement
+    // would ever produce.
+    // Build a rect from LOCAL (tangent/normal) bounds — since tangent
+    // and normal are orthonormal, growing the local t/n bounds by a
+    // fixed metres amount on every side is a true isotropic buffer in
+    // world space, unlike padding the already-transformed polygon
+    // outward from its own centroid (which under-expands a long, thin
+    // rectangle in exactly the direction that matters: the centroid-to-
+    // corner direction is close to the rect's long axis, not its short
+    // one, so a fixed-length radial push barely grows the short sides).
+    const localRect = (tMin: number, tMax: number, nMin: number, nMax: number): BNGPolygon =>
+      (
+        [
+          [tMin, nMin],
+          [tMax, nMin],
+          [tMax, nMax],
+          [tMin, nMax],
+        ] as [number, number][]
+      ).map(([tt, nn]) => geo.add(group.origin, geo.add(geo.scale(group.tangent, tt), geo.scale(group.normal, nn))));
+    for (let t = gapStart + rules.SIDE_GAP_M; t + smallestFrontageWidthM + rules.SIDE_GAP_M <= gapEnd + 1e-6; t += probeStepM) {
+      const rect = localRect(t, t + smallestFrontageWidthM, group.frontN, group.frontN + smallestTotalDepthM);
+      // Footprint-only sub-rect (one driveway-depth in from the
+      // frontage, one footprint-depth deep) — the part a "buildings"-
+      // bars restriction actually blocks; its driveway and garden may
+      // cross or run along one freely, mirroring fitsSpurBlockAt's own
+      // two-tier check (whole rect vs "everything", footprint vs any
+      // hard restriction) instead of treating the WHOLE candidate depth
+      // as footprint for this test, which would flag a "buildings" zone
+      // under a candidate's garden or driveway as blocking it when it
+      // wouldn't.
+      const smallestFootprintDepthM = Math.min(
+        ...(["2-bed-terrace", "3-bed-semi", "4-bed-detached", "3-bed-bungalow"] as HouseTypeId[]).map(
+          (ht) => rules.ASSUMED_FOOTPRINT_DEPTH_M[ht]
+        )
+      );
+      const footprintFrontN = group.frontN + rules.PARKING_SPACE_DEPTH_M;
+      // Grown by probeStepM on every side, in LOCAL t/n space, before
+      // the overlap test only (never for the boundary-containment
+      // test) — the exact same margin, for the exact same reason, as
+      // roadRestrictionCeilingY's own "extra PROBE_STEP_M... slack" a
+      // few hundred lines up in generateLayout.ts: a candidate landing
+      // EXACTLY touching a restriction's edge is a razor-thin artifact
+      // of this probe's own step granularity, not a genuinely usable
+      // gap a real placement search — which only ever lands on
+      // probeStepM-spaced positions itself — could actually occupy
+      // without the same hair's-breadth adjacency. Confirmed necessary
+      // directly on a fuzz-generated irregular/restricted shape where
+      // an exact (zero-margin) overlap test found a "fit" ~1m from the
+      // restriction's own edge.
+      const paddedRect = localRect(
+        t - probeStepM,
+        t + smallestFrontageWidthM + probeStepM,
+        group.frontN - probeStepM,
+        group.frontN + smallestTotalDepthM + probeStepM
+      );
+      const paddedFootprintRect = localRect(
+        t - probeStepM,
+        t + smallestFrontageWidthM + probeStepM,
+        footprintFrontN - probeStepM,
+        footprintFrontN + smallestFootprintDepthM + probeStepM
       );
       // A restriction-blocked spot doesn't count as "fits" — a hard
-      // restriction (either bars type) stops a footprint just as surely
-      // as the boundary does, so skip it rather than reporting a gap
-      // the engine left empty for a real reason as a wasted-space bug.
-      if (geo.convexPolygonFullyInside(rect, buildableBoundary) && !overlapsAnyHardRestrictionPoly(rect, hardPolys)) return true;
+      // restriction stops a footprint just as surely as the boundary
+      // does, so skip it rather than reporting a gap the engine left
+      // empty for a real reason as a wasted-space bug. "everything"
+      // bars block the WHOLE candidate (road/driveway/garden included,
+      // same as a turning head or road corridor would be stopped);
+      // "buildings" bars only block the footprint sub-rect above.
+      if (
+        geo.convexPolygonFullyInside(rect, buildableBoundary) &&
+        !overlapsAnyHardRestrictionPoly(paddedRect, everythingPolys) &&
+        !overlapsAnyHardRestrictionPoly(paddedFootprintRect, hardPolys)
+      ) {
+        return true;
+      }
     }
     return false;
   }

@@ -8,13 +8,22 @@
 // see generateLayout.ts's "never a silent zero" rule).
 //
 // Run with: npx tsx scripts/fuzz-shapes.ts [--seed N] [--count N] [--ci]
+//   [--restrictions]
 // --ci prints a compact, CI-log-friendly summary (see scripts/fuzz-ci.ts
 // for the non-blocking wrapper this feeds).
+// --restrictions attaches 0-2 random hard restrictions (random position/
+// size/rotation, random bars semantics) to each shape before running it
+// — exercises the restriction-aware topology-repair path (branching
+// spurs shortened/dropped around a restriction instead of the whole
+// topology being discarded) across the same 300 random boundaries,
+// rather than only the handful of hand-traced real fixtures that happen
+// to carry one. Omitted entirely from the default (no-flag) run, so the
+// historical baseline run stays exactly reproducible.
 
 import { generateLayout } from "../src/engine";
 import { suggestEntrance } from "../src/engine/autoEntrance";
 import { checkInvariants } from "./invariants";
-import type { BNGPoint, BNGPolygon, EngineOutput, Metrics } from "../src/engine/types";
+import type { BNGPoint, BNGPolygon, EngineOutput, Metrics, Restriction } from "../src/engine/types";
 
 // --- Seeded PRNG (same mulberry32 construction already used in
 // src/engine/optimizer.ts — duplicated here rather than exported from
@@ -36,6 +45,7 @@ interface GeneratedShape {
   boundaryBng: BNGPolygon;
   entranceBng: BNGPoint;
   areaHectares: number;
+  restrictions: Restriction[];
 }
 
 const ORIGIN: BNGPoint = [330000, 220000]; // arbitrary BNG origin, clear of any real test-sites fixture
@@ -75,6 +85,57 @@ function pickEntrance(rand: () => number, pts: BNGPolygon): BNGPoint {
   return pointOnEdge(pts, edgeIndex, t);
 }
 
+/**
+ * 0-2 random hard restrictions, sized and placed relative to the
+ * boundary's own bounding box (so they land on/near the site regardless
+ * of its position after translation) — a random rectangle (random
+ * width/height/rotation) with a coin-flip `bars` ("everything" vs
+ * "buildings"), exercising both semantics across random, unplanned
+ * positions: sometimes clear of the boundary entirely (no effect, a
+ * valid case too), sometimes carving into a corner, sometimes crossing
+ * a whole side.
+ */
+function genRandomRestrictions(rand: () => number, boundaryBng: BNGPolygon): Restriction[] {
+  const roll = rand();
+  const n = roll < 0.5 ? 0 : roll < 0.8 ? 1 : 2;
+  if (n === 0) return [];
+  const xs = boundaryBng.map((p) => p[0]);
+  const ys = boundaryBng.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const restrictions: Restriction[] = [];
+  for (let i = 0; i < n; i++) {
+    const cx = minX + rand() * spanX;
+    const cy = minY + rand() * spanY;
+    const w = 4 + rand() * Math.max(4, Math.min(35, spanX * 0.5));
+    const h = 4 + rand() * Math.max(4, Math.min(35, spanY * 0.5));
+    const angle = rand() * Math.PI * 2;
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const polygon: BNGPolygon = (
+      [
+        [-w / 2, -h / 2],
+        [w / 2, -h / 2],
+        [w / 2, h / 2],
+        [-w / 2, h / 2],
+      ] as BNGPoint[]
+    ).map(([x, y]) => [cx + (x * c - y * s), cy + (x * s + y * c)]);
+    restrictions.push({
+      label: "fuzz-restriction",
+      hardness: "hard",
+      reason: "choice",
+      bars: rand() < 0.5 ? "everything" : "buildings",
+      source: "scripts/fuzz-shapes.ts random generator (--restrictions)",
+      polygon,
+    });
+  }
+  return restrictions;
+}
+
 function finalizeShape(id: string, category: string, local: BNGPolygon, rand: () => number): GeneratedShape {
   const angle = rand() * Math.PI * 2;
   const rotated = local.map((p) => rotatePoint(p, angle));
@@ -82,7 +143,7 @@ function finalizeShape(id: string, category: string, local: BNGPolygon, rand: ()
   const dy = ORIGIN[1] + (rand() - 0.5) * 2000;
   const boundaryBng = translateAll(rotated, dx, dy);
   const entranceBng = pickEntrance(rand, boundaryBng);
-  return { id, category, boundaryBng, entranceBng, areaHectares: polygonArea(boundaryBng) / 10000 };
+  return { id, category, boundaryBng, entranceBng, areaHectares: polygonArea(boundaryBng) / 10000, restrictions: [] };
 }
 
 function randomAreaM2(rand: () => number): number {
@@ -176,7 +237,7 @@ function genNarrowStrip(rand: () => number): BNGPolygon {
   return genRectangle(rand, 8, 20);
 }
 
-export function generateShapes(seed: number, count: number): GeneratedShape[] {
+export function generateShapes(seed: number, count: number, withRestrictions = false): GeneratedShape[] {
   const rand = mulberry32(seed);
   const shapes: GeneratedShape[] = [];
   const categories: { name: string; weight: number; gen: (r: () => number) => BNGPolygon }[] = [
@@ -191,6 +252,19 @@ export function generateShapes(seed: number, count: number): GeneratedShape[] {
     const n = Math.round(count * cat.weight);
     for (let k = 0; k < n; k++) {
       shapes.push(finalizeShape(`${cat.name}-${k + 1}`, cat.name, cat.gen(rand), rand));
+    }
+  }
+  // Restrictions are attached in a SEPARATE pass, on an INDEPENDENT rand
+  // stream (seed+1 — never the same stream shape generation itself
+  // draws from), specifically so turning --restrictions on/off never
+  // changes a single boundary/entrance this function produces: the two
+  // modes must be directly comparable (same shapes, restrictions added
+  // or not), not two different random universes that happen to share a
+  // seed number.
+  if (withRestrictions) {
+    const restrictionRand = mulberry32(seed + 1);
+    for (const shape of shapes) {
+      shape.restrictions = genRandomRestrictions(restrictionRand, shape.boundaryBng);
     }
   }
   return shapes;
@@ -221,9 +295,10 @@ function runShape(shape: GeneratedShape, useAutoEntrance: boolean): ShapeResult 
   const t0 = performance.now();
   try {
     const entrance = useAutoEntrance ? suggestEntrance(shape.boundaryBng, { quality: "full" }).entrance : shape.entranceBng;
-    const output = generateLayout(shape.boundaryBng, entrance, {});
+    const inputs = shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {};
+    const output = generateLayout(shape.boundaryBng, entrance, inputs);
     const ms = performance.now() - t0;
-    const invariants = checkInvariants(output, shape.boundaryBng, entrance, {});
+    const invariants = checkInvariants(output, shape.boundaryBng, entrance, inputs);
     const failing = invariants.filter((inv) => !inv.pass);
     return {
       shape,
@@ -251,10 +326,11 @@ function runShape(shape: GeneratedShape, useAutoEntrance: boolean): ShapeResult 
 
 /** For zero-home shapes, probes a couple of alternate entrance points on the SAME boundary to see whether entrance choice alone would have changed the outcome — the "entrance placement" cause bucket, derived rather than engine-classified (see module header). */
 function probeEntranceSensitivity(shape: GeneratedShape, rand: () => number): boolean {
+  const inputs = shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {};
   for (let attempt = 0; attempt < 3; attempt++) {
     const altEntrance = pickEntrance(rand, shape.boundaryBng);
     try {
-      const out = generateLayout(shape.boundaryBng, altEntrance, {});
+      const out = generateLayout(shape.boundaryBng, altEntrance, inputs);
       if (out.metrics.totalUnits > 0) return true;
     } catch {
       // A probe entrance throwing isn't a success — keep trying.
@@ -269,10 +345,11 @@ function main() {
   const countArg = args.indexOf("--count");
   const ciMode = args.includes("--ci");
   const useAutoEntrance = args.includes("--auto-entrance");
+  const withRestrictions = args.includes("--restrictions");
   const seed = seedArg >= 0 ? Number(args[seedArg + 1]) : 42;
   const count = countArg >= 0 ? Number(args[countArg + 1]) : 300;
 
-  const shapes = generateShapes(seed, count);
+  const shapes = generateShapes(seed, count, withRestrictions);
   const results = shapes.map((s) => runShape(s, useAutoEntrance));
   const probeRand = mulberry32(seed + 1); // separate stream from shape generation
 
@@ -302,7 +379,8 @@ function main() {
   const pctInvariantFail = ((invariantFails.length / results.length) * 100).toFixed(1);
 
   if (ciMode) {
-    console.log(`FUZZ-SHAPES seed=${seed} n=${results.length} autoEntrance=${useAutoEntrance} pctWithHomes=${pctHomes}% pctInvariantFail=${pctInvariantFail}% zeroHome=${zeroHome.length}`);
+    const withRestrictionsCount = shapes.filter((s) => s.restrictions.length > 0).length;
+    console.log(`FUZZ-SHAPES seed=${seed} n=${results.length} autoEntrance=${useAutoEntrance} restrictions=${withRestrictions}(${withRestrictionsCount} shape(s) carry one) pctWithHomes=${pctHomes}% pctInvariantFail=${pctInvariantFail}% zeroHome=${zeroHome.length}`);
     for (const [cause, n] of [...causeCounts.entries()].sort((a, b) => b[1] - a[1])) {
       console.log(`  cause ${cause}: ${n} (${((n / results.length) * 100).toFixed(1)}%)`);
     }

@@ -10,6 +10,7 @@
     "test:fixtures": "tsx scripts/run-fixtures.ts",
     "test:scorecard": "tsx scripts/scorecard.ts --check",
     "test:fuzz-shapes": "tsx scripts/fuzz-shapes.ts --ci",
+    "test:fuzz-restrictions": "tsx scripts/fuzz-shapes.ts --ci --restrictions",
     "report:fuzz-shapes": "tsx scripts/fuzz-shapes.ts",
     "report:draft-mode": "tsx scripts/draft-mode-report.ts",
     "report:optimizer": "tsx scripts/optimizer-report.ts",

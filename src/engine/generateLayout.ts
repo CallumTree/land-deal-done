@@ -1422,13 +1422,39 @@ export function generateLayout(
         return false;
       }
 
+      // The turning-head check above only tests the square AT u — it
+      // says nothing about the carriageway strip connecting the spine
+      // to it. A hard "everything" restriction sitting over that strip
+      // (not necessarily over any individual plot or the turning head
+      // itself — a gap between blocks, or open verge, is just as real a
+      // "no road here" obstruction) was previously invisible to this
+      // search: trySpur would happily pick a maxU beyond the
+      // restriction, place plots up to it, and only the FINAL
+      // roadRestrictionOk check (built from the whole spur's corridor
+      // rectangle, after everything is already placed) would catch it —
+      // at which point the caller discarded the ENTIRE branching
+      // network for every spur/junction, not just this one obstructed
+      // spur. Folding the corridor check into the same backward search
+      // as the turning head means a restriction here now only shortens
+      // THIS spur to stop short of it, exactly like a boundary edge
+      // would, instead of poisoning the whole topology.
+      function corridorClearToU(u: number): boolean {
+        const corridor: BNGPolygon = [
+          spurToMain(0, -roadHalfWidth, originY, dirX),
+          spurToMain(0, roadHalfWidth, originY, dirX),
+          spurToMain(u + turningHeadSide, roadHalfWidth, originY, dirX),
+          spurToMain(u + turningHeadSide, -roadHalfWidth, originY, dirX),
+        ];
+        return !overlapsEverythingRestriction(corridor);
+      }
+
       const xsLocal = localBoundary.map((p) => p[0]);
       const maxXExtent = dirX < 0 ? -Math.min(...xsLocal) : Math.max(...xsLocal);
       const naiveUCeiling = maxXExtent - roadHalfWidth - turningHeadSide;
       let maxU = 0;
       let headFits = false;
       for (let u = Math.max(0, naiveUCeiling); u >= 0; u -= PROBE_STEP_M) {
-        if (turningHeadFitsAtU(u)) {
+        if (turningHeadFitsAtU(u) && corridorClearToU(u)) {
           maxU = u;
           headFits = true;
           break;
@@ -1564,9 +1590,21 @@ export function generateLayout(
     // pathological, very long/narrow boundary looping excessively —
     // real UK sites this engine targets don't need anywhere near this
     // many spurs off one spine.
+    //
+    // The spine shares the exact same local corridor (X in
+    // [-roadHalfWidth, roadHalfWidth], Y increasing from the entrance)
+    // as the single-ribbon "state" road above — roadRestrictionCeilingY
+    // was already computed once for that road, against an identical
+    // slice, so it applies equally here: no junction is attempted beyond
+    // the Y the spine itself could never physically reach without
+    // running straight through a hard "everything" restriction. Without
+    // this, a junction beyond the restriction could still succeed on its
+    // own (restriction-free out there), silently stretching the spine's
+    // own rectangle back through the blocked band to reach it.
+    const spineCeilingY = Math.min(maxBoundaryY, roadRestrictionCeilingY - PROBE_STEP_M);
     const MAX_JUNCTIONS = 12;
     let junctionsTried = 0;
-    for (let y = spurSpacingM / 2; y < maxBoundaryY && junctionsTried < MAX_JUNCTIONS; y += spurSpacingM, junctionsTried++) {
+    for (let y = spurSpacingM / 2; y < spineCeilingY && junctionsTried < MAX_JUNCTIONS; y += spurSpacingM, junctionsTried++) {
       for (const dirX of [-1, 1] as const) {
         const spur = trySpur(y, dirX);
         if (spur) {
