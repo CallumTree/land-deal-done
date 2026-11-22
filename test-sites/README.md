@@ -446,6 +446,29 @@ chase its own number. Source documents are in
   unchanged — only the explanation for its own gap is now informed by
   measurement.
 
+## Drive "X-Plot" folder index — hold-out pool, NOT opened/traced
+
+A snapshot index of the Google Drive "X-Plot" folder's own case-study
+library (`Case study library - Planning Examples`), taken 2026-11-22 by
+listing folder/file names and dates only — no scheme file was opened or
+traced to compile this, per instruction. One line per scheme found;
+anything marked "unknown — not opened" genuinely isn't known yet, not
+glossed over. Re-check this list (it's a live Drive folder, not a
+snapshot this repo controls) before treating it as current.
+
+| Drive subfolder | Files | Dates | This repo's fixture | Council | Real homes | Area | Status | Boundary/layout file | Used here? |
+|---|---|---|---|---|---|---|---|---|---|
+| Sageston | 36 PDFs | Jun–Aug 2026 | `sageston-hays-lane` | Pembrokeshire | 12 (proposed) | 0.65ha | proposed, undetermined | `PA-Planning Block Plan-25062026.PDF` (1:200) + `PA-Planning Application Forms-21072026.PDF` | **Yes** — traced, holdout |
+| Gibbas way | 10 PDFs | Nov 2026 (3rd/10th/13th/16th) | `gibbas-way-pembroke` | Pembrokeshire | 50 (proposed) | — | proposed_not_confirmed_approved | one of the `PA-Plans general-...PDF` files (no file individually named "Block Plan" in this folder) | **Yes** — traced in an earlier session |
+| **Gibbas way V2** | 24 PDFs | same Nov 2026 date range as "Gibbas way", but 11 separate `PA-Plans general-...PDF` files (numbered (1)–(10) plus the base) vs only 1 in the plain "Gibbas way" folder | — | unknown — not opened | unknown — not opened | unknown — not opened | unknown — not opened | unknown — not opened | **No — FLAGGED.** A second, larger plans set for what looks like the same site and date range as the already-traced "Gibbas way" folder. Could be an amended/resubmitted set of drawings that supersedes what `gibbas-way-pembroke.json` was traced from, or a different, bigger application entirely — not established, not opened. Worth checking (which plans the current trace actually used, and whether V2 changes anything) before any further Gibbas Way work, not before. |
+| Land south of Meads | 10 PDFs | Jan–Jul 2026 | `meads-priory-road-milford-haven` | Pembrokeshire | 89 total (59 houses/bungalows + 30 flats), approved | 2.93ha | approved (25/0074/PA, reserved matters, decided 02/07/2026) | `PA-Planning Delegated Report-02072026.PDF` (+ the Hydrock drainage plan already in `test-sites/source/meads-priory-road/`, which lives outside this Drive folder) | **Yes** — traced, now `nonComparable: true` |
+| Pond Bridge | 9 PDFs | Apr–Jun 2024 | `pond-bridge-johnston` | Pembrokeshire | 123, approved | — | approved (reserved matters 04/0070/PA, varied 24/0052/PA) | `PA-Planning Block Plan-19042024.pdf` + `PA-Planning Site Location Plan-19042024.pdf` | **Yes** — traced, approved_unit_count |
+| *(loose in the library's own root, no subfolder)* | 4 items: 1 `.zip` + 3 PDFs | 15 Sep 2008 | — | unknown — not opened | unknown — not opened | unknown — not opened | unknown — not opened | `PA-Plans general-15092008.PDF` (by name only) | **No — FLAGGED.** No scheme name or subfolder of its own, and dated years before every other folder here (2008 vs 2024–2026) — genuinely unidentified until opened. |
+
+Not in this Drive folder at all: `fern-rise-neyland` — sourced separately (its own PDFs are committed under `test-sites/source/fern-rise/`), not part of "X-Plot".
+
+**Two flagged, untouched hold-outs going forward: "Gibbas way V2" and the unlabeled 2008 set.** Neither has been opened; both stay in the hold-out pool until a future task asks for them by name.
+
 ## Pass/fail tolerance
 
 The harness treats a fixture's unit count as a pass if the engine's
