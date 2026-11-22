@@ -397,6 +397,19 @@ chase its own number. Source documents are in
   `scripts/scorecard-baseline.json` for drift detection and printed in
   `scripts/scorecard.ts`'s own "HOLD-OUT" table, but never used to tune
   any engine parameter.
+- **The -33% gap is INFORMED, not an unexplained structural mismatch —
+  same mechanism as Gibbas Way.** With the SuDS restriction removed
+  entirely, the same boundary gives 13 units vs real 12 (+8.3%, well
+  inside the ±15% tolerance): this site's underlying topology match is
+  actually good. The committed result's gap is overwhelmingly caused by
+  the SuDS basin restriction's interaction with the `double` topology's
+  placement search — it costs 5 of 13 units (38%) despite being only
+  ~4% of the eroded buildable area, the same disproportionate,
+  topology-level effect measured on Gibbas Way (see that fixture's own
+  entry above), not a generic "v0 under-packs small linear single-road
+  sites" finding. The "held-out, never tuned on" methodology is
+  unchanged — only the explanation for its own gap is now informed by
+  measurement.
 
 ## Pass/fail tolerance
 
