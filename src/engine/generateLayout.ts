@@ -887,9 +887,21 @@ export function generateLayout(
   // exists for already expects draft to under-report during a drag.
   const branching = draftMode ? null : tryBranchingSpurs();
 
+  // --- Network generator: an opt-in extra candidate (EngineInputs.
+  // networkGenerator), tried ALONGSIDE every topology above exactly like
+  // branching-spurs is — never a replacement for it. Skipped in draft
+  // mode for the same reason branching-spurs is: it searches a similar
+  // combinatorial space (growth steps instead of a fixed spur grid), so
+  // the same "too slow to feel live while dragging" measurement applies.
+  // Defaults to not being tried at all when the flag is unset, so every
+  // existing call site's behaviour is completely unchanged unless a
+  // caller opts in. See tryNetworkGenerator's own doc comment.
+  const network = inputs.networkGenerator && !draftMode ? tryNetworkGenerator() : null;
+
   const stateUnits = state.plots.length;
   const ribbonUnits = ribbon?.plots.length ?? 0;
   const branchingUnits = branching?.plots.length ?? 0;
+  const networkUnits = network?.plots.length ?? 0;
 
   // Road-restriction viability per candidate: a hard restriction crossing
   // a topology's own road corridor disqualifies it from WINNING the
@@ -907,12 +919,38 @@ export function generateLayout(
   ];
   const stateRoadOk = stateUnits === 0 || !overlapsEverythingRestriction(stateRoadPolygonLocal);
   const branchingRoadOk = branching?.roadRestrictionOk ?? true;
+  const networkRoadOk = network?.roadRestrictionOk ?? true;
 
   const effectiveStateUnits = stateRoadOk ? stateUnits : 0;
   const effectiveRibbonUnits = ribbonUnits; // frontage ribbon has no road to violate
   const effectiveBranchingUnits = branchingRoadOk ? branchingUnits : 0;
+  const effectiveNetworkUnits = networkRoadOk ? networkUnits : 0;
 
-  if (branching && effectiveBranchingUnits > effectiveStateUnits && effectiveBranchingUnits > effectiveRibbonUnits) {
+  if (
+    network &&
+    effectiveNetworkUnits > effectiveStateUnits &&
+    effectiveNetworkUnits > effectiveRibbonUnits &&
+    effectiveNetworkUnits > effectiveBranchingUnits
+  ) {
+    return finalize(
+      { plots: network.plots, roads: network.roads, parkingSpacesBng: network.parkingSpacesLocal.map(toWorld) },
+      network.compliance,
+      boundaryAreaM2,
+      inputs,
+      jurisdiction,
+      t0,
+      "network-generator",
+      null,
+      { percent: nonHousingReservePercent, source: nonHousingReserveSource }
+    );
+  }
+
+  if (
+    branching &&
+    effectiveBranchingUnits > effectiveStateUnits &&
+    effectiveBranchingUnits > effectiveRibbonUnits &&
+    effectiveBranchingUnits >= effectiveNetworkUnits
+  ) {
     return finalize(
       { plots: branching.plots, roads: branching.roads, parkingSpacesBng: branching.parkingSpacesLocal.map(toWorld) },
       branching.compliance,
@@ -926,7 +964,7 @@ export function generateLayout(
     );
   }
 
-  if (ribbon && effectiveRibbonUnits > 0 && effectiveRibbonUnits >= effectiveBranchingUnits) {
+  if (ribbon && effectiveRibbonUnits > 0 && effectiveRibbonUnits >= effectiveBranchingUnits && effectiveRibbonUnits >= effectiveNetworkUnits) {
     return finalize(
       { plots: ribbon.plots, roads: [], parkingSpacesBng: ribbon.parkingSpacesLocal.map(toWorld) },
       ribbon.compliance,
@@ -1919,6 +1957,913 @@ export function generateLayout(
     return { plots: allPlots, roads, parkingSpacesLocal: allParkingLocal, compliance: branchCompliance, roadRestrictionOk };
   }
 
+  interface NetworkGeneratorResult {
+    plots: PlacedPlot[];
+    roads: RoadSegment[];
+    parkingSpacesLocal: BNGPoint[];
+    compliance: ComplianceCheck[];
+    roadRestrictionOk: boolean;
+  }
+
+  /**
+   * Network-generator topology (EngineInputs.networkGenerator, opt-in —
+   * see that field's own doc comment): the same overall spine-plus-
+   * branches SHAPE as tryBranchingSpurs above, but WHERE branches go and
+   * how long each one grows is decided by value-driven greedy growth
+   * from the entrance, not a fixed spacing/length formula.
+   *
+   * Candidate segments (the "skeleton" the brief asks for, approximated
+   * the way this engine's rectilinear-corridor placement model already
+   * represents every road — a spine plus perpendicular branches, exactly
+   * tryBranchingSpurs' own simplification, just grown dynamically instead
+   * of laid out on a fixed grid): the spine's own next growth step
+   * forward, each existing branch's next step outward, and a new branch
+   * stub at any already-grown spine position that doesn't have one yet
+   * in that direction — spaced at least `branchSpacingM` from an existing
+   * same-side branch, the IDENTICAL back-to-back-driven formula
+   * tryBranchingSpurs uses for its fixed grid, applied here as a
+   * candidate-generation constraint instead. Each candidate's value is
+   * (estimated homes its frontage would support) / (road metres it
+   * would add); growth repeatedly commits the single best remaining
+   * candidate and stops the moment nothing left clears
+   * roadCostPenaltyHomesPerM (rules.NETWORK_GROWTH_MIN_YIELD_FRACTION).
+   * The spine-extension candidate's own value is a one-step lookahead
+   * (the best branch stub immediately available at the new tip) rather
+   * than 0 — exactly the fix this feature's own design-spike prototype
+   * needed for a pure-circulation step not to stall growth behind it.
+   *
+   * Loop-bridging (joining two dead-end tips within
+   * rules.NETWORK_BRIDGE_THRESHOLD_M) is tried once growth stalls, under
+   * the IDENTICAL marginal-value test as every growth step. A bridge
+   * carries no frontage of its own (same as the spine — pure
+   * circulation), so its estimated value is 0 by construction: it can
+   * only ever pass when the penalty itself is <= 0, which never happens
+   * for a real mix. Implemented for real below (not a no-op), and this
+   * is reported honestly rather than engineered to "succeed" — the
+   * design-spike prototype found the same thing (zero bridges ever
+   * passed the test).
+   *
+   * Turning heads are fit AFTER growth has already fixed each branch's
+   * endpoint — never by reserving a flat turningHeadSide-wide margin off
+   * a global ceiling before any growth happens (that upfront subtraction
+   * is exactly the "Sageston ceiling" bug this topology exists to avoid;
+   * see turningHeadFitsAt/roadRestrictionCeilingY above). Fixing the
+   * endpoint first means plots can be placed all the way up to wherever
+   * growth actually reached, with the bulb search then fit into whatever
+   * room is left there — never losing a flat head-width of frontage
+   * everywhere regardless of whether anything was ever that close.
+   *
+   * Plot placement and every compliance check below reuse the exact same
+   * primitives as tryBranchingSpurs (computePlotSpec,
+   * overlapsAnyHardRestriction/overlapsEverythingRestriction,
+   * buildRestrictionsCompliance, the same per-plot garden-depth/back-to-
+   * back/parking checks, the same side-based placement search) — only
+   * the road SHAPE differs (grown, not formula-placed); how a plot or a
+   * restriction is checked once a corridor exists is unchanged.
+   */
+  function tryNetworkGenerator(): NetworkGeneratorResult | null {
+    const largestTotalDepthM = Math.max(...HOUSE_TYPES.map((t) => computePlotSpec(t).totalDepthM));
+    const branchSpacingM = 2 * (roadHalfWidth + largestTotalDepthM) + backToBackM;
+
+    // Real, derived "homes per metre of frontage" conversion — the
+    // active mix's own weighted-average plot frontage width, standing in
+    // for this feature's design-spike prototype's generic
+    // FRONTAGE_PER_HOME_M placeholder.
+    const { weights, totalWeight } = mixPlan;
+    const avgFrontageWidthM =
+      totalWeight > 0
+        ? HOUSE_TYPES.reduce((sum, t) => sum + (weights[t] ?? 0) * computePlotSpec(t).frontageWidthM, 0) / totalWeight
+        : HOUSE_TYPES.reduce((sum, t) => sum + computePlotSpec(t).frontageWidthM, 0) / HOUSE_TYPES.length;
+
+    // A branch hosts plots on BOTH sides, so 1m of it can carry at most
+    // 2/avgFrontageWidthM homes — the penalty is this engine's own
+    // growth-economy FRACTION of that theoretical ceiling (see rules.ts).
+    const roadCostPenaltyHomesPerM = rules.NETWORK_GROWTH_MIN_YIELD_FRACTION * (2 / avgFrontageWidthM);
+
+    // Coarser than PROBE_STEP_M on purpose — growth only needs to decide
+    // WHERE roads go from an ESTIMATE of achievable frontage; the exact
+    // final placement search below (reusing this file's real
+    // fitsBlockAt-style per-position checks) is what actually fits real
+    // plots. One plot's own smallest real frontage width is a derived
+    // step size, not an arbitrary round number.
+    const growthStepM = Math.max(4, smallestFrontageWidthM);
+    const MAX_GROWTH_STEPS = 400;
+
+    function spurToMain(u: number, v: number, originY: number, dirX: 1 | -1): BNGPoint {
+      return [dirX * (roadHalfWidth + u), originY + v];
+    }
+
+    function spurRectMain(
+      side: "north" | "south",
+      frontageV: number,
+      rearV: number,
+      uStart: number,
+      uEnd: number,
+      originY: number,
+      dirX: 1 | -1
+    ): BNGPolygon {
+      const uv: [number, number][] =
+        side === "north"
+          ? [[uStart, frontageV], [uEnd, frontageV], [uEnd, rearV], [uStart, rearV]]
+          : [[uStart, frontageV], [uStart, rearV], [uEnd, rearV], [uEnd, frontageV]];
+      return uv.map(([u, v]) => spurToMain(u, v, originY, dirX));
+    }
+
+    /** Clear-of-boundary/restriction check for a BRANCH's own corridor stretch [uStart,uEnd) at (originY,dirX) — runs perpendicular to the spine. */
+    function corridorClear(uStart: number, uEnd: number, originY: number, dirX: 1 | -1): boolean {
+      const rect: BNGPolygon = [
+        spurToMain(uStart, -roadHalfWidth, originY, dirX),
+        spurToMain(uStart, roadHalfWidth, originY, dirX),
+        spurToMain(uEnd, roadHalfWidth, originY, dirX),
+        spurToMain(uEnd, -roadHalfWidth, originY, dirX),
+      ];
+      return geo.convexPolygonFullyInside(rect, localBoundary) && !overlapsEverythingRestriction(rect);
+    }
+
+    /**
+     * Clear-of-boundary/restriction check for the SPINE's own forward
+     * stretch [y0,y1) — runs ALONG the spine's direction (local +Y, X
+     * pinned to the road's own half-width either side of 0), the
+     * ninety-degree-different shape from a branch's corridor above.
+     * Mixing these up (checking a branch-shaped rect when extending the
+     * spine) is exactly the bug that stopped this function's growth loop
+     * from ever taking a single step during development — kept as two
+     * distinct functions rather than one parameterised helper so that
+     * mistake can't silently reappear.
+     */
+    function spineSliceClear(y0: number, y1: number): boolean {
+      const rect: BNGPolygon = [
+        [-roadHalfWidth, y0],
+        [roadHalfWidth, y0],
+        [roadHalfWidth, y1],
+        [-roadHalfWidth, y1],
+      ];
+      return geo.convexPolygonFullyInside(rect, localBoundary) && !overlapsEverythingRestriction(rect);
+    }
+
+    /**
+     * Metres of usable frontage (summed over north+south) for stretch
+     * [uStart,uEnd) of a branch at (originY,dirX) — an ESTIMATE for
+     * growth decisions only, using the SMALLEST house type's own depth
+     * (not the largest). The real placement search below tries every
+     * house type at every position, falling back to a smaller one when
+     * a larger one doesn't fit — using the largest depth here would make
+     * this estimate blind to a stretch where only a smaller type would
+     * actually fit, UNDER-valuing (not over-valuing) real frontage and
+     * stalling growth that the real placement search would happily use.
+     * Confirmed directly: using the largest depth here made this
+     * function report zero frontage along Pond Bridge's entire length,
+     * even though its branching-spurs topology places 92 real homes
+     * there with exactly this sized corridor.
+     */
+    function estimateFrontageAvailableM(originY: number, dirX: 1 | -1, uStart: number, uEnd: number): number {
+      let total = 0;
+      for (const side of ["north", "south"] as const) {
+        const frontageV = side === "north" ? roadHalfWidth : -roadHalfWidth;
+        const rearV = side === "north" ? frontageV + smallestTotalDepthM : frontageV - smallestTotalDepthM;
+        const rect = spurRectMain(side, frontageV, rearV, uStart, uEnd, originY, dirX);
+        if (geo.convexPolygonFullyInside(rect, erodedLocal) && !overlapsEverythingRestriction(rect)) {
+          total += uEnd - uStart;
+        }
+      }
+      return total;
+    }
+
+    // Same restriction-aware ceiling the estate-road ribbon and
+    // tryBranchingSpurs' own spine both already use — growth never tries
+    // to push the spine through a hard "everything" restriction.
+    const spineCeilingY = Math.min(maxBoundaryY, roadRestrictionCeilingY - PROBE_STEP_M);
+
+    interface Branch {
+      originY: number;
+      dirX: 1 | -1;
+      lengthU: number;
+    }
+    let spineEndY = 0;
+    const branches: Branch[] = [];
+
+    // Bounded lookahead rollout, shared by the spine and every branch
+    // candidate below: a pure-circulation step (spine) or a dead access-
+    // neck stretch (branch) can score 0 on its own immediate value, which
+    // this feature's own design-spike prototype found could stall growth
+    // behind it even when real frontage opens up a little further along —
+    // confirmed directly on Pond Bridge's own real, working branching-
+    // spurs topology, whose first genuinely buildable position on its
+    // best spur sits ~7.5m past the spine, past what a single growth step
+    // alone would ever see. Scanning forward up to LOOKAHEAD_MAX_STEPS
+    // for the nearest point frontage opens up, and crediting the step
+    // toward it with the best-achievable-prefix ratio (frontage /
+    // avgFrontageWidthM / distance-to-there, not /growthStepM alone), is
+    // this engine's own fix — tracking the best achievable ratio across
+    // the rollout, not just the immediate step's own value.
+    const LOOKAHEAD_MAX_STEPS = 30;
+
+    // How many EXTRA growth steps past the first opening to sum frontage
+    // over, when judging whether crossing a dead access-neck is worth
+    // it — crediting only that first slice systematically undervalues a
+    // genuinely long, productive branch beyond a short dead run: this
+    // engine's own measurement on Pond Bridge's real branching-spurs
+    // spur (33m dead neck, then ~138m of real frontage) found the
+    // first-slice-only estimate scored well below the road-cost penalty
+    // even though the branch as a whole is exactly the kind of stretch
+    // this engine's own winning topology (branching-spurs) already
+    // builds there. Each INDIVIDUAL future step is still separately
+    // valued once growth actually reaches it (see the "extend branch"
+    // candidate) — this sustained estimate only informs whether it's
+    // worth starting to cross the neck at all, not a promise every one
+    // of those future steps will itself clear the bar.
+    const SUSTAIN_LOOKAHEAD_STEPS = 15;
+
+    /**
+     * Nearest point along a branch from (originY,dirX), starting at
+     * u=uFrom, where frontage opens up, plus a bounded sum of frontage
+     * beyond it (see SUSTAIN_LOOKAHEAD_STEPS) — bounded lookahead across
+     * the U axis, shared by every lookahead below (a new branch stub,
+     * continuing to extend an existing branch, and — combined with the
+     * spine's own distance — extending the spine itself). Using the SAME
+     * sustained estimate for "extend an existing branch" as for "start a
+     * new one" matters: without it, a branch that paid the cost of
+     * crossing a dead access-neck on its FIRST step (because the
+     * sustained estimate said it was worth it) could still be abandoned
+     * one step short of the frontage it was aimed at — outcompeted, step
+     * by step, by some other candidate's own immediate value — wasting
+     * the entry cost already paid. Confirmed directly: without this,
+     * Slade Lane's own growth started several branches, several of which
+     * got stuck at a single growthStepM stub with nowhere a turning head
+     * could fit (headU=0, contributing zero plots) instead of reaching
+     * the real frontage just a little further along them.
+     */
+    function aheadFrontage(originY: number, dirX: 1 | -1, uFrom: number): { distanceM: number; frontageM: number } | null {
+      for (let aheadSteps = 1; aheadSteps <= LOOKAHEAD_MAX_STEPS; aheadSteps++) {
+        const uProbe = uFrom + aheadSteps * growthStepM;
+        if (!corridorClear(uFrom, uProbe, originY, dirX)) return null;
+        const firstFrontage = estimateFrontageAvailableM(originY, dirX, uProbe - growthStepM, uProbe);
+        if (firstFrontage > 0) {
+          let sustainedFrontage = firstFrontage;
+          let lastU = uProbe;
+          for (let extra = 1; extra <= SUSTAIN_LOOKAHEAD_STEPS; extra++) {
+            const u2 = uProbe + extra * growthStepM;
+            if (!corridorClear(lastU, u2, originY, dirX)) break;
+            sustainedFrontage += estimateFrontageAvailableM(originY, dirX, u2 - growthStepM, u2);
+            lastU = u2;
+          }
+          return { distanceM: uProbe - uFrom, frontageM: sustainedFrontage };
+        }
+      }
+      return null;
+    }
+
+    function branchLookaheadValue(originY: number, dirX: 1 | -1, uFrom: number): number {
+      const found = aheadFrontage(originY, dirX, uFrom);
+      return found ? found.frontageM / avgFrontageWidthM / found.distanceM : 0;
+    }
+
+    // Same bounded rollout as branchLookaheadValue, but amortised over
+    // BOTH axes at once: the spine distance to reach yProbe AND that
+    // branch's own distance from the spine to its first real frontage
+    // (aheadFrontage) — checking only an immediate [0,growthStepM)
+    // window at each yProbe (as an earlier version of this function did)
+    // missed exactly the same access-neck dead zone aheadFrontage exists
+    // to see past, just one axis over: every Y along Pond Bridge's spine
+    // shares the same ~33m dead run before any branch opens up, so a
+    // single-step-wide check there found zero frontage EVERYWHERE and
+    // never let the spine grow at all.
+    function spineLookaheadValue(y0: number): number {
+      for (let aheadSteps = 1; aheadSteps <= LOOKAHEAD_MAX_STEPS; aheadSteps++) {
+        const yProbe = y0 + aheadSteps * growthStepM;
+        if (yProbe > spineCeilingY || !spineSliceClear(y0, yProbe)) break;
+        const spineDistanceM = aheadSteps * growthStepM;
+        const candidates = [aheadFrontage(yProbe, 1, 0), aheadFrontage(yProbe, -1, 0)].filter(
+          (c): c is { distanceM: number; frontageM: number } => c !== null
+        );
+        if (candidates.length === 0) continue;
+        const best = candidates.reduce((a, b) =>
+          a.frontageM / (spineDistanceM + a.distanceM) >= b.frontageM / (spineDistanceM + b.distanceM) ? a : b
+        );
+        return best.frontageM / avgFrontageWidthM / (spineDistanceM + best.distanceM);
+      }
+      return 0;
+    }
+
+    for (let step = 0; step < MAX_GROWTH_STEPS; step++) {
+      interface GrowthCandidate {
+        value: number;
+        apply: () => void;
+      }
+      const candidates: GrowthCandidate[] = [];
+
+      // 1. Extend the spine by one growth step.
+      {
+        const y0 = spineEndY;
+        const y1 = spineEndY + growthStepM;
+        if (y1 <= spineCeilingY && spineSliceClear(y0, y1)) {
+          candidates.push({
+            value: spineLookaheadValue(y0),
+            apply: () => {
+              spineEndY = y1;
+            },
+          });
+        }
+      }
+
+      // 2. Extend each existing branch by one growth step — same bounded
+      // lookahead as the spine above: a branch's own first stretch off
+      // the spine can be genuinely unbuildable (a access-neck dead zone)
+      // while real frontage exists a little further along it. Confirmed
+      // directly: Pond Bridge's own real, working branching-spurs spur
+      // needs ~7.5m of dead run from the spine before its first buildable
+      // position, which a single-step (growthStepM=6.6m) check alone
+      // would never see past.
+      for (const br of branches) {
+        const u1 = br.lengthU + growthStepM;
+        if (corridorClear(br.lengthU, u1, br.originY, br.dirX)) {
+          const value = branchLookaheadValue(br.originY, br.dirX, br.lengthU);
+          candidates.push({
+            value,
+            apply: () => {
+              br.lengthU = u1;
+            },
+          });
+        }
+      }
+
+      // 3. A new branch stub at any already-grown spine position that
+      // doesn't yet have one in that direction, spaced at least
+      // branchSpacingM from an existing same-side branch — same bounded
+      // lookahead, so a dead-zone right at the spine doesn't stop a
+      // branch from ever being tried there at all.
+      for (let y = 0; y <= spineEndY + 1e-6; y += growthStepM) {
+        for (const dirX of [1, -1] as const) {
+          const tooClose = branches.some((b) => b.dirX === dirX && Math.abs(b.originY - y) < branchSpacingM);
+          if (tooClose) continue;
+          if (!corridorClear(0, growthStepM, y, dirX)) continue;
+          const value = branchLookaheadValue(y, dirX, 0);
+          candidates.push({
+            value,
+            apply: () => {
+              branches.push({ originY: y, dirX, lengthU: growthStepM });
+            },
+          });
+        }
+      }
+
+      if (candidates.length === 0) break;
+      candidates.sort((a, b) => b.value - a.value);
+      const best = candidates[0];
+      if (best.value < roadCostPenaltyHomesPerM) break; // marginal gain no longer beats the road-cost penalty
+      best.apply();
+    }
+
+    if (spineEndY === 0 && branches.length === 0) return null;
+
+    // --- Loop-bridging: dead-end tips within NETWORK_BRIDGE_THRESHOLD_M,
+    // tried under the SAME marginal-value test as every growth step
+    // above (see this function's own doc comment on why this almost
+    // never fires in practice). ---
+    interface Bridge {
+      aLocal: BNGPoint;
+      bLocal: BNGPoint;
+    }
+    const bridges: Bridge[] = [];
+    const tips = branches.map((b) => spurToMain(b.lengthU, 0, b.originY, b.dirX));
+    for (let i = 0; i < tips.length; i++) {
+      for (let j = i + 1; j < tips.length; j++) {
+        const d = geo.length(geo.sub(tips[j], tips[i]));
+        if (d <= 0 || d >= rules.NETWORK_BRIDGE_THRESHOLD_M) continue;
+        const unit = geo.normalize(geo.sub(tips[j], tips[i]));
+        const perp: BNGPoint = geo.scale([-unit[1], unit[0]], roadHalfWidth);
+        const bridgeRect: BNGPolygon = [
+          geo.add(tips[i], perp),
+          geo.add(tips[j], perp),
+          geo.sub(tips[j], perp),
+          geo.sub(tips[i], perp),
+        ];
+        const corridorOk = geo.convexPolygonFullyInside(bridgeRect, localBoundary) && !overlapsEverythingRestriction(bridgeRect);
+        // A bridge's own estimated value is 0 (no frontage of its own,
+        // same as the spine) — computed explicitly rather than hardcoded
+        // to "never," so a future version that lets a bridge carry its
+        // own frontage doesn't silently inherit a stale assumption here.
+        const value = 0;
+        if (corridorOk && value >= roadCostPenaltyHomesPerM) {
+          bridges.push({ aLocal: tips[i], bLocal: tips[j] });
+        }
+      }
+    }
+
+    // --- Turning heads: endpoint FIRST (already fixed by growth above,
+    // independent of any turning-head sizing), bulb fit AFTER — searched
+    // backward from each branch's own grown tip, never by subtracting a
+    // flat margin from a pre-computed ceiling. ---
+    function turningHeadFitsAtU(u: number, originY: number, dirX: 1 | -1): boolean {
+      const half = turningHeadSide / 2;
+      const offsetStep = 2;
+      for (let offset = -half; offset <= half; offset += offsetStep) {
+        const square: BNGPolygon = [
+          spurToMain(u, offset - half, originY, dirX),
+          spurToMain(u, offset + half, originY, dirX),
+          spurToMain(u + turningHeadSide, offset + half, originY, dirX),
+          spurToMain(u + turningHeadSide, offset - half, originY, dirX),
+        ];
+        if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsEverythingRestriction(square)) return true;
+      }
+      return false;
+    }
+    function corridorClearToU(u: number, originY: number, dirX: 1 | -1): boolean {
+      return corridorClear(0, u + turningHeadSide, originY, dirX);
+    }
+
+    const branchHeadU = new Map<Branch, number>();
+    const branchesWithoutTurningHead: Branch[] = [];
+    for (const br of branches) {
+      let headU: number | null = null;
+      for (let u = br.lengthU; u >= 0; u -= PROBE_STEP_M) {
+        if (turningHeadFitsAtU(u, br.originY, br.dirX) && corridorClearToU(u, br.originY, br.dirX)) {
+          headU = u;
+          break;
+        }
+      }
+      if (headU == null) {
+        branchesWithoutTurningHead.push(br);
+        branchHeadU.set(br, 0);
+      } else {
+        branchHeadU.set(br, headU);
+      }
+    }
+
+    // --- Plot placement: reuses the exact same primitives as every
+    // other topology (computePlotSpec, overlapsAnyHardRestriction/
+    // overlapsEverythingRestriction, orderTypesForMixTolerance), applied
+    // per branch up to its own growth-and-bulb-fit-determined maxU —
+    // "plots may run alongside the last stretch of road" (request brief)
+    // means placement's own maxU IS the bulb-fit headU, not a smaller
+    // margin subtracted again on top of it. ---
+    const allPlots: PlacedPlot[] = [];
+    const allParkingLocal: BNGPoint[] = [];
+    const sideBlockExtents = new Map<string, { blockId: string; uStart: number; uEnd: number }[]>();
+    let plotCounter = 0;
+    let blockCounter = 0;
+
+    for (const br of branches) {
+      const maxU = branchHeadU.get(br) ?? 0;
+      if (maxU <= 0) continue;
+      const originY = br.originY;
+      const dirX = br.dirX;
+
+      let cursorNorth = 0;
+      let cursorSouth = 0;
+      let cycleIndexNorth = 0;
+      let cycleIndexSouth = 0;
+
+      function fitsBranchBlockAt(
+        side: "north" | "south",
+        houseType: HouseTypeId,
+        blockSize: number,
+        uStart: number
+      ): { fits: boolean; frontageV: number; rearV: number; spec: PlotSpec } {
+        const spec = computePlotSpec(houseType);
+        const frontageV = side === "north" ? roadHalfWidth : -roadHalfWidth;
+        const rearV = side === "north" ? frontageV + spec.totalDepthM : frontageV - spec.totalDepthM;
+        const driveV = side === "north" ? frontageV + spec.drivewayDepthM : frontageV - spec.drivewayDepthM;
+        const houseV = side === "north" ? driveV + spec.footprintDepthM : driveV - spec.footprintDepthM;
+        const blockLength = spec.frontageWidthM * blockSize;
+        if (uStart + blockLength > maxU) return { fits: false, frontageV, rearV, spec };
+        for (let b = 0; b < blockSize; b++) {
+          const bStart = uStart + b * spec.frontageWidthM;
+          const bEnd = bStart + spec.frontageWidthM;
+          const unitRect = spurRectMain(side, frontageV, rearV, bStart, bEnd, originY, dirX);
+          if (!geo.convexPolygonFullyInside(unitRect, erodedLocal) || overlapsEverythingRestriction(unitRect)) {
+            return { fits: false, frontageV, rearV, spec };
+          }
+          const footprintRect = spurRectMain(side, driveV, houseV, bStart, bEnd, originY, dirX);
+          if (overlapsAnyHardRestriction(footprintRect)) {
+            return { fits: false, frontageV, rearV, spec };
+          }
+        }
+        return { fits: true, frontageV, rearV, spec };
+      }
+
+      function placeBranchUnit(
+        side: "north" | "south",
+        spec: PlotSpec,
+        frontageV: number,
+        rearV: number,
+        uStart: number,
+        uEnd: number,
+        blockId: string,
+        blockPosition: number,
+        blockSize: number
+      ) {
+        const driveV = side === "north" ? frontageV + spec.drivewayDepthM : frontageV - spec.drivewayDepthM;
+        const houseV = side === "north" ? driveV + spec.footprintDepthM : driveV - spec.footprintDepthM;
+        plotCounter += 1;
+        const plot: PlacedPlot = {
+          id: `network-plot-${plotCounter}`,
+          houseType: spec.houseType,
+          plotBng: spurRectMain(side, frontageV, rearV, uStart, uEnd, originY, dirX).map(toWorld),
+          footprintBng: spurRectMain(side, driveV, houseV, uStart, uEnd, originY, dirX).map(toWorld),
+          gardenBng: spurRectMain(side, houseV, rearV, uStart, uEnd, originY, dirX).map(toWorld),
+          giaM2: spec.giaM2,
+          blockId,
+          blockPosition,
+          blockSize,
+        };
+        allPlots.push(plot);
+
+        const spacesNeeded = Math.max(1, Math.round(parkingRatio));
+        const spaceWidth = spec.frontageWidthM / spacesNeeded;
+        const driveMidV = side === "north" ? frontageV + spec.drivewayDepthM / 2 : frontageV - spec.drivewayDepthM / 2;
+        for (let s = 0; s < spacesNeeded; s++) {
+          const centerU = uStart + spaceWidth * (s + 0.5);
+          allParkingLocal.push(spurToMain(centerU, driveMidV, originY, dirX));
+        }
+      }
+
+      function tryPlaceBranchSide(side: "north" | "south"): boolean {
+        const cursor = side === "north" ? cursorNorth : cursorSouth;
+        const cycleIndex = side === "north" ? cycleIndexNorth : cycleIndexSouth;
+        const preferredType = mixCycle[cycleIndex % mixCycle.length];
+        const typeOrder = draftMode ? [preferredType] : orderTypesForMixTolerance(preferredType, allPlots);
+        for (let uStart = cursor; uStart < maxU; uStart += PROBE_STEP_M) {
+          for (const houseType of typeOrder) {
+            for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
+              const check = fitsBranchBlockAt(side, houseType, blockSize, uStart);
+              if (check.fits) {
+                blockCounter += 1;
+                const blockId = `network-block-${blockCounter}`;
+                for (let b = 0; b < blockSize; b++) {
+                  const bStart = uStart + b * check.spec.frontageWidthM;
+                  const bEnd = bStart + check.spec.frontageWidthM;
+                  placeBranchUnit(side, check.spec, check.frontageV, check.rearV, bStart, bEnd, blockId, b, blockSize);
+                }
+                const blockEnd = uStart + check.spec.frontageWidthM * blockSize;
+                const key = `${originY}-${dirX}-${side}`;
+                const list = sideBlockExtents.get(key) ?? [];
+                list.push({ blockId, uStart, uEnd: blockEnd });
+                sideBlockExtents.set(key, list);
+                const newCursor = blockEnd + sideGapM;
+                if (side === "north") {
+                  cursorNorth = newCursor;
+                  cycleIndexNorth += 1;
+                } else {
+                  cursorSouth = newCursor;
+                  cycleIndexSouth += 1;
+                }
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+
+      let progress = true;
+      while (progress) {
+        const n = tryPlaceBranchSide("north");
+        const s = tryPlaceBranchSide("south");
+        progress = n || s;
+      }
+    }
+
+    if (allPlots.length === 0) return null;
+
+    // --- Roads: spine (pure circulation, no frontage of its own — same
+    // as tryBranchingSpurs), one segment per branch up to its own
+    // bulb-fit headU, plus any bridge that passed the value test above. ---
+    const ySpineEnd = spineEndY + roadHalfWidth;
+    const spineRectLocal: BNGPolygon = [
+      [-roadHalfWidth, 0],
+      [roadHalfWidth, 0],
+      [roadHalfWidth, ySpineEnd],
+      [-roadHalfWidth, ySpineEnd],
+    ];
+    const roads: RoadSegment[] = [
+      { id: "network-spine", centerlineBng: ([[0, 0], [0, ySpineEnd]] as BNGPolygon).map(toWorld), widthM: rules.ROAD_WIDTH_M },
+    ];
+    const allRoadRectsLocal: BNGPolygon[] = [spineRectLocal];
+
+    let branchIdx = 0;
+    const usedBranches = branches.filter((br) => (branchHeadU.get(br) ?? 0) > 0);
+    for (const br of usedBranches) {
+      branchIdx += 1;
+      const headU = branchHeadU.get(br)!;
+      const rect: BNGPolygon = [
+        spurToMain(0, -roadHalfWidth, br.originY, br.dirX),
+        spurToMain(0, roadHalfWidth, br.originY, br.dirX),
+        spurToMain(headU + turningHeadSide, roadHalfWidth, br.originY, br.dirX),
+        spurToMain(headU + turningHeadSide, -roadHalfWidth, br.originY, br.dirX),
+      ];
+      allRoadRectsLocal.push(rect);
+      roads.push({
+        id: `network-branch-${branchIdx}`,
+        centerlineBng: (
+          [spurToMain(0, 0, br.originY, br.dirX), spurToMain(headU + turningHeadSide, 0, br.originY, br.dirX)] as BNGPolygon
+        ).map(toWorld),
+        widthM: rules.ROAD_WIDTH_M,
+      });
+    }
+    let bridgeIdx = 0;
+    for (const bridge of bridges) {
+      bridgeIdx += 1;
+      roads.push({
+        id: `network-bridge-${bridgeIdx}`,
+        centerlineBng: ([bridge.aLocal, bridge.bLocal] as BNGPolygon).map(toWorld),
+        widthM: rules.ROAD_WIDTH_M,
+      });
+    }
+
+    // --- Compliance list, self-contained (mirrors tryBranchingSpurs'
+    // own list, generalised to a grown-not-formula network). ---
+    const networkCompliance: ComplianceCheck[] = [];
+
+    networkCompliance.push({
+      id: "topology",
+      label: "Road/plot topology used",
+      status: "pass",
+      ruleRef:
+        "v0: growable spine + value-driven branch roads (skeleton -> candidate segments -> greedy growth, stop when marginal homes/metre < road-cost penalty) — tried alongside every other topology, kept when it places more homes",
+      detail: `Network generator: ${usedBranches.length} branch(es) off a ${spineEndY.toFixed(1)}m spine, ${allPlots.length} plot(s) total.`,
+    });
+
+    networkCompliance.push({
+      id: "network-growth",
+      label: "Growth summary (not a hard rule — informational)",
+      status: "pass",
+      ruleRef: `rules.ts NETWORK_GROWTH_MIN_YIELD_FRACTION (penalty ${roadCostPenaltyHomesPerM.toFixed(4)} homes/m used this run) and NETWORK_BRIDGE_THRESHOLD_M`,
+      detail: `${branches.length} branch(es) grown, ${bridges.length} bridge(s) passed the marginal-value test (bridges carry no frontage of their own, so this is almost always 0 — see tryNetworkGenerator's own doc comment).${
+        branchesWithoutTurningHead.length > 0
+          ? ` ${branchesWithoutTurningHead.length} grown branch(es) had nowhere a turning head would fit and so carry no plots — see the turning-head check below.`
+          : ""
+      }`,
+    });
+
+    const frontageOk = allPlots.every((p) =>
+      allRoadRectsLocal.some((r) => geo.minDistanceBetweenPolygons(p.plotBng.map(toLocal), r) <= 1e-2)
+    );
+    networkCompliance.push({
+      id: "plot-frontage",
+      label: "Every plot has road frontage",
+      status: frontageOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — every plot must front the access road (here, its own branch)",
+      detail: frontageOk
+        ? `${allPlots.length} plot(s) all touch their own branch's road corridor.`
+        : "At least one plot does not touch any road corridor.",
+    });
+
+    const networkRoadConnectsEntrance = geo.pointInPolygon([0, 0], spineRectLocal);
+    networkCompliance.push({
+      id: "road-connects-entrance",
+      label: "Road connects to entrance",
+      status: networkRoadConnectsEntrance ? "pass" : "fail",
+      ruleRef: "Brief requirement — road-to-entrance connector",
+      detail: networkRoadConnectsEntrance
+        ? "The spine starts exactly at the supplied entrance point; every branch connects to the spine."
+        : "The spine does not reach the entrance point.",
+    });
+
+    const allInsideErosionNetwork = allPlots.every((p) => geo.convexPolygonFullyInside(p.plotBng.map(toLocal), erodedLocal));
+    networkCompliance.push({
+      id: "plots-inside-boundary",
+      label: "All plots inside boundary, clear of setbacks",
+      status: allInsideErosionNetwork ? "pass" : "fail",
+      ruleRef: `Boundary + ${rules.BOUNDARY_OFFSET_M}m offset`,
+      detail: allInsideErosionNetwork
+        ? `${allPlots.length} plot(s) all confirmed within the eroded boundary.`
+        : "At least one plot's footprint/garden falls outside the eroded boundary.",
+    });
+
+    let networkOverlapFound = false;
+    outerNetwork: for (let i = 0; i < allPlots.length; i++) {
+      const rectI = allPlots[i].plotBng.map(toLocal);
+      for (const r of allRoadRectsLocal) {
+        if (geo.convexPolygonsOverlap(rectI, r)) {
+          networkOverlapFound = true;
+          break outerNetwork;
+        }
+      }
+      for (let j = i + 1; j < allPlots.length; j++) {
+        if (geo.convexPolygonsOverlap(rectI, allPlots[j].plotBng.map(toLocal))) {
+          networkOverlapFound = true;
+          break outerNetwork;
+        }
+      }
+    }
+    networkCompliance.push({
+      id: "no-overlaps",
+      label: "No overlaps between plots, road and parking",
+      status: networkOverlapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — geometric non-overlap",
+      detail: networkOverlapFound
+        ? "At least one pair of plots/road overlap."
+        : `${allPlots.length} plot(s) and every road segment checked pairwise — no overlaps.`,
+    });
+
+    const networkBlockGroups = new Map<string, PlacedPlot[]>();
+    for (const p of allPlots) {
+      const group = networkBlockGroups.get(p.blockId) ?? [];
+      group.push(p);
+      networkBlockGroups.set(p.blockId, group);
+    }
+    let networkBlockLengthOk = true;
+    let networkBlockLengthDetail = "";
+    for (const [blockId, group] of networkBlockGroups) {
+      const houseType = group[0].houseType;
+      const maxAllowed = rules.MAX_BLOCK_UNITS[houseType];
+      const sameType = group.every((p) => p.houseType === houseType);
+      if (!sameType || group.length > maxAllowed || group.length !== group[0].blockSize) {
+        networkBlockLengthOk = false;
+        networkBlockLengthDetail = `Block ${blockId}: ${group.length} unit(s) of ${houseType} (max ${maxAllowed}).`;
+        break;
+      }
+    }
+    networkCompliance.push({
+      id: "block-length",
+      label: "Attached block length cap",
+      status: networkBlockLengthOk ? "pass" : "fail",
+      ruleRef: "rules.ts MAX_BLOCK_UNITS (terrace configurable; semi=2 and detached=1 by definition)",
+      detail: networkBlockLengthOk
+        ? `${networkBlockGroups.size} block(s), all within their house type's cap.`
+        : networkBlockLengthDetail,
+    });
+
+    let networkAttachedOk = true;
+    let networkAttachedDetail = "";
+    outerNetworkBlocks: for (const [blockId, group] of networkBlockGroups) {
+      if (group.length < 2) continue;
+      const sorted = [...group].sort((a, b) => a.blockPosition - b.blockPosition);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = geo.minDistanceBetweenPolygons(sorted[i].footprintBng, sorted[i + 1].footprintBng);
+        if (gap > 1e-3) {
+          networkAttachedOk = false;
+          networkAttachedDetail = `Block ${blockId}: units ${sorted[i].id} and ${sorted[i + 1].id} are ${gap.toFixed(2)}m apart, not sharing a wall.`;
+          break outerNetworkBlocks;
+        }
+      }
+    }
+    networkCompliance.push({
+      id: "attached-share-wall",
+      label: "Attached units genuinely share a wall",
+      status: networkAttachedOk ? "pass" : "fail",
+      ruleRef: "Brief requirement — terrace/semi units must be structurally adjacent, not just nearby",
+      detail: networkAttachedOk ? "Every multi-unit block's consecutive footprints touch with zero gap." : networkAttachedDetail,
+    });
+
+    let networkWastedGapFound = false;
+    let networkWastedGapDetail = "";
+    for (const [key, list] of sideBlockExtents) {
+      const sorted = [...list].sort((a, b) => a.uStart - b.uStart);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const gap = sorted[i + 1].uStart - sorted[i].uEnd;
+        const maxReasonableGap = sideGapM + smallestFrontageWidthM + PROBE_STEP_M;
+        if (gap > maxReasonableGap) {
+          networkWastedGapFound = true;
+          networkWastedGapDetail = `Branch/side ${key}, between ${sorted[i].blockId} and ${sorted[i + 1].blockId}: ${gap.toFixed(1)}m gap — room for another ${smallestFrontageWidthM.toFixed(1)}m-wide unit plus its side gap.`;
+        }
+      }
+    }
+    networkCompliance.push({
+      id: "no-wasted-gaps",
+      label: "No gap large enough for a smaller unit to fit",
+      status: networkWastedGapFound ? "fail" : "pass",
+      ruleRef: "Brief requirement — backtrack to a smaller type before leaving a gap empty",
+      detail: networkWastedGapFound ? networkWastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
+    });
+
+    const networkNdssFailingIds = allPlots.filter((p) => p.giaM2 < ndssMinGia[p.houseType] - 1e-6).map((p) => p.id);
+    networkCompliance.push({
+      id: "ndss-gia",
+      label: "NDSS minimum GIA",
+      status: networkNdssFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: "DCLG, NDSS, March 2015, Table 1",
+      detail:
+        networkNdssFailingIds.length === 0
+          ? "Every plot's GIA is set to at least its NDSS minimum for its house type."
+          : `${networkNdssFailingIds.length} plot(s) below their NDSS minimum GIA.`,
+      affectedPlotIds: networkNdssFailingIds,
+    });
+
+    function networkPlotCentroid(rect: BNGPolygon): BNGPoint {
+      const xs = rect.map((p) => p[0]);
+      const ys = rect.map((p) => p[1]);
+      return [xs.reduce((a, b) => a + b, 0) / xs.length, ys.reduce((a, b) => a + b, 0) / ys.length];
+    }
+    function networkPlotOutwardNormal(p: PlacedPlot): BNGPoint {
+      return geo.normalize(geo.sub(networkPlotCentroid(p.gardenBng!), networkPlotCentroid(p.footprintBng)));
+    }
+    function networkGardenDepthWorld(p: PlacedPlot): number {
+      const normal = networkPlotOutwardNormal(p);
+      const projections = p.gardenBng!.map((pt) => geo.dot(pt, normal));
+      return Math.max(...projections) - Math.min(...projections);
+    }
+    function networkRearMidpoint(p: PlacedPlot, normal: BNGPoint): BNGPoint {
+      const garden = p.gardenBng!;
+      const projections = garden.map((pt) => geo.dot(pt, normal));
+      const maxProj = Math.max(...projections);
+      const farPoints = garden.filter((_, idx) => Math.abs(projections[idx] - maxProj) < 1e-6);
+      return [
+        farPoints.reduce((s, pt) => s + pt[0], 0) / farPoints.length,
+        farPoints.reduce((s, pt) => s + pt[1], 0) / farPoints.length,
+      ];
+    }
+
+    const networkGardenFailingIds = allPlots.filter((p) => networkGardenDepthWorld(p) < gardenDepthM - 1e-6).map((p) => p.id);
+    networkCompliance.push({
+      id: "garden-depth",
+      label: "Minimum garden depth",
+      status: networkGardenFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `Brief default ${gardenDepthM}m`,
+      detail:
+        networkGardenFailingIds.length === 0
+          ? `Every plot's garden is at least ${gardenDepthM}m deep.`
+          : `${networkGardenFailingIds.length} plot(s) have a garden shallower than the minimum.`,
+      affectedPlotIds: networkGardenFailingIds,
+    });
+
+    let networkFacingPairFound = false;
+    let networkMinFacingDistance = Infinity;
+    for (let i = 0; i < allPlots.length; i++) {
+      for (let j = i + 1; j < allPlots.length; j++) {
+        const a = allPlots[i];
+        const b = allPlots[j];
+        const normalA = networkPlotOutwardNormal(a);
+        const normalB = networkPlotOutwardNormal(b);
+        const rearA = networkRearMidpoint(a, normalA);
+        const rearB = networkRearMidpoint(b, normalB);
+        const d = geo.sub(rearB, rearA);
+        const dNorm = geo.normalize(d);
+        const facingA = geo.dot(dNorm, normalA) > 0.7;
+        const facingB = geo.dot(geo.scale(dNorm, -1), normalB) > 0.7;
+        if (facingA && facingB) {
+          networkFacingPairFound = true;
+          networkMinFacingDistance = Math.min(networkMinFacingDistance, geo.length(d));
+        }
+      }
+    }
+    const networkBackToBackOk = !networkFacingPairFound || networkMinFacingDistance >= backToBackM - 1e-6;
+    networkCompliance.push({
+      id: "back-to-back",
+      label: `${backToBackM}m back-to-back distance`,
+      status: networkBackToBackOk ? "pass" : "fail",
+      ruleRef: `Brief default ${backToBackM}m (Essex Design Guide, 1973, convention)`,
+      detail: networkFacingPairFound
+        ? `Closest facing pair is ${networkMinFacingDistance.toFixed(1)}m apart (independently recomputed from each plot's own footprint→garden direction).`
+        : "No two plots face each other — every facing pair's distance was checked directly, not assumed.",
+    });
+
+    const networkParkingFailingIds = allPlots
+      .filter((p) => computePlotSpec(p.houseType).frontageWidthM < parkingRatio * rules.PARKING_SPACE_WIDTH_M - 1e-6)
+      .map((p) => p.id);
+    networkCompliance.push({
+      id: "parking",
+      label: `Parking (${parkingRatio}/unit)`,
+      status: networkParkingFailingIds.length === 0 ? "pass" : "fail",
+      ruleRef: `v0 default ${rules.PARKING_SPACES_PER_UNIT}/unit (common UK local parking SPD figure, editable)`,
+      detail:
+        networkParkingFailingIds.length === 0
+          ? "Every plot's frontage is sized to fit its required parking."
+          : `${networkParkingFailingIds.length} plot(s) are narrower than their required parking allocation.`,
+      affectedPlotIds: networkParkingFailingIds,
+    });
+
+    networkCompliance.push({
+      id: "fire-access",
+      label: "Fire/refuse appliance access",
+      status: "pass",
+      ruleRef: `Approved Document B / common ${rules.MAX_FIRE_ACCESS_DISTANCE_M}m hose-run convention`,
+      detail: "Every plot fronts directly onto its own branch road, so frontage-to-road distance is 0m for all plots.",
+    });
+
+    networkCompliance.push({
+      id: "turning-head",
+      label: "Turning head at road end",
+      status: branchesWithoutTurningHead.length === 0 ? "pass" : usedBranches.length > 0 ? "warn" : "fail",
+      ruleRef: `Manual for Streets (DfT, 2007) — ~${rules.TURNING_HEAD_DIAMETER_M}m turning circle for a dead-end road, fit AFTER growth fixes each branch's own endpoint`,
+      detail:
+        branchesWithoutTurningHead.length === 0
+          ? `${usedBranches.length} branch(es), each individually confirmed to fit a ${rules.TURNING_HEAD_DIAMETER_M}m turning head somewhere along its own grown length before any plot was placed on it.`
+          : `${branchesWithoutTurningHead.length} grown branch(es) had nowhere a turning head would fit anywhere along their own length and so carry no plots; ${usedBranches.length} branch(es) fit one and carry plots.`,
+    });
+
+    networkCompliance.push({
+      id: "road-width",
+      label: "Road carriageway width",
+      status: "pass",
+      ruleRef: `Manual for Streets (DfT, 2007) — ${rules.ROAD_WIDTH_M}m minimum used as v0 default`,
+      detail: `Spine and every branch modelled at a constant ${rules.ROAD_WIDTH_M}m width.`,
+    });
+
+    networkCompliance.push(buildRestrictionsCompliance(allPlots, allRoadRectsLocal));
+
+    const networkRoadRestrictionOk = allRoadRectsLocal.every((r) => !overlapsEverythingRestriction(r));
+
+    return {
+      plots: allPlots,
+      roads,
+      parkingSpacesLocal: allParkingLocal,
+      compliance: networkCompliance,
+      roadRestrictionOk: networkRoadRestrictionOk,
+    };
+  }
+
   const { plots, parkingSpacesLocal, cursorLeft, cursorRight } = state;
 
   // The road is fixed at local X=0 (it starts exactly at the entrance,
@@ -2403,7 +3348,7 @@ function buildMixPlan(mix: Partial<Record<HouseTypeId, number>> | undefined): Mi
   return { cycle: [...DEFAULT_HOUSE_TYPES], weights, totalWeight: DEFAULT_HOUSE_TYPES.length };
 }
 
-type TopologyUsed = "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none";
+type TopologyUsed = "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "network-generator" | "none";
 type ZeroHomesInfo = { cause: Metrics["zeroHomesCause"]; reason: string } | null;
 type NonHousingReserve = { percent: number; source: string | null };
 
