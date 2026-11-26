@@ -59,6 +59,10 @@ specific finding, not fixed by loosening the fixture.
   // read that fixture's own "notes" for exactly what's missing to lift
   // this. Its number is still tracked for drift, never chased by tuning.
   "nonComparable": true,
+  // Optional. "OS-anchored" when the whole fixture has been placed on
+  // its real OS-map location (absent = position not verified; only the
+  // shape is meaningful). Site Layers (slope/flood) need a real position.
+  "positionSource": "OS-anchored",
   // Optional. Engine inputs for this fixture, e.g. a real scheme built
   // entirely of one house type: { "mix": { "3-bed-bungalow": 1 } }.
   // Omitted fixtures get the engine's own default mix.
@@ -157,6 +161,14 @@ Neyland, Pembrokeshire. Ref 04/0235/PA, decided 17/08/2004.
   form) — the BNG anchor used (E196300, N205600) is an **unverified
   approximate estimate** for Honeyborough/Neyland's general location,
   not looked up against an authoritative source.
+- **Position: OS-anchored (2026-11-26).** The whole fixture (boundary
+  and entrance together) was translated by **−34 E, +166 N** so it sits
+  on the real site as checked against OS mapping by the user. Pure
+  translation — shape, area, orientation and therefore the engine's
+  unit count are unchanged (scorecard baseline untouched). The
+  "unverified estimate" caveat below on absolute position is superseded;
+  the shape caveats still stand. Fixture field: `"positionSource":
+  "OS-anchored"`.
 - **Error margin:** shape and relative dimensions (traced against a real
   printed scale bar, cross-checked against real floor-plan sizes) are
   the most confident tracing in this fixture set — estimated **±10-15%**
@@ -413,6 +425,12 @@ chase its own number. Source documents are in
   effect: the shape is a genuine hand trace with a sourced, exact area,
   but absolute position/scale/orientation are not independently
   verified against any surveyed coordinate.
+- **Position: OS-anchored (2026-11-26).** Boundary, entrance and the
+  SuDS restriction were translated together by **+9 E, +5,200 N** so the
+  site sits on its real OS location (the earlier trace had no
+  georeference at all). Pure translation, so the engine's count is
+  unchanged (scorecard baseline untouched). Orientation and scale remain
+  as traced. Fixture field: `"positionSource": "OS-anchored"`.
 - **SuDS infiltration basin (north strip) — `bars: "everything"`
   ("Nothing here"), enforced.** Traced from the same drawing's own
   hatched basin annotation and corroborated by the Statement's text
