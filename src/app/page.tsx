@@ -32,6 +32,10 @@ import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/p
 import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/types";
 import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction, RestrictionBars } from "@/engine/types";
 import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
+import { SiteLayersCard } from "@/components/plot-line/SiteLayersCard";
+import { useSiteLayers } from "@/hooks/useSiteLayers";
+import { floodZoneLabel, isNoHomes, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
+import type { FloodZoneId } from "@/lib/siteLayers/types";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
 
@@ -159,6 +163,19 @@ export default function Home() {
       mix.setIncludeBungalows(state.includeBungalows);
       setRestrictions(state.restrictions);
       if (hashState) storeSiteState(state); // a shared link becomes the new auto-save going forward
+      // Show the restored site, not the default map position — a shared
+      // link that opens somewhere else entirely reads as "it's empty".
+      if (state.boundary.length >= 3) {
+        const xs = state.boundary.map((p) => p[0]);
+        const ys = state.boundary.map((p) => p[1]);
+        const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+        flyToKeyRef.current += 1;
+        setFlyTo({
+          center: [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2],
+          resolution: Math.min(20, Math.max(0.25, span / 250)), // site fills ~250px of a phone-width map
+          key: flyToKeyRef.current,
+        });
+      }
     }
     setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,6 +193,41 @@ export default function Home() {
     storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions });
   }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, isDragging]);
 
+  // Site Layers (slope + flood, Wales only for v0) — fetched once the
+  // boundary is finished and not mid-drag. Flood zones switched to "No
+  // homes here" become engine restrictions (bars: "buildings" — gardens,
+  // parking and roads may still sit on the land, the homes may not),
+  // using each zone's convex cover rectangles, never its raw outline
+  // (see FloodZoneLayer.cover). Kept apart from the user's own drawn
+  // keep-clear zones: not saved/shared, re-derived from the live data.
+  const siteLayers = useSiteLayers(boundary, mode === "done" && !isDragging);
+  const [floodOverrides, setFloodOverrides] = useState<FloodOverrides>({});
+  const handleToggleFloodZone = useCallback((id: FloodZoneId, noHomes: boolean) => {
+    setFloodOverrides((o) => ({ ...o, [id]: noHomes }));
+  }, []);
+  const floodZones = useMemo(() => (siteLayers.status === "ok" ? siteLayers.flood.zones : []), [siteLayers]);
+  const floodRestrictions = useMemo(
+    (): Restriction[] =>
+      floodZones
+        .filter((z) => isNoHomes(z, floodOverrides))
+        .flatMap((z) =>
+          z.cover.map((polygon) => ({
+            polygon,
+            label: `No homes here: flood, ${floodZoneLabel(z)}`,
+            hardness: "hard" as const,
+            reason: "policy" as const,
+            bars: "buildings" as const,
+            source: "NRW Flood Map for Planning; Welsh Government TAN 15",
+          }))
+        ),
+    [floodZones, floodOverrides]
+  );
+  const mapFloodZones = useMemo(
+    () => floodZones.map((z) => ({ polygons: z.polygons, zone: z.zone, noHomes: isNoHomes(z, floodOverrides) })),
+    [floodZones, floodOverrides]
+  );
+  const engineRestrictions = useMemo(() => [...restrictions, ...floodRestrictions], [restrictions, floodRestrictions]);
+
   const liveInputs = useMemo(
     () => ({
       sizeMix: mix.engineMixFields.sizeMix,
@@ -183,9 +235,9 @@ export default function Home() {
       localAuthority: "pembrokeshire",
       marketBand,
       sideGapTier: FIXED_SIDE_GAP_TIER,
-      restrictions,
+      restrictions: engineRestrictions,
     }),
-    [mix.engineMixFields, marketBand, restrictions]
+    [mix.engineMixFields, marketBand, engineRestrictions]
   );
 
   // Auto-entrance: only searches once a real boundary exists AND the
@@ -270,6 +322,7 @@ export default function Home() {
     setMode("boundary");
     setRestrictions([]);
     setDraftRestriction([]);
+    setFloodOverrides({});
   }, []);
 
   const handleStartRestrictionZone = useCallback(() => {
@@ -325,9 +378,9 @@ export default function Home() {
 
   const handleRunOptimizer = useCallback(() => {
     if (!effectiveEntrance || boundary.length < 3) return;
-    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full", restrictions };
+    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full", restrictions: engineRestrictions };
     optimizer.run(boundary, effectiveEntrance, inputs);
-  }, [boundary, effectiveEntrance, marketBand, optimizer, restrictions]);
+  }, [boundary, effectiveEntrance, marketBand, optimizer, engineRestrictions]);
 
   const handleToggleAuto = useCallback(() => {
     const turningOn = mix.mode !== "auto";
@@ -378,6 +431,7 @@ export default function Home() {
           flyTo={flyTo}
           tightPlotIds={tightPlotIds}
           dark={mapDark}
+          floodZones={mapFloodZones}
           fill
         />
       )}
@@ -528,6 +582,8 @@ export default function Home() {
           {metrics?.totalUnits === 0 && metrics.zeroHomesReason && (
             <p className="mt-1.5 text-[11px] leading-snug text-grid-amber">{metrics.zeroHomesReason}</p>
           )}
+
+          <SiteLayersCard state={siteLayers} overrides={floodOverrides} onToggleZone={handleToggleFloodZone} />
 
           {entranceIsSuggested && (
             <p className="mt-1.5 text-[11px] leading-snug text-grid-muted">
