@@ -31,7 +31,15 @@
 //   development next to them should be "appropriately set back". TAN 15
 //   doesn't bar homes outright here — off by default, with a warning.
 
+import type { Restriction } from "@/engine/types";
 import type { FloodSource, FloodZoneId, FloodZoneLayer } from "./types";
+
+/**
+ * Every flood zone id, in a FIXED order: the share link stores an
+ * override as its index in this list (siteState.ts, v5). Append only —
+ * reordering or removing an entry would silently re-map old links.
+ */
+export const FLOOD_ZONE_IDS: readonly FloodZoneId[] = ["rivers-3", "rivers-2", "sea-3", "sea-2", "surface-3", "surface-2"];
 
 export function noHomesByDefault(zone: Pick<FloodZoneLayer, "source" | "zone">): boolean {
   return zone.zone === 3 && (zone.source === "rivers" || zone.source === "sea");
@@ -43,9 +51,25 @@ const SOURCE_LABEL: Record<FloodSource, string> = {
   surface: "Surface water",
 };
 
-export function floodZoneLabel(zone: Pick<FloodZoneLayer, "source" | "zone">): string {
-  return `${SOURCE_LABEL[zone.source]} · Zone ${zone.zone}`;
+/**
+ * River/sea Zone 3 is labelled "undefended extent" until TAN 15 Defended
+ * Zones are modelled: the Flood Map for Planning layers read here show
+ * Zone 3 regardless of defences, so a defended site still shows as Zone 3
+ * (TAN 15 paras 4.4-4.5: Defended Zones are areas benefiting from formal
+ * river/sea defences — surface water has no Defended Zone, so its Zone 3
+ * keeps the plain label).
+ */
+export function isUndefendedExtent(zone: Pick<FloodZoneLayer, "source" | "zone">): boolean {
+  return zone.zone === 3 && zone.source !== "surface";
 }
+
+export function floodZoneLabel(zone: Pick<FloodZoneLayer, "source" | "zone">): string {
+  return `${SOURCE_LABEL[zone.source]} · Zone ${zone.zone}${isUndefendedExtent(zone) ? ", undefended extent" : ""}`;
+}
+
+/** One line, shown once when a site has any river/sea Zone 3. */
+export const UNDEFENDED_EXTENT_NOTE =
+  "Zone 3 is shown at its undefended extent: a site behind flood defences (a TAN 15 Defended Zone) may still show as Zone 3 here.";
 
 /** Shown while a zone is OPEN to homes — plain English, one line, with the TAN 15 paragraph. */
 export function openZoneWarning(zone: Pick<FloodZoneLayer, "source" | "zone">): string {
@@ -58,4 +82,26 @@ export type FloodOverrides = Partial<Record<FloodZoneId, boolean>>;
 
 export function isNoHomes(zone: FloodZoneLayer, overrides: FloodOverrides): boolean {
   return overrides[zone.id] ?? noHomesByDefault(zone);
+}
+
+/**
+ * The engine restrictions for a site's flood zones under the user's
+ * switches: each "No homes here" zone becomes its cover rectangles
+ * (FloodZoneLayer.cover) with bars "buildings" — gardens, parking and
+ * roads may still sit on that land, homes may not. One shared function
+ * so the page and the share-link test derive restrictions identically.
+ */
+export function floodRestrictions(zones: FloodZoneLayer[], overrides: FloodOverrides): Restriction[] {
+  return zones
+    .filter((z) => isNoHomes(z, overrides))
+    .flatMap((z) =>
+      z.cover.map((polygon) => ({
+        polygon,
+        label: `No homes here: flood, ${floodZoneLabel(z)}`,
+        hardness: "hard" as const,
+        reason: "policy" as const,
+        bars: "buildings" as const,
+        source: "NRW Flood Map for Planning; Welsh Government TAN 15",
+      }))
+    );
 }

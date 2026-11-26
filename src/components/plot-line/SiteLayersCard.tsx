@@ -6,9 +6,10 @@
 // site. Never blank: loading and unavailable states both say something
 // calm in one line.
 
+import { useEffect, useState } from "react";
 import type { SiteLayersState } from "@/hooks/useSiteLayers";
 import type { FloodZoneId, FloodZoneLayer } from "@/lib/siteLayers/types";
-import { floodZoneLabel, isNoHomes, openZoneWarning, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
+import { floodZoneLabel, isNoHomes, isUndefendedExtent, openZoneWarning, UNDEFENDED_EXTENT_NOTE, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
 
 type Dot = "green" | "amber" | "red" | "none";
 const DOT_CLASS: Record<Dot, string> = {
@@ -55,17 +56,7 @@ export function SiteLayersCard({
 
   const shell = "mt-3 rounded-xl border border-grid-border bg-panel/40 px-3 py-2.5 text-[11px] leading-snug";
 
-  if (state.status === "loading") {
-    return (
-      <div className={shell} aria-live="polite">
-        <div className="mb-1 font-semibold text-grid-text">About this site</div>
-        <div className="flex items-center gap-2 text-grid-muted">
-          <span className={`h-2 w-2 shrink-0 animate-pulse rounded-full ${DOT_CLASS.none}`} aria-hidden />
-          Checking slope and flood for this site…
-        </div>
-      </div>
-    );
-  }
+  if (state.status === "loading") return <LoadingCard className={shell} />;
 
   if (state.status === "unavailable") {
     return (
@@ -113,15 +104,15 @@ export function SiteLayersCard({
             return (
               <li key={z.id}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2 text-grid-text">
+                  <span className="flex min-w-0 items-start gap-2 text-grid-text">
                     <span
-                      className="h-3 w-3 shrink-0 rounded-sm border border-[#3d8bff]"
+                      className="mt-px h-3 w-3 shrink-0 rounded-sm border border-[#3d8bff]"
                       style={{
                         backgroundImage: `repeating-linear-gradient(45deg, rgba(61,139,255,${z.zone === 3 ? 0.9 : 0.55}) 0 1.5px, transparent 1.5px ${z.zone === 3 ? 4 : 6}px)`,
                       }}
                       aria-hidden
                     />
-                    <span className="truncate">
+                    <span>
                       {floodZoneLabel(z)} <span className="text-grid-muted">· {pct(z.percent)}</span>
                     </span>
                   </span>
@@ -150,10 +141,41 @@ export function SiteLayersCard({
         </ul>
       )}
 
+      {flood.zones.some(isUndefendedExtent) && <p className="mt-2 text-[10.5px] text-grid-muted">{UNDEFENDED_EXTENT_NOTE}</p>}
+
       <p className="mt-2 text-[10px] text-grid-muted/80">
         Sources: {sources.lidar.name}
         {sources.lidar.date && `, ${sources.lidar.date}`}. {sources.flood.name}
         {sources.flood.date && `, updated ${sources.flood.date}`}.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The first request for a new area is the slow one (opening the LiDAR
+ * file and the flood map can take ~5-10s; later ones ~1s), so the loading
+ * state says what's happening, shows it's alive, and — after a few
+ * seconds — says why it's taking a while. It also warns the home count
+ * may move: the layout shown meanwhile doesn't know about flood zones yet.
+ */
+function LoadingCard({ className }: { className: string }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className={className} role="status" aria-live="polite" aria-busy="true">
+      <div className="mb-1 font-semibold text-grid-text">About this site</div>
+      <p className="text-[12px] text-grid-text">Reading slope and flood maps for this site…</p>
+      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-grid-border/60" aria-hidden>
+        <div className="site-layers-progress h-full w-1/3 rounded-full bg-[#3d8bff]" />
+      </div>
+      <p className="mt-2 text-grid-muted">
+        {seconds < 3
+          ? "Home count may change once flood zones load."
+          : `Still working (${seconds}s) — the first look at a new area can take 10 seconds or so. Home count may change once flood zones load.`}
       </p>
     </div>
   );

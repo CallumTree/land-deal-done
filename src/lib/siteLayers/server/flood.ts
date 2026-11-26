@@ -64,7 +64,7 @@ function toMultiPolygon(g: NonNullable<WfsFeature["geometry"]>): MultiPolygon {
 }
 
 /** Axis-aligned rectangles that fully cover `mp`: slice into horizontal strips, take each piece's x-extent, then merge vertically adjacent strips with overlapping extents. */
-function coverRectangles(mp: MultiPolygon): BNGPolygon[] {
+export function coverRectangles(mp: MultiPolygon): BNGPolygon[] {
   if (mp.length === 0) return [];
   let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
   for (const poly of mp) for (const [x, y] of poly[0]) {
@@ -79,7 +79,10 @@ function coverRectangles(mp: MultiPolygon): BNGPolygon[] {
     const strip: PcPolygon = [[[minX - 1, y0], [maxX + 1, y0], [maxX + 1, y1], [minX - 1, y1], [minX - 1, y0]]];
     const pieces = polygonClipping.intersection(mp, strip);
     const spans = pieces
-      .filter((p) => ringArea(p[0]) > 0.01)
+      // Keep every non-empty piece: dropping "slivers" here once left a
+      // strip corner poking into the next row uncovered (up to ~0.01m²,
+      // found by scripts/report-flood-cover.ts). Cover must never miss.
+      .filter((p) => ringArea(p[0]) > 0)
       .map((p) => {
         let a = Infinity, b = -Infinity;
         for (const [x] of p[0]) { a = Math.min(a, x); b = Math.max(b, x); }

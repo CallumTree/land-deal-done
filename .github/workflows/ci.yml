@@ -19,6 +19,7 @@ jobs:
       - run: npm run build
       - run: npm run test:fixtures
       - run: npm run test:scorecard
+      - run: npm run test:share-link
       # Always prints the full % with homes / cause breakdown (an
       # informational report, never gates CI on its own) — exits non-
       # zero ONLY if a returned layout breaks an independently-checked
