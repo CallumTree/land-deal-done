@@ -203,6 +203,20 @@ export interface EngineInputs {
    * all — identical behaviour to before this field existed.
    */
   restrictions?: Restriction[];
+  /**
+   * Opt-in extra candidate topology: a growable spine-and-branches road
+   * network (skeleton -> candidate segments -> value-driven growth from
+   * the entrance, stopping when the marginal homes-per-metre a segment
+   * would add no longer beats an explicit road-cost penalty; loop-
+   * bridging tried under the same test) rather than branching-spurs'
+   * fixed spacing/length formula. Tried ALONGSIDE every other topology,
+   * same "most compliant homes wins" selection — never removes or
+   * changes behaviour for any existing topology. Defaults to false/unset
+   * (today's exact existing behaviour) — this is purely additive; a
+   * caller must opt in to exercise it. See generateLayout.ts's
+   * tryNetworkGenerator.
+   */
+  networkGenerator?: boolean;
 }
 
 export interface PlacedPlot {
@@ -276,8 +290,16 @@ export interface Metrics {
    * ALONGSIDE the ribbon and frontage-ribbon topologies (not just as a
    * last-resort fallback), and used whenever it places more homes than
    * either. See generateLayout.ts's tryBranchingSpurs.
+   * "network-generator": a growable spine-and-branches network — same
+   * overall shape as branching-spurs, but WHERE/HOW LONG each branch
+   * grows is decided by value-driven greedy growth from the entrance
+   * rather than a fixed spacing/length formula, with each branch's
+   * turning head fit AFTER its endpoint is already fixed by growth
+   * (never by reserving a fixed turning-head-sized margin up front). Only
+   * tried when EngineInputs.networkGenerator is set. See
+   * generateLayout.ts's tryNetworkGenerator.
    */
-  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "none";
+  topologyUsed: "double" | "single-left" | "single-right" | "frontage-ribbon" | "branching-spurs" | "network-generator" | "none";
   /**
    * Set WHENEVER totalUnits === 0 — a plain-English, one-line reason this
    * boundary/entrance placed nothing, in the exact style "Frontage is 9m:

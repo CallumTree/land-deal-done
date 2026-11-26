@@ -215,3 +215,38 @@ export const MAX_BLOCK_UNITS: Record<HouseTypeId, number> = {
  */
 export const PROBE_STEP_M = 0.5;
 export const DRAFT_PROBE_STEP_M = 2;
+
+/**
+ * Network-generator topology (generateLayout.ts's tryNetworkGenerator,
+ * behind EngineInputs.networkGenerator) — growth-economy constants, not
+ * planning-rule figures, so flagged and swappable here rather than
+ * derived from any citation.
+ *
+ * NETWORK_GROWTH_MIN_YIELD_FRACTION: the growth loop scores each
+ * candidate road segment by (estimated homes gained) / (road metres
+ * added) and keeps growing only while the best candidate's score beats a
+ * penalty. The penalty is expressed as a FRACTION of that segment's own
+ * theoretical best case — a branch road hosts plots on both sides, so a
+ * metre of it can carry at most 2 / (its mix's average plot frontage
+ * width) homes; this fraction is how much of that theoretical ceiling a
+ * stretch must actually deliver (accounting for boundary/restriction
+ * loss, not just an arbitrary cutoff) before it's judged to pay for
+ * itself. 0.25 is this engine's own default growth-economy choice, not a
+ * sourced standard: a quarter of double-sided capacity is deliberately
+ * permissive (plenty of real UK cul-de-sac stretches run well under
+ * fully built out on both sides at every metre) while still stopping
+ * growth that would mostly just be access road with little housing on
+ * it.
+ *
+ * NETWORK_BRIDGE_THRESHOLD_M: maximum straight-line distance between two
+ * dead-end tips for a loop-closing bridge to even be considered. 40m
+ * mirrors this feature's own design-spike prototype (see the session's
+ * growth_lib.py) — carried over as this engine's starting default rather
+ * than re-derived, since there's no planning-rule number for "how close
+ * is close enough to bridge"; a bridge is still only ever built if it
+ * passes the SAME marginal-value test as every other growth step (see
+ * tryNetworkGenerator), so this threshold only bounds which pairs are
+ * even tried, not which succeed.
+ */
+export const NETWORK_GROWTH_MIN_YIELD_FRACTION = 0.25;
+export const NETWORK_BRIDGE_THRESHOLD_M = 40;
