@@ -295,7 +295,14 @@ function runShape(shape: GeneratedShape, useAutoEntrance: boolean): ShapeResult 
   const t0 = performance.now();
   try {
     const entrance = useAutoEntrance ? suggestEntrance(shape.boundaryBng, { quality: "full" }).entrance : shape.entranceBng;
-    const inputs = shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {};
+    // networkGenerator:true on every run, both the plain and --restrictions
+    // suites — this is the harness opting the NEW candidate topology into
+    // its own exercised paths (per the brief: "Add the generator to the
+    // fuzz runs"), not a change to the engine's own default (which stays
+    // opt-in — see EngineInputs.networkGenerator's own doc comment). It's
+    // an ADDITIONAL candidate tried alongside every other topology, so
+    // this can only ever match or improve pctWithHomes, never regress it.
+    const inputs = { ...(shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {}), networkGenerator: true };
     const output = generateLayout(shape.boundaryBng, entrance, inputs);
     const ms = performance.now() - t0;
     const invariants = checkInvariants(output, shape.boundaryBng, entrance, inputs);
@@ -326,7 +333,7 @@ function runShape(shape: GeneratedShape, useAutoEntrance: boolean): ShapeResult 
 
 /** For zero-home shapes, probes a couple of alternate entrance points on the SAME boundary to see whether entrance choice alone would have changed the outcome — the "entrance placement" cause bucket, derived rather than engine-classified (see module header). */
 function probeEntranceSensitivity(shape: GeneratedShape, rand: () => number): boolean {
-  const inputs = shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {};
+  const inputs = { ...(shape.restrictions.length > 0 ? { restrictions: shape.restrictions } : {}), networkGenerator: true };
   for (let attempt = 0; attempt < 3; attempt++) {
     const altEntrance = pickEntrance(rand, shape.boundaryBng);
     try {

@@ -203,14 +203,19 @@ export function checkInvariants(
     return results;
   }
 
-  // Branching spurs (generateLayout.ts's tryBranchingSpurs) has N road
-  // segments (one spine + one per spur), each running a different
-  // direction — the single roads[0]/roadPoly/one-road-direction
-  // assumption the rest of this function relies on genuinely doesn't
-  // apply, the same reason frontage ribbon gets its own entranceFrame
-  // branch below rather than forcing a road-direction fiction onto a
-  // topology that has none. Dedicated, fully independent recheck.
-  if (output.metrics.topologyUsed === "branching-spurs") {
+  // Branching spurs (generateLayout.ts's tryBranchingSpurs) and the
+  // network generator (tryNetworkGenerator, EngineInputs.networkGenerator)
+  // both have N road segments (one spine + one per branch/spur), each
+  // running a different direction — the single roads[0]/roadPoly/one-
+  // road-direction assumption the rest of this function relies on
+  // genuinely doesn't apply, the same reason frontage ribbon gets its own
+  // entranceFrame branch below rather than forcing a road-direction
+  // fiction onto a topology that has none. Both topologies share the
+  // exact same geometric SHAPE (a spine plus perpendicular branches, each
+  // with its own turning head) — only how branches are decided (fixed
+  // grid vs grown) differs, which this independent recheck never looks
+  // at — so one dedicated, fully independent recheck covers both.
+  if (output.metrics.topologyUsed === "branching-spurs" || output.metrics.topologyUsed === "network-generator") {
     return checkBranchingInvariants(output, boundary, entrance, inputs);
   }
 

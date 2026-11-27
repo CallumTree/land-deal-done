@@ -2289,12 +2289,26 @@ export function generateLayout(
 
       // 3. A new branch stub at any already-grown spine position that
       // doesn't yet have one in that direction, spaced at least
-      // branchSpacingM from an existing same-side branch — same bounded
-      // lookahead, so a dead-zone right at the spine doesn't stop a
-      // branch from ever being tried there at all.
+      // branchSpacingM from EVERY existing branch, regardless of dirX —
+      // same bounded lookahead, so a dead-zone right at the spine doesn't
+      // stop a branch from ever being tried there at all.
+      //
+      // branchSpacingM must apply across dirX, not just within it: a
+      // "north"-facing plot on one branch and a "south"-facing plot on a
+      // DIFFERENT branch (opposite dirX, so on the opposite side of the
+      // spine) can still face each other across the spine if their own
+      // Y-positions are close enough — the back-to-back check cares about
+      // each plot's own Y-facing normal, not which side of the spine its
+      // branch sits on. tryBranchingSpurs' own fixed grid gets this for
+      // free (every junction, either dirX, sits on the SAME uniform
+      // spurSpacingM-spaced Y grid); this topology's flexible branch
+      // positions need the check spelled out explicitly. Confirmed
+      // directly: restricting this to same-dirX pairs let the fuzz
+      // harness's own independent back-to-back recheck fail at 19.5m
+      // (below the 21m minimum) on a random trapezoid shape.
       for (let y = 0; y <= spineEndY + 1e-6; y += growthStepM) {
         for (const dirX of [1, -1] as const) {
-          const tooClose = branches.some((b) => b.dirX === dirX && Math.abs(b.originY - y) < branchSpacingM);
+          const tooClose = branches.some((b) => Math.abs(b.originY - y) < branchSpacingM);
           if (tooClose) continue;
           if (!corridorClear(0, growthStepM, y, dirX)) continue;
           const value = branchLookaheadValue(y, dirX, 0);
