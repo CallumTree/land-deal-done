@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OsMapBasemap } from "./OsMapBasemap";
-import { GRID_AMBER, GRID_CYAN, GRID_GREEN, GRID_KEEPCLEAR, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "./gridColors";
+import { GRID_AMBER, GRID_CYAN, GRID_FLOOD, GRID_GREEN, GRID_KEEPCLEAR, HOUSE_TYPE_COLOR, ROAD_GREY_BLUE } from "./gridColors";
 import { bufferStraightRoad } from "./bufferRoad";
 import type { BNGPoint, BNGPolygon, LayoutResult } from "@/engine/types";
 
@@ -53,6 +53,47 @@ function getKeepClearHatch(): CanvasPattern | null {
   ctx.stroke();
   keepClearHatchCache = ctx.createPattern(canvas, "repeat");
   return keepClearHatchCache;
+}
+
+/**
+ * Flood-zone hatch: the OPPOSITE diagonal to keep-clear's, in flood blue,
+ * so the two never read as the same thing where they overlap. Zone 3 is
+ * a denser hatch than Zone 2 (higher risk = more ink), cached per zone.
+ */
+const floodHatchCache = new Map<2 | 3, CanvasPattern | null>();
+function getFloodHatch(zone: 2 | 3): CanvasPattern | null {
+  if (floodHatchCache.has(zone)) return floodHatchCache.get(zone)!;
+  if (typeof document === "undefined") return null;
+  const size = zone === 3 ? 6 : 10;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    floodHatchCache.set(zone, null);
+    return null;
+  }
+  ctx.strokeStyle = zone === 3 ? "rgba(61,139,255,0.9)" : "rgba(61,139,255,0.6)"; // GRID_FLOOD
+  ctx.lineWidth = zone === 3 ? 1.6 : 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(size, size);
+  ctx.moveTo(-size / 2, size / 2);
+  ctx.lineTo(size / 2, size * 1.5);
+  ctx.moveTo(size / 2, -size / 2);
+  ctx.lineTo(size * 1.5, size / 2);
+  ctx.stroke();
+  const pattern = ctx.createPattern(canvas, "repeat");
+  floodHatchCache.set(zone, pattern);
+  return pattern;
+}
+
+/** A flood zone to draw: polygons-with-holes, clipped to the site (see FloodZoneLayer in lib/siteLayers/types.ts). */
+export interface MapFloodZone {
+  polygons: BNGPolygon[][];
+  zone: 2 | 3;
+  /** "No homes here" is on for this zone — solid outline; off — dashed. */
+  noHomes: boolean;
 }
 
 type OlMap = import("ol/Map").default;
@@ -132,6 +173,8 @@ interface SiteCanvasProps {
   fill?: boolean;
   /** Mirrors the Dark/Light map toggle — forwarded straight to OsMapBasemap's own `dark` prop (see mapFilter.ts). Defaults to true (dark) to match this app's default. */
   dark?: boolean;
+  /** Flood zones from Site Layers, drawn hatched under the layout. */
+  floodZones?: MapFloodZone[];
   /** Called on every map tap/click, before any mode-specific handling (adding a boundary point, setting the entrance, or nothing in "done" mode) — lets the parent collapse an overlapping bottom sheet back to peek so the map stays reachable. */
   onMapInteraction?: () => void;
 }
@@ -139,6 +182,7 @@ interface SiteCanvasProps {
 const EMPTY_TIGHT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_RESTRICTIONS: BNGPolygon[] = [];
 const EMPTY_DRAFT_RESTRICTION: BNGPolygon = [];
+const EMPTY_FLOOD_ZONES: MapFloodZone[] = [];
 
 export function SiteCanvas({
   boundary,
@@ -158,6 +202,7 @@ export function SiteCanvas({
   fill = false,
   dark = true,
   onMapInteraction,
+  floodZones = EMPTY_FLOOD_ZONES,
 }: SiteCanvasProps) {
   const [map, setMap] = useState<OlMap | null>(null);
   const redrawRef = useRef<(() => void) | null>(null);
@@ -179,6 +224,7 @@ export function SiteCanvas({
     tightPlotIds,
     restrictions,
     draftRestriction,
+    floodZones,
     onAddBoundaryPoint,
     onSetEntrance,
     onAddRestrictionPoint,
@@ -196,6 +242,7 @@ export function SiteCanvas({
       tightPlotIds,
       restrictions,
       draftRestriction,
+      floodZones,
       onAddBoundaryPoint,
       onSetEntrance,
       onAddRestrictionPoint,
@@ -373,7 +420,7 @@ export function SiteCanvas({
 
       function redraw() {
         source.clear();
-        const { boundary: b, entrance: e, layout: l, mode: m, tightPlotIds: tight, restrictions: zones, draftRestriction: draftZone } = propsRef.current;
+        const { boundary: b, entrance: e, layout: l, mode: m, tightPlotIds: tight, restrictions: zones, draftRestriction: draftZone, floodZones: floods } = propsRef.current;
 
         // Draggable corners/entrance only make sense once a boundary and
         // entrance already exist. Skip syncing their geometry while a
@@ -386,6 +433,23 @@ export function SiteCanvas({
         if (m === "done" && !isDraggingRef.current) {
           boundaryEditFeature.setGeometry(b.length >= 3 ? new Polygon([[...b, b[0]]]) : undefined);
           entranceEditFeature.setGeometry(e ? new Point(e) : undefined);
+        }
+
+        // Flood zones first, so roads/plots/homes draw on top and the
+        // hatch reads as "the ground here", not as a layer over the homes.
+        for (const fz of floods) {
+          const hatch = getFloodHatch(fz.zone);
+          for (const rings of fz.polygons) {
+            if (rings[0]?.length < 3) continue;
+            const f = new Feature(new Polygon(rings.map((r) => [...r, r[0]])));
+            f.setStyle(
+              new Style({
+                fill: new Fill({ color: hatch ?? (fz.zone === 3 ? "rgba(61,139,255,0.3)" : "rgba(61,139,255,0.15)") }),
+                stroke: new Stroke({ color: GRID_FLOOD, width: fz.noHomes ? 1.5 : 1, lineDash: fz.noHomes ? undefined : [4, 4] }),
+              })
+            );
+            source.addFeature(f);
+          }
         }
 
         for (const road of l?.roads ?? []) {
@@ -561,7 +625,7 @@ export function SiteCanvas({
   // toggles the drag interactions' active state — see redraw()).
   useEffect(() => {
     redrawRef.current?.();
-  }, [boundary, entrance, layout, mode, restrictions, draftRestriction]);
+  }, [boundary, entrance, layout, mode, restrictions, draftRestriction, floodZones]);
 
   // Animate to a new location (e.g. from a postcode search) whenever
   // `flyTo` changes. Guarded on `map` existing; `flyTo.key` (not just

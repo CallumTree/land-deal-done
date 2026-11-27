@@ -36,3 +36,9 @@ export const ROAD_GREY_BLUE = "#4b5a7a";
  * plot, magenta/violet=house sizes).
  */
 export const GRID_KEEPCLEAR = "#6fa8b8";
+/**
+ * Flood-zone colour (Site Layers) — a plain water blue, distinct from the
+ * cyan boundary and the slate-teal keep-clear. Hatched, never a solid
+ * block, so the base map and the layout still read through it.
+ */
+export const GRID_FLOOD = "#3d8bff";

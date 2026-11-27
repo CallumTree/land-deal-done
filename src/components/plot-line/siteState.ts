@@ -27,6 +27,7 @@
 import type { BNGPoint, BNGPolygon, Restriction, RestrictionBars } from "@/engine/types";
 import { SIZE_TIERS, type SizeTier } from "@/engine/sizeTiers";
 import type { MixMode } from "@/hooks/useMixState";
+import { FLOOD_ZONE_IDS, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
 
 export interface SiteState {
   boundary: BNGPolygon;
@@ -44,6 +45,14 @@ export interface SiteState {
    * and a version bump, same as any other layout change.
    */
   restrictions: Restriction[];
+  /**
+   * Site Layers "No homes here" switches the user has CHANGED from their
+   * default (see floodPolicy.ts) — a zone absent here follows its
+   * default. Stored as overrides, not the resolved on/off list, so the
+   * link carries the sender's choices, not a snapshot of which zones
+   * happened to be on their site at the time. Added in v5.
+   */
+  floodOverrides: FloodOverrides;
 }
 
 const LOCAL_STORAGE_KEY = "plotline.siteState.v1";
@@ -51,6 +60,17 @@ const COORD_SCALE = 10; // 0.1m precision
 
 function round10(n: number): number {
   return Math.round(n * COORD_SCALE);
+}
+
+/**
+ * Snaps a point to the 0.1m grid the share link stores. Applied to every
+ * point the moment the user places or drags it (see page.tsx), so the
+ * sender's own in-memory site is EXACTLY what a recipient decodes — not
+ * a value up to 5cm away, which could tip an engine threshold and give
+ * the recipient a different home count.
+ */
+export function quantizePoint(p: BNGPoint): BNGPoint {
+  return [round10(p[0]) / COORD_SCALE, round10(p[1]) / COORD_SCALE];
 }
 
 /**
@@ -110,6 +130,16 @@ function packSiteState(state: SiteState): number[] {
       pn = rn;
     });
   }
+
+  // v5: flood-zone overrides, appended after the zones —
+  // [overrideCount, (per override) zoneCode, noHomesFlag]. zoneCode is
+  // the zone's index in FLOOD_ZONE_IDS (a fixed, append-only list).
+  const overrides = FLOOD_ZONE_IDS.flatMap((id, code) => {
+    const v = state.floodOverrides[id];
+    return v === undefined ? [] : [[code, v ? 1 : 0]];
+  });
+  out.push(overrides.length);
+  for (const [code, flag] of overrides) out.push(code, flag);
 
   return out;
 }
@@ -195,6 +225,23 @@ function unpackSiteState(nums: number[], formatVersion: number): SiteState | nul
     }
   }
 
+  const floodOverrides: FloodOverrides = {};
+  if (formatVersion >= 5) {
+    const overrideCount = rest[cursor++];
+    // undefined = nothing left to read: an older auto-save read on the
+    // tolerant localStorage path — no overrides, not a decode failure.
+    if (overrideCount !== undefined) {
+      if (overrideCount < 0 || overrideCount > FLOOD_ZONE_IDS.length) return null;
+      for (let i = 0; i < overrideCount; i++) {
+        const code = rest[cursor++];
+        const flag = rest[cursor++];
+        const id = FLOOD_ZONE_IDS[code];
+        if (id === undefined || (flag !== 0 && flag !== 1)) return null;
+        floodOverrides[id] = flag === 1;
+      }
+    }
+  }
+
   return {
     boundary,
     entrance,
@@ -202,6 +249,7 @@ function unpackSiteState(nums: number[], formatVersion: number): SiteState | nul
     sizeMix,
     includeBungalows: !!bungalowFlag,
     restrictions,
+    floodOverrides,
   };
 }
 
@@ -231,8 +279,11 @@ function base64UrlDecode(s: string): string {
 // zone's point count — a version-3 link has no such field, so its zones
 // decode with bars: "everything", matching what they always enforced
 // back when every drawn zone was unconditionally fully blocking.
+// 5 = Site Layers flood-zone "No homes here" overrides appended after
+// the zones (see packSiteState) — a v1-4 link decodes with no overrides,
+// i.e. every flood zone on its default.
 const VERSION_SENTINEL = -1;
-const HASH_FORMAT_VERSION = 4;
+export const HASH_FORMAT_VERSION = 5;
 
 /** Encodes state into a URL hash fragment value (no leading "#"). Never throws — a malformed/empty state just encodes to a tiny, harmless string. */
 export function encodeSiteStateToHash(state: SiteState): string {
@@ -286,7 +337,19 @@ export function readStoredSiteState(): SiteState | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return null;
+    return raw ? decodeStoredSiteState(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The auto-save slot's own format: the unversioned packed array, read at the CURRENT version (tolerant of an older, shorter save — see unpackSiteState). Pure, so it's testable outside a browser. */
+export function encodeStoredSiteState(state: SiteState): string {
+  return JSON.stringify(packSiteState(state));
+}
+
+export function decodeStoredSiteState(raw: string): SiteState | null {
+  try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
     return unpackSiteState(parsed, HASH_FORMAT_VERSION);
@@ -298,7 +361,7 @@ export function readStoredSiteState(): SiteState | null {
 export function storeSiteState(state: SiteState): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(packSiteState(state)));
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, encodeStoredSiteState(state));
   } catch {
     // Storage can throw (quota, private mode) — saving is a convenience, never worth crashing the app over.
   }

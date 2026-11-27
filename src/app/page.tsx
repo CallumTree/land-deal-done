@@ -25,7 +25,7 @@ import { useMixState } from "@/hooks/useMixState";
 import { useOptimizer } from "@/hooks/useOptimizer";
 import { SIZE_TIERS } from "@/engine/sizeTiers";
 import { readStoredMapTheme, storeMapTheme } from "@/components/plot-line/mapFilter";
-import { readHashSiteState, readStoredSiteState, storeSiteState, writeHashSiteState, buildShareUrl, type SiteState } from "@/components/plot-line/siteState";
+import { readHashSiteState, readStoredSiteState, storeSiteState, writeHashSiteState, buildShareUrl, quantizePoint, type SiteState } from "@/components/plot-line/siteState";
 import { getComplianceCopy, describeSizeMix, MIX_CARD_COPY, BUNGALOW_TOGGLE_HELP } from "@/copy/labels";
 import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
@@ -33,6 +33,11 @@ import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/t
 import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction, RestrictionBars } from "@/engine/types";
 import { geo } from "@/engine";
 import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
+import { SiteLayersCard } from "@/components/plot-line/SiteLayersCard";
+import { useSiteLayers } from "@/hooks/useSiteLayers";
+import { isNoHomes, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
+import { siteEngineInputs, FIXED_SIDE_GAP_TIER } from "@/lib/siteEngineInputs";
+import type { FloodZoneId } from "@/lib/siteLayers/types";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
 
@@ -84,7 +89,7 @@ function unionAffectedPlotIds(compliance: ComplianceCheck[]): Set<string> {
 // The engine still accepts all three tiers via EngineInputs.sideGapTier
 // for a future "advanced" surface — only the front-and-centre control is
 // removed.
-const FIXED_SIDE_GAP_TIER = "tighter" as const;
+// (FIXED_SIDE_GAP_TIER now lives in lib/siteEngineInputs.ts, shared with the share-link test.)
 
 export default function Home() {
   const [boundary, setBoundary] = useState<BNGPolygon>([]);
@@ -101,6 +106,11 @@ export default function Home() {
   // placed so far for the one currently being drawn.
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [draftRestriction, setDraftRestriction] = useState<BNGPolygon>([]);
+
+  // Site Layers flood-zone switches the user changed from their default
+  // (see floodPolicy.ts). Saved and shared with the rest of the site
+  // (siteState.ts v5), so a recipient gets the sender's home count.
+  const [floodOverrides, setFloodOverrides] = useState<FloodOverrides>({});
 
   // Must start "dark" (matching SSR, which has no window/localStorage)
   // rather than reading the stored preference in a lazy initializer —
@@ -176,7 +186,21 @@ export default function Home() {
       for (const tier of SIZE_TIERS) mix.setTierWeight(tier, state.sizeMix[tier] ?? 0);
       mix.setIncludeBungalows(state.includeBungalows);
       setRestrictions(state.restrictions);
+      setFloodOverrides(state.floodOverrides);
       if (hashState) storeSiteState(state); // a shared link becomes the new auto-save going forward
+      // Show the restored site, not the default map position — a shared
+      // link that opens somewhere else entirely reads as "it's empty".
+      if (state.boundary.length >= 3) {
+        const xs = state.boundary.map((p) => p[0]);
+        const ys = state.boundary.map((p) => p[1]);
+        const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+        flyToKeyRef.current += 1;
+        setFlyTo({
+          center: [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2],
+          resolution: Math.min(20, Math.max(0.25, span / 250)), // site fills ~250px of a phone-width map
+          key: flyToKeyRef.current,
+        });
+      }
     }
     setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,20 +215,35 @@ export default function Home() {
   // transition itself re-running it.
   useEffect(() => {
     if (!restored || isDragging) return;
-    storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions });
-  }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, isDragging]);
+    storeSiteState({ boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions, floodOverrides });
+  }, [restored, boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, floodOverrides, isDragging]);
 
-  const liveInputs = useMemo(
-    () => ({
-      sizeMix: mix.engineMixFields.sizeMix,
-      includeBungalows: mix.engineMixFields.includeBungalows,
-      localAuthority: "pembrokeshire",
-      marketBand,
-      sideGapTier: FIXED_SIDE_GAP_TIER,
-      restrictions,
-    }),
-    [mix.engineMixFields, marketBand, restrictions]
+  // Site Layers (slope + flood, Wales only for v0) — fetched once the
+  // boundary is finished and not mid-drag. Flood zones switched to "No
+  // homes here" become engine restrictions (bars: "buildings" — gardens,
+  // parking and roads may still sit on the land, the homes may not),
+  // using each zone's convex cover rectangles, never its raw outline
+  // (see FloodZoneLayer.cover). Kept apart from the user's own drawn
+  // keep-clear zones: not saved/shared, re-derived from the live data.
+  const siteLayers = useSiteLayers(boundary, mode === "done" && !isDragging);
+  const handleToggleFloodZone = useCallback((id: FloodZoneId, noHomes: boolean) => {
+    setFloodOverrides((o) => ({ ...o, [id]: noHomes }));
+  }, []);
+  const floodZones = useMemo(() => (siteLayers.status === "ok" ? siteLayers.flood.zones : []), [siteLayers]);
+  const mapFloodZones = useMemo(
+    () => floodZones.map((z) => ({ polygons: z.polygons, zone: z.zone, noHomes: isNoHomes(z, floodOverrides) })),
+    [floodZones, floodOverrides]
   );
+  const liveInputs = useMemo(
+    () =>
+      siteEngineInputs(
+        { mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions, floodOverrides },
+        floodZones,
+        marketBand
+      ),
+    [mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, floodOverrides, floodZones, marketBand]
+  );
+  const engineRestrictions = liveInputs.restrictions;
 
   // Auto-entrance: only searches once a real boundary exists AND the
   // user hasn't set their own entrance — a user drag/tap always wins
@@ -215,7 +254,16 @@ export default function Home() {
     enabled: boundary.length >= 3 && entrance === null,
     isDragging,
   });
-  const effectiveEntrance = entrance ?? autoEntrance.suggestion?.entrance ?? null;
+  // The suggestion is snapped to the share link's 0.1m grid, same as a
+  // user-placed entrance (see quantizePoint), and the share link pins it
+  // (see handleShare): suggestEntrance has a time budget, so a slower
+  // device could otherwise suggest a different entrance and get a
+  // different home count from the same link.
+  const suggestedEntrance = useMemo(
+    () => (autoEntrance.suggestion ? quantizePoint(autoEntrance.suggestion.entrance) : null),
+    [autoEntrance.suggestion]
+  );
+  const effectiveEntrance = entrance ?? suggestedEntrance;
   const entranceIsSuggested = entrance === null && autoEntrance.suggestion !== null;
 
   const liveLayout = useLiveLayout(worker, { boundary, entrance: effectiveEntrance, inputs: liveInputs, isDragging });
@@ -285,12 +333,19 @@ export default function Home() {
   const canFinishBoundary = mode === "boundary" && boundary.length >= 3;
   const canFinishRestriction = mode === "restriction" && draftRestriction.length >= 3;
 
+  // Every point is snapped to the share link's 0.1m grid as it's placed
+  // or dragged (see quantizePoint) — so what the sender sees is exactly
+  // what a recipient of their link decodes.
+  const handleBoundaryChange = useCallback((b: BNGPolygon) => setBoundary(b.map(quantizePoint)), []);
+  const handleEntranceDrag = useCallback((p: BNGPoint) => setEntrance(quantizePoint(p)), []);
+
   const handleReset = useCallback(() => {
     setBoundary([]);
     setEntrance(null);
     setMode("boundary");
     setRestrictions([]);
     setDraftRestriction([]);
+    setFloodOverrides({});
   }, []);
 
   const handleStartRestrictionZone = useCallback(() => {
@@ -321,7 +376,9 @@ export default function Home() {
   const [shareCopied, setShareCopied] = useState(false);
   const shareCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleShare = useCallback(() => {
-    const state: SiteState = { boundary, entrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions };
+    // effectiveEntrance, not entrance: pins a suggested entrance into the
+    // link so the recipient doesn't re-run the time-budgeted search.
+    const state: SiteState = { boundary, entrance: effectiveEntrance, mixMode: mix.mode, sizeMix: mix.sizeMix, includeBungalows: mix.includeBungalows, restrictions, floodOverrides };
     // Always sync the address bar to the current state — a visible,
     // copy-able fallback if the clipboard write below fails (no
     // permission, insecure context) or isn't available at all.
@@ -334,7 +391,7 @@ export default function Home() {
         shareCopiedTimeoutRef.current = setTimeout(() => setShareCopied(false), 1500);
       })
       .catch(() => {});
-  }, [boundary, entrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions]);
+  }, [boundary, effectiveEntrance, mix.mode, mix.sizeMix, mix.includeBungalows, restrictions, floodOverrides]);
 
   const handlePostcodeFound = useCallback(
     (center: BNGPoint) => {
@@ -346,9 +403,9 @@ export default function Home() {
 
   const handleRunOptimizer = useCallback(() => {
     if (!effectiveEntrance || boundary.length < 3) return;
-    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full", restrictions };
+    const inputs: EngineInputs = { localAuthority: "pembrokeshire", marketBand, sideGapTier: FIXED_SIDE_GAP_TIER, quality: "full", restrictions: engineRestrictions };
     optimizer.run(boundary, effectiveEntrance, inputs);
-  }, [boundary, effectiveEntrance, marketBand, optimizer, restrictions]);
+  }, [boundary, effectiveEntrance, marketBand, optimizer, engineRestrictions]);
 
   const handleToggleAuto = useCallback(() => {
     const turningOn = mix.mode !== "auto";
@@ -384,21 +441,22 @@ export default function Home() {
           entrance={effectiveEntrance}
           layout={output?.layout ?? null}
           mode={mode}
-          onAddBoundaryPoint={(p) => setBoundary((b) => [...b, p])}
+          onAddBoundaryPoint={(p) => setBoundary((b) => [...b, quantizePoint(p)])}
           onSetEntrance={(p) => {
-            setEntrance(p);
+            setEntrance(quantizePoint(p));
             setMode("done");
           }}
           restrictions={restrictions.map((r) => r.polygon)}
           draftRestriction={draftRestriction}
-          onAddRestrictionPoint={(p) => setDraftRestriction((d) => [...d, p])}
-          onBoundaryChange={setBoundary}
-          onEntranceChange={setEntrance}
+          onAddRestrictionPoint={(p) => setDraftRestriction((d) => [...d, quantizePoint(p)])}
+          onBoundaryChange={handleBoundaryChange}
+          onEntranceChange={handleEntranceDrag}
           onDragStateChange={handleDragStateChange}
           onMapInteraction={handleMapInteraction}
           flyTo={flyTo}
           tightPlotIds={tightPlotIds}
           dark={mapDark}
+          floodZones={mapFloodZones}
           fill
         />
       )}
@@ -428,6 +486,21 @@ export default function Home() {
           />
           <span className="grid-live-dot h-2 w-2 shrink-0 rounded-full" aria-hidden title="Live" />
         </div>
+
+        {/*
+          Site Layers loading chip — visible on the map itself, since the
+          sheet usually sits at "peek" where the card is half off-screen.
+          Top-left, clear of the right-hand button column.
+        */}
+        {siteLayers.status === "loading" && (
+          <div
+            role="status"
+            className="pointer-events-none absolute left-3 top-16 z-20 flex items-center gap-2 rounded-full border border-[#3d8bff]/60 bg-sheet px-3 py-1.5 text-xs text-grid-text"
+          >
+            <span className="grid-live-dot h-2 w-2 shrink-0 rounded-full" style={{ background: "#3d8bff" }} aria-hidden />
+            Checking slope &amp; flood…
+          </div>
+        )}
 
         {/* Draw-flow action buttons */}
         <div className="pointer-events-auto absolute right-3 top-16 z-20 flex flex-col items-end gap-2">
@@ -549,6 +622,8 @@ export default function Home() {
           {metrics?.totalUnits === 0 && metrics.zeroHomesReason && (
             <p className="mt-1.5 text-[11px] leading-snug text-grid-amber">{metrics.zeroHomesReason}</p>
           )}
+
+          <SiteLayersCard state={siteLayers} overrides={floodOverrides} onToggleZone={handleToggleFloodZone} />
 
           {entranceIsSuggested && (
             <p className="mt-1.5 text-[11px] leading-snug text-grid-muted">

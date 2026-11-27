@@ -14,12 +14,16 @@
     "report:fuzz-shapes": "tsx scripts/fuzz-shapes.ts",
     "report:draft-mode": "tsx scripts/draft-mode-report.ts",
     "report:optimizer": "tsx scripts/optimizer-report.ts",
-    "report:perf": "tsx scripts/perf-stability.ts"
+    "report:perf": "tsx scripts/perf-stability.ts",
+    "test:share-link": "tsx scripts/share-link-test.ts",
+    "report:flood-cover": "tsx scripts/report-flood-cover.ts"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.2",
+    "geotiff": "^2.1.3",
     "next": "16.4.6",
     "ol": "^10.11.0",
+    "polygon-clipping": "^0.15.7",
     "proj4": "^2.23.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
