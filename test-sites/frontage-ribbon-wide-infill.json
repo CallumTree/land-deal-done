@@ -1,0 +1,17 @@
+{
+  "id": "frontage-ribbon-wide-infill",
+  "description": "50m-wide x 25m-deep rectangle, entrance at the midpoint of the 50m edge. Too shallow for an estate road (road + one row of plots needs ~25-26m on this width), but the 50m frontage itself is long enough to hold several plots directly — the frontage-ribbon topology's core case.",
+  "category": "frontage-ribbon",
+  "boundaryBng": [
+    [304000, 205000],
+    [304050, 205000],
+    [304050, 205025],
+    [304000, 205025],
+    [304000, 205000]
+  ],
+  "entranceBng": [304025, 205000],
+  "areaHectares": 0.125,
+  "expectedUnits": 4,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

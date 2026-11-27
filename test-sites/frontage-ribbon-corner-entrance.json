@@ -1,0 +1,17 @@
+{
+  "id": "frontage-ribbon-corner-entrance",
+  "description": "30m-wide x 28m-deep rectangle, entrance only 6m from the left corner (not centred). Tests frontage-ribbon placement when the entrance sits near one end of its own edge, same off-centre geometry that previously broke the turning-head fit check for estate roads.",
+  "category": "frontage-ribbon",
+  "boundaryBng": [
+    [306000, 215000],
+    [306030, 215000],
+    [306030, 215028],
+    [306000, 215028],
+    [306000, 215000]
+  ],
+  "entranceBng": [306006, 215000],
+  "areaHectares": 0.084,
+  "expectedUnits": 3,
+  "expectedUnitsMethod": "flat 30 dph net density sense-check — NOT an architect-approved scheme",
+  "confidence": "sense_check"
+}

@@ -7,19 +7,30 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:fixtures": "tsx scripts/run-fixtures.ts"
+    "test:fixtures": "tsx scripts/run-fixtures.ts",
+    "test:scorecard": "tsx scripts/scorecard.ts --check",
+    "test:fuzz-shapes": "tsx scripts/fuzz-shapes.ts --ci",
+    "test:fuzz-restrictions": "tsx scripts/fuzz-shapes.ts --ci --restrictions",
+    "report:fuzz-shapes": "tsx scripts/fuzz-shapes.ts",
+    "report:draft-mode": "tsx scripts/draft-mode-report.ts",
+    "report:optimizer": "tsx scripts/optimizer-report.ts",
+    "report:perf": "tsx scripts/perf-stability.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.119.0",
+    "@react-three/fiber": "^9.8.2",
     "next": "16.4.6",
+    "ol": "^10.11.0",
+    "proj4": "^2.23.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.187.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",

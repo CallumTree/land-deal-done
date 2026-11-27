@@ -1,0 +1,106 @@
+{
+  "id": "meads-priory-road-milford-haven",
+  "description": "Real LPA-approved scheme, Land south of the Meads, Priory Road, Milford Haven, SA73 2BS (25/0074/PA, reserved matters approval, decided 02/07/2026, under outline 12/0685/PA 2013). 89 dwellings total: 30 one-bedroom flats in 2-3 storey blocks (out of scope for v0, which only places houses/bungalows) plus 59 houses and bungalows. Mixed flats-and-houses scheme on a single spine road with two estate spurs and turning heads, access from Priory Road. Included as a density-rule test: the application site is 2.93ha and the approved scheme sits at 30.3 dwellings/hectare gross, right at Pembrokeshire LDP policy GN.26's stated minimum (30 dph in towns) for a site this size. Tenure: SOCIAL — applicant is ateb, a registered social landlord, 100% affordable (delegated report §8.2) — set via inputs.tenure so the engine does NOT apply the jurisdiction's market-size GIA uplift here (see test-sites/README.md's yield-honesty section on tenure-aware sizing).",
+  "category": "mixed_flats_and_houses",
+  "boundaryBng": [
+    [190283.9, 206657.4],
+    [190341.3, 206625.5],
+    [190376.5, 206599.0],
+    [190344.5, 206535.1],
+    [190317.4, 206504.8],
+    [190277.5, 206486.6],
+    [190234.4, 206419.6],
+    [190215.2, 206370.1],
+    [190131.6, 206387.7],
+    [190157.8, 206435.5],
+    [190161.0, 206467.5],
+    [190178.5, 206509.0],
+    [190221.6, 206563.2],
+    [190272.7, 206635.1]
+  ],
+  "entranceBng": [190312.6, 206641.5],
+  "areaHectares": 2.93,
+  "expectedUnits": 59,
+  "expectedUnitsMethod": "LPA-approved split, read directly from the 25/0074/PA delegated decision report's own house-mix breakdown: 30 one-bedroom flats + 4 one-bed bungalows + 6 two-bed bungalows + 27 two-bed houses + 18 three-bed houses + 2 four-bed houses + 2 five-bed houses = 89 total (30 flats + 59 houses/bungalows). expectedUnits here is deliberately 59, NOT 89 — v0's engine only places houses/bungalows (no multi-storey flat blocks), so comparing its output to the full 89 would misreport a structural scope gap as an accuracy failure. See test-sites/README.md for the full method, the density-flag check this fixture exists for, and the boundary tracing method/error margin.",
+  "confidence": "approved_unit_count",
+  "nonComparable": true,
+  "inputs": {
+    "settlementTier": "town",
+    "tenure": "social",
+    "restrictions": [
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "25/0074/PA delegated decision report §8.14/condition: 'a minimum 2m buffer (measured from the boundary line) to be maintained along western boundary... to remain outside of individual species. A maintenance strategy for this buffer zone shall also be [secured].' Modelled as a 2m-deep strip along the boundary's western run (vertices 6-11 of boundaryBng, the longest contiguous stretch on the low-easting/western side of the site) — per-edge rectangles, not a single mitred polygon (a deliberately simple approximation at the interior vertices, not a precise offset). bars=\"everything\" (explicit, now that the field exists): a tree/shrub-planted ecology buffer, not a buried easement — nothing should be sited on it.",
+        "polygon": [[190234.4,206419.6],[190215.2,206370.1],[190213.3,206370.8],[190232.5,206420.3]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190215.2,206370.1],[190131.6,206387.7],[190132.0,206389.7],[190215.6,206372.1]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190131.6,206387.7],[190157.8,206435.5],[190159.6,206434.5],[190133.4,206386.7]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190157.8,206435.5],[190161.0,206467.5],[190163.0,206467.3],[190159.8,206435.3]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "policy",
+        "bars": "everything",
+        "source": "Same condition as the other 4 segments of this buffer — see that entry.",
+        "polygon": [[190161.0,206467.5],[190178.5,206509.0],[190180.3,206508.2],[190162.8,206466.7]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "choice",
+        "bars": "everything",
+        "source": "Modelling choice, not a legal/physical constraint: the approved scheme's 30 one-bedroom flats (out of scope for this v0 houses-only engine) occupy real land that a houses-only re-run must not also offer to houses, or the comparison against the real 89-unit scheme is not fair. 25/0074/PA delegated decision report §8.2: 'Plots 1-8 and 83-86 would provide two person, one bedroom flats within two storey semi-detached blocks... main ridge height of approximately 8.9 metres... located to the north-eastern edge of the site.' That's 12 flats (8+4) in two-storey blocks. Footprint sized from NDSS's own 1-bed/2-person minimum GIA (50m² per flat, the same public standard the engine's own house types use) divided by storey count: (12 flats / 2 storeys) x 50m2 = 300m2, laid out as a 30m x 10m rectangle (10m depth is a typical flat-block-plus-bin-store allowance, not a traced dimension). POSITION IS APPROXIMATE: this fixture's boundaryBng was traced from an unscaled (NTS) geotechnical plan and uniformly scaled to match the report's stated 2.93ha area (see this fixture's own 'notes' field) — there is no shared, verified coordinate transform between the real architectural drawings (which show exact plot positions) and this fixture's own BNG frame. This zone is placed near the site's own north-eastern tip (vertices 1-2 of boundaryBng, the actual NE point of the whole boundary) rather than tight against the entrance itself — an initial placement right beside the entrance (vertices 0/13) blocked the only viable road path entirely (an artefact of this zone's own approximate siting, not a real-world 'no road possible' finding, so it was moved rather than left to report a false zero) — it is not a traced position.",
+        "polygon": [[190330.0,206595.0],[190360.0,206595.0],[190360.0,206605.0],[190330.0,206605.0]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "choice",
+        "bars": "everything",
+        "source": "Same modelling rationale as the other flat-block zones (land occupied by the approved scheme's out-of-scope flats, excluded so the houses-only comparison is fair) — see the NE-edge zone's own source for the full explanation. 25/0074/PA delegated decision report §8.2: 'Plots 29-34... would provide 2-person one-bedroom flats within three-storey buildings. The building on plots 29-34 would be located centrally within the site... The buildings would have a pitched roof with a ridge height of approximately 11 metres.' That's 6 flats in one three-storey block. Footprint: (6 flats / 3 storeys) x 50m2 (NDSS 1b2p GIA) = 100m2, laid out as a 10m x 10m square (10m depth assumption, not traced). POSITION IS APPROXIMATE for the same reason given on the NE-edge zone (this fixture's boundary is shape-matched to a stated hectare figure, not georeferenced) — placed near the middle of the site's own boundary only because the report says 'centrally within the site', not because this exact spot was traced from a plan.",
+        "polygon": [[190260.0,206520.0],[190270.0,206520.0],[190270.0,206530.0],[190260.0,206530.0]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "choice",
+        "bars": "everything",
+        "source": "Same modelling rationale as the other flat-block zones — see the NE-edge zone's own source for the full explanation. 25/0074/PA delegated decision report §8.2: 'Plots 45-56... would provide 2-person one-bedroom flats within three-storey buildings... located towards the northwest of the site... ridge height of approximately 11 metres.' That's 12 flats in three-storey building(s). Footprint: (12 flats / 3 storeys) x 50m2 (NDSS 1b2p GIA) = 200m2, laid out as a 20m x 10m rectangle (10m depth assumption, not traced). This grouping is also the one directly visible on the Hydrock drainage strategy plan (test-sites/source/meads-priory-road/approved_P02_Hydrock_drainage-strategy-plan.png) as a long building footprint with 3 separate entrance/bin-store doors running along the site's western boundary run, consistent with 'northwest of the site' and with sitting right behind the ecology buffer modelled above. POSITION IS APPROXIMATE for the same reason given on the NE-edge zone — placed near the western boundary run (inside, east of the 2m ecology buffer) because that is where both the report's own wording and the drainage plan's building footprint put it, not because this exact spot was coordinate-traced into this fixture's own (shape-matched, not georeferenced) BNG frame.",
+        "polygon": [[190165.0,206425.0],[190185.0,206425.0],[190185.0,206435.0],[190165.0,206435.0]]
+      },
+      {
+        "label": "Nothing here",
+        "hardness": "hard",
+        "reason": "choice",
+        "bars": "everything",
+        "source": "Dedicated parking court for the flats, shown on the Hydrock drainage strategy plan (test-sites/source/meads-priory-road/approved_P02_Hydrock_drainage-strategy-plan.png) labelled 'PROPOSED PERMEABLE SURFACING TO PARKING AREA OF FLATS', sat directly beside the NW flat-block grouping modelled above. Sized by pixel-tracing that plan's own parking-court outline and calibrating scale against an assumed 5.5m estate-road width (Manual for Streets, the same figure this engine's own roads use) measured from the same image, giving a rough court of ~25m x 10m (250m2) — a simplified rectangle standing in for the real court's irregular, cul-de-sac-bulb-hugging shape. The drainage plan does not make it possible to confirm with certainty which of the three flat groupings this specific court serves (only that it's one of them, geometrically nearest the NW grouping) — modelled once, against the NW zone, rather than guessing undocumented parking courts for all three groups. POSITION IS APPROXIMATE for the same reason given on the other flat zones (shape-matched boundary, not georeferenced) — placed immediately adjacent to the NW flat-block zone, not coordinate-traced into this fixture's own BNG frame.",
+        "polygon": [[190172.0,206440.0],[190197.0,206440.0],[190197.0,206450.0],[190172.0,206450.0]]
+      }
+    ]
+  },
+  "notes": "Sewer easement NOT modelled — stated plainly rather than guessed. The Hydrock drainage strategy plan (test-sites/source/meads-priory-road/approved_P02_Hydrock_drainage-strategy-plan.png) does show two 'Existing Easement Zone to Public Sewer' corridors (see its key), confirming the delegated report §8.13's description of a site 'crossed by a public 225mm and 375mm combined sewer.' But this fixture's boundaryBng was NOT georeferenced from a scaled, coordinate-bearing source (see this fixture's own README section: traced from an NTS — Not To Scale — geotechnical plan with no OS grid references, then uniformly scaled to match the report's stated 2.93ha area). The Hydrock plan is a separate, differently-scaled drawing with no shared control point to that trace. Placing the sewer corridor at any specific BNG position relative to this boundary would be inventing a correspondence the source material doesn't support, not tracing one — so it is left out rather than guessed.\n\nFlats + their parking ARE now modelled, as 4 bars=\"everything\" ('Nothing here') zones (see each entry's own source): 3 flat-block zones matching the delegated report §8.2's own 3 groupings (NE edge, 12 flats 2-storey; central, 6 flats 3-storey; NW, 12 flats 3-storey) sized from NDSS's 1b2p GIA standard divided by storey count, and 1 parking-court zone traced from the Hydrock drainage plan's own 'PARKING AREA OF FLATS' annotation, placed beside the NW zone. All 4 are explicitly POSITION-APPROXIMATE, for the same reason as the sewer easement above (this fixture's boundary is shape-matched to a stated hectare figure, not georeferenced) — unlike the sewer, there was enough textual/visual evidence of real size and rough siting to model them rather than leave them out, but the exact placement within this fixture's own boundary is this session's own approximation, not a traced coordinate correspondence. expectedUnits (59) is unaffected — it was already houses/bungalows-only; these new zones exist so the engine's own houses-only search also treats that land as unavailable, for a fair footprint-level comparison, not to change what the 'real' figure means.\n\nMARKED nonComparable (scorecard.ts and run-fixtures.ts both print this as its own category now, not a PASS/FAIL signal): the flats ARE entered as 'Nothing here', but every one of those 4 zones is POSITION-APPROXIMATE, as stated above — there is no verified coordinate correspondence between this fixture's own (shape-matched, not georeferenced) boundaryBng and the real architectural drawings' exact plot positions. A 73-vs-59 comparison under that condition looks like a precise accuracy signal but isn't one. WHAT'S MISSING to make it comparable: a scaled, coordinate-bearing source for the site boundary itself — an OS-grid-referenced site plan, or any drawing with recoverable scale and at least two identifiable control points against the real OS map (e.g. Priory Road's own kerb line, a building corner visible on both an aerial photo and the drawing) — so the boundary can be traced (or the existing shape-matched trace re-anchored) with a real coordinate transform, and the flat-block/parking-court footprints from the Hydrock drainage plan and the delegated report's own descriptions placed against it with actual positional confidence rather than a best-effort approximation. Until then this fixture stays nonComparable, and its number must never be chased by tuning anything."
+}
