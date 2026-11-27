@@ -542,28 +542,21 @@ export function checkInvariants(
     detail: wastedGapFound ? wastedGapDetail : "No gap between blocks is large enough to have fit another unit.",
   });
 
-  // The exported road[0] segment's own centerline (and so roadPoly, built
-  // from it) stops at roadEndY — it does NOT reach as far as
-  // generateLayout.ts's own internal roadPolygonLocal, which reserves an
-  // extra TURNING_HEAD_DIAMETER_M beyond that for the turning head itself
-  // (roadLengthWithHead = roadEndY + turningHeadSide). Reusing roadPoly
-  // as-is here would under-check: a hard restriction sitting only in that
-  // reserved turning-head stretch — confirmed directly on
-  // meads-priory-road-milford-haven's ecology-buffer fixture, where the
-  // engine's own "restrictions" check correctly reports FAIL but a naive
-  // recheck against the plain roadPoly reported PASS — would be missed.
-  // Branching's own exported road segments already include this
-  // extension in their own centrelines (see tryBranchingSpurs), so
-  // checkBranchingInvariants below needs no equivalent fix.
-  const roadPolyForRestrictions = road
-    ? (() => {
-        const [p0, p1] = road.centerlineBng;
-        const dir = geo.normalize(geo.sub(p1, p0));
-        const extendedP1 = geo.add(p1, geo.scale(dir, rules.TURNING_HEAD_DIAMETER_M));
-        return roadRect([p0, extendedP1], road.widthM);
-      })()
-    : null;
-  const restrictionsResult = checkRestrictions(plots, roadPolyForRestrictions ? [roadPolyForRestrictions] : [], inputs);
+  // The exported road[0] segment's own centerline now already reaches
+  // generateLayout.ts's full roadLengthWithHead (roadEndY, or the
+  // turning head's own far edge, whichever is further — see the
+  // "fix the endpoint first, fit the bulb after" turning-head change),
+  // the same convention tryBranchingSpurs' exported spurs already used.
+  // This used to need a manual TURNING_HEAD_DIAMETER_M extension here,
+  // back when the exported centerline stopped short at the plain
+  // placement cursor — adding that extension on top of an ALREADY-full
+  // length would double the turning head's reach and could walk the
+  // check straight into a restriction the real road never comes near
+  // (confirmed directly on sageston-hays-lane once the exported
+  // centerline started carrying the true length). roadPoly (plain,
+  // unextended) is correct now, same as checkBranchingInvariants below
+  // already uses for its own exported segments.
+  const restrictionsResult = checkRestrictions(plots, roadPoly ? [roadPoly] : [], inputs);
   results.push(restrictionsResult);
 
   // 8. No compliance "green" on a rule violation — cross-check the subset

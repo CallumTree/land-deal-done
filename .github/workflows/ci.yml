@@ -14,6 +14,13 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # Next.js 16 generates the global LayoutProps/PageProps types used in
+      # src/app/layout.tsx into .next/types at build time; `next build`
+      # does this implicitly, but a bare `tsc --noEmit` on a clean
+      # checkout (no .next/ yet) doesn't, so it needs its own typegen
+      # step first. Vercel builds were green because `next build` already
+      # covers this — only the standalone tsc check in CI was missing it.
+      - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run build

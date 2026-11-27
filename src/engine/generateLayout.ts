@@ -368,7 +368,13 @@ export function generateLayout(
    * the fuzz harness's zero-home results, by far the largest single
    * cause — see audit report.
    */
-  function turningHeadFitsAt(y: number): boolean {
+  // Returns the first x-offset (same search order as before: centred
+  // first, then outward) a turningHeadSide square at local Y `y` fits
+  // at, or null if none does. Exposed (not just a boolean) so the
+  // "fix the endpoint first, fit the bulb after" logic below can tell
+  // which side of the road the winning square actually bulges into —
+  // see its own comment for why that matters.
+  function turningHeadOffsetAt(y: number): number | null {
     const half = turningHeadSide / 2;
     const offsetStep = 2; // coarser than PROBE_STEP_M — exact mm-level positioning doesn't matter here, only whether SOME placement fits
     for (let offset = -half; offset <= half; offset += offsetStep) {
@@ -378,39 +384,14 @@ export function generateLayout(
         [offset + half, y + turningHeadSide],
         [offset - half, y + turningHeadSide],
       ];
-      if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsEverythingRestriction(square)) return true;
+      if (geo.convexPolygonFullyInside(square, localBoundary) && !overlapsEverythingRestriction(square)) return offset;
     }
-    return false;
+    return null;
   }
 
-  // Reserve room for the turning head up front, rather than placing plots
-  // greedily and finding out afterwards there's no room to turn around.
-  //
-  // `maxBoundaryY - turningHeadSide` is only a valid ceiling for a
-  // boundary that's roughly rectangular (constant width with Y) — on an
-  // irregular polygon the usable width can narrow and widen unevenly, so
-  // the turning head can fit in a window partway up the site and then
-  // NEVER fit again all the way to that naive ceiling (confirmed on the
-  // real pond-bridge-johnston fixture: fits across roughly y=50-100m,
-  // then fails everywhere from y=110m up to the naive ceiling at
-  // y=220.3m). Placement is a one-directional greedy fill with no
-  // backtracking once a block is committed, so if the naive ceiling sits
-  // inside a dead zone, EVERY mix with enough demand to keep filling
-  // ribbon frontage walks straight into it and the turning head fails
-  // regardless of which houses were chosen — not a mix problem at all.
-  //
-  // Fix: search downward from the naive ceiling for the highest Y where
-  // the turning head actually still fits, and use THAT as the real
-  // ceiling instead. This is a one-off search over the boundary's shape
-  // alone (independent of mix/topology), run once per generateLayout
-  // call, so the extra cost is negligible next to the per-position
-  // placement search below. If nothing fits anywhere — not even at
-  // y=0 — maxPlotFrontageY stays 0 and the final turning-head check
-  // legitimately fails: that's a genuinely infeasible site shape, not
-  // something to paper over.
   // A hard restriction can also sit directly in the road's own fixed path
   // (X in [-roadHalfWidth, roadHalfWidth]), not just where a plot or the
-  // turning head would go — turningHeadFitsAt above already refuses a
+  // turning head would go — turningHeadOffsetAt above already refuses a
   // turning-head position that overlaps a restriction, but nothing yet
   // stops the PLAIN road corridor between the entrance and the turning
   // head from running straight through one. Cap the ceiling the
@@ -438,20 +419,67 @@ export function generateLayout(
 
   // The extra PROBE_STEP_M below is slack for roadRestrictionCeilingY's
   // own probe-step granularity (it's the START of the first overlapping
-  // slice, not the restriction's exact true edge) — without it, the
-  // turning head's reserved square can land EXACTLY touching the
+  // slice, not the restriction's exact true edge) — without it, a
+  // reservation right at that Y can land EXACTLY touching the
   // restriction's probed boundary, which is sometimes still a genuine
   // overlap once converted to/from the exact polygon geometry. Confirmed
   // necessary directly on meads-priory-road-milford-haven: without this
   // margin the two ceilings came out numerically equal and the resulting
   // road still overlapped, discarding an otherwise-fully-placeable site.
-  const naiveTurningHeadCeiling = Math.min(maxBoundaryY - turningHeadSide, roadRestrictionCeilingY - turningHeadSide - PROBE_STEP_M);
-  let maxPlotFrontageY = 0;
-  for (let y = naiveTurningHeadCeiling; y >= 0; y -= PROBE_STEP_M) {
-    if (turningHeadFitsAt(y)) {
-      maxPlotFrontageY = y;
+  //
+  // --- Turning head: "fix the endpoint first, fit the bulb after" ---
+  // The OLD approach reserved the turning head's whole turningHeadSide x
+  // turningHeadSide footprint from BOTH sides' frontage, by searching
+  // downward for the highest Y the head could fit at and capping BOTH
+  // sides' placement there unconditionally. That's always safe, but
+  // over-conservative: turningHeadOffsetAt only needs the head to fit at
+  // SOME x-offset within its search window, so the winning square often
+  // only bulges into ONE side — yet the old ceiling still cut the OTHER
+  // side off at the exact same Y, discarding real, perfectly buildable
+  // frontage on the side the head never actually touches. Confirmed on
+  // sageston-hays-lane (the fixture this gap was originally diagnosed
+  // on, see its own test-sites/ notes) — the "Sageston ceiling" bug.
+  //
+  // Fix: first pin down the road's own physical endpoint —
+  // roadEndCeilingY below, the furthest Y the corridor could ever reach,
+  // completely independent of the turning head's own footprint. THEN,
+  // searching backward from that fixed endpoint (same search direction
+  // and step as before — this alone changes nothing), find where the
+  // bulb actually fits and which offset it fits AT. Only the side(s)
+  // that offset's square genuinely reaches past the road's own edge
+  // into need to stop short at that Y — the other side never had
+  // anything placed on top of the bulb to begin with, so it can keep
+  // running plots alongside the last stretch of road, all the way to
+  // roadEndCeilingY, exactly as Request N item 3 asks for.
+  const roadEndCeilingY = Math.min(maxBoundaryY, roadRestrictionCeilingY - PROBE_STEP_M);
+  let headY = 0;
+  let headOffset: number | null = null;
+  for (let y = roadEndCeilingY - turningHeadSide; y >= 0; y -= PROBE_STEP_M) {
+    const offset = turningHeadOffsetAt(y);
+    if (offset !== null) {
+      headY = y;
+      headOffset = offset;
       break;
     }
+  }
+  const turningHeadHalfSide = turningHeadSide / 2;
+  const bulbLeftX = (headOffset ?? 0) - turningHeadHalfSide;
+  const bulbRightX = (headOffset ?? 0) + turningHeadHalfSide;
+  // headOffset === null means no fit was found anywhere down to y=0 —
+  // both sides must stay capped at headY (0), exactly the old "nowhere
+  // to turn around" outcome; the zero-homes classification below reads
+  // this the same way it always did (maxPlotFrontageY* <= 0).
+  // The unblocked side's ceiling is the bulb's OWN far edge
+  // (headY + turningHeadSide) — "alongside the last stretch of road,"
+  // i.e. alongside the turning head itself, not past it. A dead-end
+  // road cannot keep going beyond its own turning head, so this is
+  // never roadEndCeilingY even when that's larger.
+  const headEndY = headY + turningHeadSide;
+  let maxPlotFrontageYLeft = headOffset !== null && bulbLeftX < -roadHalfWidth ? headY : headEndY;
+  let maxPlotFrontageYRight = headOffset !== null && bulbRightX > roadHalfWidth ? headY : headEndY;
+  if (headOffset === null) {
+    maxPlotFrontageYLeft = headY;
+    maxPlotFrontageYRight = headY;
   }
 
   // --- Mix cycle at the TYPE level: each "turn" attempts a whole attached
@@ -705,7 +733,8 @@ export function generateLayout(
     const frontageX = side === "left" ? -roadHalfWidth : roadHalfWidth;
     const rearX = depthToX(side, frontageX, spec.totalDepthM);
     const blockWidth = spec.frontageWidthM * blockSize;
-    if (yStart + blockWidth > maxPlotFrontageY) {
+    const sideCeiling = side === "left" ? maxPlotFrontageYLeft : maxPlotFrontageYRight;
+    if (yStart + blockWidth > sideCeiling) {
       return { fits: false, frontageX, rearX, spec };
     }
     const driveX = depthToX(side, frontageX, spec.drivewayDepthM);
@@ -767,8 +796,9 @@ export function generateLayout(
     // is strictly less search than full mode does, never more — draft
     // can only place a subset of what full would place.
     const typeOrder = draftMode ? [preferredType] : orderTypesForMixTolerance(preferredType, state.plots);
+    const sideCeiling = side === "left" ? maxPlotFrontageYLeft : maxPlotFrontageYRight;
 
-    for (let yStart = startCursor; yStart < maxPlotFrontageY; yStart += PROBE_STEP_M) {
+    for (let yStart = startCursor; yStart < sideCeiling; yStart += PROBE_STEP_M) {
       for (const houseType of typeOrder) {
         for (let blockSize = rules.MAX_BLOCK_UNITS[houseType]; blockSize >= 1; blockSize--) {
           const check = fitsBlockAt(side, houseType, blockSize, yStart);
@@ -860,6 +890,20 @@ export function generateLayout(
   // block further down, which checks things that don't apply here
   // (turning head, road width, a road for frontage/entrance-connection
   // checks) the same way the erosion-invalid early return above does.
+  //
+  // NOTE: tried only in the "none" case, deliberately — NOT alongside
+  // every topology the way branching-spurs is. An earlier version of
+  // this change tried it unconditionally (to fix a case where the
+  // endpoint-first turning-head change let the estate-road topology
+  // succeed with very few units on a flag-shaped plot ribbon would have
+  // done better on), but that surfaced a PRE-EXISTING, previously-
+  // dormant bug in tryFrontageRibbon on an unrelated fuzzed shape
+  // (irregular-5-8-2 under scripts/fuzz-shapes.ts's seed 42 — a plot
+  // that doesn't correctly front the boundary edge) that had simply
+  // never been exercised broadly before, since this fallback only ran
+  // when nothing else worked at all. That's a real correctness
+  // regression, not an acceptable trade for a synthetic fixture's unit
+  // count, so it's reverted here — out of scope for this change.
   const ribbon = topology === "none" ? tryFrontageRibbon() : null;
 
   // --- Branching spurs: tried ALONGSIDE every topology above (not just
@@ -898,12 +942,23 @@ export function generateLayout(
   // ribbon's own result, honestly flagged non-compliant by its own
   // "restrictions" check, rather than returning nothing). Frontage ribbon
   // builds no road, so it's never disqualified this way.
-  const stateRoadEndY = Math.max(state.cursorLeft, state.cursorRight, 0);
+  // `+ turningHeadSide` alone was the right approximation only when
+  // BOTH sides shared one ceiling at the road's actual end (the old
+  // behaviour). Now one side can run alongside the head itself and end
+  // up CLOSE to the head's own far edge already — adding a full extra
+  // turningHeadSide on top of that double-counts the head's length and
+  // over-extends the checked corridor past where the road truly ends,
+  // which on a restricted site like sageston-hays-lane can walk this
+  // check straight into a restriction the real road never reaches.
+  // Math.max(..., headY + turningHeadSide) mirrors roadLengthWithHead
+  // below exactly, so this candidate is judged against its OWN true
+  // road length, not an inflated one.
+  const stateRoadEndY = Math.max(state.cursorLeft, state.cursorRight, headY + turningHeadSide, 0);
   const stateRoadPolygonLocal: BNGPolygon = [
     [-roadHalfWidth, 0],
     [roadHalfWidth, 0],
-    [roadHalfWidth, stateRoadEndY + turningHeadSide],
-    [-roadHalfWidth, stateRoadEndY + turningHeadSide],
+    [roadHalfWidth, stateRoadEndY],
+    [-roadHalfWidth, stateRoadEndY],
   ];
   const stateRoadOk = stateUnits === 0 || !overlapsEverythingRestriction(stateRoadPolygonLocal);
   const branchingRoadOk = branching?.roadRestrictionOk ?? true;
@@ -1961,7 +2016,7 @@ export function generateLayout(
   // checked first, not folded into the width message below it. ---
   let zeroHomesInfo: { cause: Metrics["zeroHomesCause"]; reason: string } | null = null;
   if (topology === "none") {
-    if (maxPlotFrontageY <= 0) {
+    if (maxPlotFrontageYLeft <= 0 && maxPlotFrontageYRight <= 0) {
       zeroHomesInfo = {
         cause: "turning-head-no-fit",
         reason: `No room for the ${rules.TURNING_HEAD_DIAMETER_M}m turning circle a dead-end road needs — it doesn't fit anywhere along this boundary.`,
@@ -1992,9 +2047,14 @@ export function generateLayout(
   }
 
   const roadEndY = Math.max(cursorLeft, cursorRight, 0);
-  const roadLengthWithHead = roadEndY + turningHeadSide;
+  // The road's true physical length must reach at least the turning
+  // head's own far edge (headY + turningHeadSide) even if plots on
+  // BOTH sides happened to stop short of it (ran out of mix demand
+  // before reaching their ceiling) — the head is still required there
+  // regardless of how much frontage got used.
+  const roadLengthWithHead = Math.max(roadEndY, headY + turningHeadSide);
 
-  const roadCenterlineLocal: BNGPoint[] = [[0, 0], [0, roadEndY]];
+  const roadCenterlineLocal: BNGPoint[] = [[0, 0], [0, roadLengthWithHead]];
   const roads: RoadSegment[] = [
     {
       id: "road-1",
@@ -2003,10 +2063,15 @@ export function generateLayout(
     },
   ];
 
-  // --- Turning head: does it fit inside the ORIGINAL boundary? Same
-  // helper used to size maxPlotFrontageY above, so this can never
-  // disagree with the ceiling placement was actually constrained by. ---
-  const turningHeadFits = turningHeadFitsAt(roadEndY);
+  // --- Turning head: does it fit inside the ORIGINAL boundary? Reuses
+  // the SAME result (headY/headOffset) the per-side ceilings above were
+  // actually sized from, rather than re-querying turningHeadOffsetAt at
+  // roadEndY — the unblocked side can now legitimately run plots right
+  // up alongside the head (see headEndY above), so roadEndY no longer
+  // always equals the Y the head fit was confirmed at; re-querying a
+  // DIFFERENT Y there would risk disagreeing with the ceiling placement
+  // was actually constrained by, the exact thing this reuse avoids. ---
+  const turningHeadFits = headOffset !== null;
   compliance.push({
     id: "turning-head",
     label: "Turning head at road end",

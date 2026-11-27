@@ -31,6 +31,7 @@ import { resolveJurisdiction } from "@/rules/jurisdictions";
 import { appraisalProvenance, planningProvenance } from "@/rules/jurisdictions/provenance";
 import { schemeSizeBandForUnits, type MarketBand } from "@/rules/jurisdictions/types";
 import type { BNGPoint, BNGPolygon, EngineInputs, ComplianceCheck, Restriction, RestrictionBars } from "@/engine/types";
+import { geo } from "@/engine";
 import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
 import { SiteLayersCard } from "@/components/plot-line/SiteLayersCard";
 import { useSiteLayers } from "@/hooks/useSiteLayers";
@@ -39,6 +40,23 @@ import { siteEngineInputs, FIXED_SIDE_GAP_TIER } from "@/lib/siteEngineInputs";
 import type { FloodZoneId } from "@/lib/siteLayers/types";
 
 const gbp = (n: number) => `£${Math.round(n).toLocaleString()}`;
+
+/**
+ * Tentative, not a derived/validated cutoff — a placeholder pending more
+ * fixture data. Evidence for "large sites are less reliable" comes from
+ * the committed scorecard (scripts/scorecard-baseline.json /
+ * test-sites/README.md): pond-bridge-johnston (12.3ha, 123 real units)
+ * is the engine's worst miss among approved-unit-count fixtures even
+ * after the "fix the endpoint first, fit the bulb after" turning-head
+ * change (engine gives 92, 25.2% short — a multi-spur site this v0
+ * topology set can't yet discover reliably), while every fixture under
+ * ~3ha (sageston-hays-lane 0.65ha, frontage-ribbon-* well under 0.2ha,
+ * fern-rise-neyland, rectangle-infill, cul-de-sac) is within a much
+ * tighter band or matches outright. 3ha is a round number inside that
+ * gap, not a fitted threshold — revisit once more mid-size approved
+ * fixtures exist to locate the real knee of the curve, if there is one.
+ */
+const LARGE_SITE_THRESHOLD_HA = 3;
 
 /**
  * Checks that are genuinely per-plot (a specific home's own GIA/garden/
@@ -300,6 +318,9 @@ export default function Home() {
     }
     return { dot: "green", text: "All rules met." };
   }, [output, tightPlotIds]);
+
+  const boundaryAreaHectares = useMemo(() => (boundary.length >= 3 ? geo.area(boundary) / 10000 : 0), [boundary]);
+  const isLargeSite = boundaryAreaHectares > LARGE_SITE_THRESHOLD_HA;
 
   const jurisdiction = useMemo(() => resolveJurisdiction("pembrokeshire"), []);
   const schemeSizeBand = metrics ? schemeSizeBandForUnits(metrics.totalUnits) : "1";
@@ -697,6 +718,12 @@ export default function Home() {
             <span className="text-grid-text">{complianceStatus.text}</span>
             {liveLayout.isComputing && <span className="text-[10px] text-grid-cyan">Updating…</span>}
           </div>
+
+          {isLargeSite && (
+            <p className="mt-2 text-[11px] leading-snug text-grid-amber">
+              Indicative layout — large sites are not reliable yet.
+            </p>
+          )}
 
           {metrics?.affordableValueOverstated && (
             <div className="mt-2 rounded-xl border border-grid-amber/40 bg-grid-amber/10 px-3 py-2 text-[11px] leading-snug text-grid-amber">
