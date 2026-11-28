@@ -36,6 +36,7 @@ import { GRID_KEEPCLEAR } from "@/components/plot-line/gridColors";
 import { SiteLayersCard } from "@/components/plot-line/SiteLayersCard";
 import { useSiteLayers } from "@/hooks/useSiteLayers";
 import { isNoHomes, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
+import { isSteepSite } from "@/lib/siteLayers/slopePolicy";
 import { siteEngineInputs, FIXED_SIDE_GAP_TIER } from "@/lib/siteEngineInputs";
 import type { FloodZoneId } from "@/lib/siteLayers/types";
 
@@ -316,8 +317,22 @@ export default function Home() {
     if (tightPlotIds.size > 0) {
       return { dot: "amber", text: `${tightPlotIds.size} home${tightPlotIds.size === 1 ? "" : "s"} a bit tight.` };
     }
+    // The engine itself has no notion of slope (flat-site assumption
+    // throughout layout generation) — this is a UI-only heads-up on top
+    // of an otherwise all-green result, not a new compliance rule, so it
+    // only kicks in once nothing else is already flagged above. See
+    // SLOPE_STEEP_THRESHOLD_PCT's own comment: the 25% line is a
+    // judgement call, not a sourced standard. Left green when slope data
+    // isn't available yet (siteLayers.status !== "ok") rather than
+    // guessing.
+    if (siteLayers.status === "ok" && isSteepSite(siteLayers.slope.steeperThan1in15Pct)) {
+      return {
+        dot: "amber",
+        text: "All the rules we check are met. Slope isn't modelled yet, so check levels before relying on this layout.",
+      };
+    }
     return { dot: "green", text: "All rules met." };
-  }, [output, tightPlotIds]);
+  }, [output, tightPlotIds, siteLayers]);
 
   const boundaryAreaHectares = useMemo(() => (boundary.length >= 3 ? geo.area(boundary) / 10000 : 0), [boundary]);
   const isLargeSite = boundaryAreaHectares > LARGE_SITE_THRESHOLD_HA;
