@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import type { SiteLayersState } from "@/hooks/useSiteLayers";
 import type { FloodZoneId, FloodZoneLayer } from "@/lib/siteLayers/types";
 import { floodZoneLabel, isNoHomes, isUndefendedExtent, openZoneWarning, UNDEFENDED_EXTENT_NOTE, type FloodOverrides } from "@/lib/siteLayers/floodPolicy";
+import { isSteepSite } from "@/lib/siteLayers/slopePolicy";
 
 type Dot = "green" | "amber" | "red" | "none";
 const DOT_CLASS: Record<Dot, string> = {
@@ -73,15 +74,23 @@ export function SiteLayersCard({
   }
 
   const { slope, elevation, flood, sources } = state;
-  const slopePart = `${capitalise(pct(slope.steeperThan1in15Pct))} of this site is steeper than 1:15`;
-  const floodPart = flood.anyPct <= 0 ? "none of it is in a flood zone" : `${pct(flood.anyPct)} is in a flood zone`;
+  // Headline, plain English, steepness-first — the engine itself has no
+  // idea the site slopes at all, so this is the one line most worth
+  // reading before trusting the layout. isSteepSite's 25% line is a
+  // judgement call (see slopePolicy.ts), shared with the compliance
+  // status line so both agree on what "steep" means; below it, this
+  // still reports the real number, just without the "Steep site" label.
+  const steep = isSteepSite(slope.steeperThan1in15Pct);
+  const headline = steep
+    ? `Steep site: ${pct(slope.steeperThan1in15Pct)} slopes more than 1 in 15.`
+    : `${capitalise(pct(slope.steeperThan1in15Pct))} of this site slopes more than 1 in 15.`;
+  const floodPart = flood.anyPct <= 0 ? "None of it is in a flood zone" : `${capitalise(pct(flood.anyPct))} is in a flood zone`;
 
   return (
     <div className={shell} aria-live="polite">
       <div className="mb-1 font-semibold text-grid-text">About this site</div>
-      <p className="text-[12px] text-grid-text">
-        {slopePart}, {floodPart}.
-      </p>
+      <p className="text-[12px] text-grid-text">{headline}</p>
+      <p className="text-[12px] text-grid-text">{floodPart}.</p>
 
       <div className="mt-2 space-y-1">
         <div className="flex items-center gap-2 text-grid-muted">
